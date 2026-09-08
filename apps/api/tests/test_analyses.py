@@ -3,12 +3,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from rci_api.analyses import (
     get_analysis_service,
     get_brand_review_service,
     get_match_review_service,
+    require_public_analysis,
+    require_public_artifact,
 )
 from rci_api.competitive_leadership import get_competitive_product_leadership_service
 from rci_api.main import create_app
@@ -36,9 +39,15 @@ def _service() -> AnalysisResultService:
     )
 
 
+def _allow_public_reads(app: FastAPI) -> None:
+    app.dependency_overrides[require_public_analysis] = lambda: None
+    app.dependency_overrides[require_public_artifact] = lambda: None
+
+
 async def test_analysis_reader_quality_match_and_artifact_apis() -> None:
     service = _service()
     app = create_app()
+    _allow_public_reads(app)
     app.dependency_overrides[get_analysis_service] = lambda: service
     async with (
         app.router.lifespan_context(app),
@@ -51,7 +60,7 @@ async def test_analysis_reader_quality_match_and_artifact_apis() -> None:
         analysis_id = published.json()["analysis_id"]
 
         listing = await client.get("/api/v1/analyses")
-        assert [row["analysis_id"] for row in listing.json()] == [analysis_id]
+        assert listing.json() == []
         fetched = await client.get(f"/api/v1/analyses/{analysis_id}")
         assert fetched.json()["result"] == document
         by_run = await client.get("/api/v1/collection-runs/run-example/analysis")
@@ -63,7 +72,7 @@ async def test_analysis_reader_quality_match_and_artifact_apis() -> None:
 
         generated = await client.post(f"/api/v1/analyses/{analysis_id}/artifacts/html")
         assert generated.status_code == 201
-        assert generated.json()["renderer_version"] == "2.15.1"
+        assert generated.json()["renderer_version"] == "2.15.2"
         assert generated.json()["publication_id"] is None
         artifact_id = generated.json()["id"]
         artifacts = await client.get(f"/api/v1/analyses/{analysis_id}/artifacts")
@@ -115,6 +124,7 @@ async def test_competitive_product_leadership_api_forwards_governed_context() ->
             return {"schema_version": "1.0.0", "analysis_id": analysis_id}
 
     app = create_app()
+    _allow_public_reads(app)
     app.dependency_overrides[get_competitive_product_leadership_service] = lambda: (
         LeadershipService()
     )
@@ -147,6 +157,7 @@ async def test_competitive_product_leadership_api_rejects_unavailable_context() 
             )
 
     app = create_app()
+    _allow_public_reads(app)
     app.dependency_overrides[get_competitive_product_leadership_service] = lambda: (
         LeadershipService()
     )
@@ -342,6 +353,7 @@ async def test_brand_workbench_api_stages_decisions_and_zero_provider_reanalysis
 async def test_analysis_v2_report_endpoint_returns_blueprint_projection() -> None:
     service = _service()
     app = create_app()
+    _allow_public_reads(app)
     app.dependency_overrides[get_analysis_service] = lambda: service
     document = json.loads(
         (REPOSITORY_ROOT / "examples/analysis-result-v2.ground-beef.json").read_text()
@@ -371,6 +383,7 @@ async def test_analysis_v2_report_endpoint_returns_blueprint_projection() -> Non
 async def test_product_decision_evidence_is_read_separately_from_report_view() -> None:
     service = _service()
     app = create_app()
+    _allow_public_reads(app)
     app.dependency_overrides[get_analysis_service] = lambda: service
     document = json.loads(
         (REPOSITORY_ROOT / "examples/analysis-result-v2.ground-beef.json").read_text()

@@ -21,7 +21,7 @@ export interface ComparableCohort {
   pairCount: number;
   matches: number;
   matchedGeographies: number;
-  benchmarkObservedLocations: number;
+  benchmarkVerifiedLocations: number;
   benchmarkScoredLocations: number;
   benchmarkUnscoredLocations: number;
   locationCoverageRate: number | null;
@@ -120,11 +120,11 @@ export function comparableCohort(row: JsonObject): ComparableCohort | null {
     matches: numericValue(row, "_matches", "matches") ?? 0,
     matchedGeographies:
       numericValue(row, "_matched_geographies", "matched geographies") ?? 0,
-    benchmarkObservedLocations:
+    benchmarkVerifiedLocations:
       numericValue(
         row,
         "_benchmark_observed_locations",
-        "benchmark observed locations",
+        "benchmark verified locations",
       ) ?? 0,
     benchmarkScoredLocations:
       numericValue(

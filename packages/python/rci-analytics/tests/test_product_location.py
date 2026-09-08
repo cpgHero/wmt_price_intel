@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from decimal import Decimal
 from pathlib import Path
+
+import pytest
 
 from rci_analytics import (
     OfferClassifier,
@@ -26,7 +29,8 @@ def _classified(
     in_scope: bool = True,
     zipcode: str = "99999",
     store_number: str | None = "0017",
-    sponsored: bool | None = True,
+    sponsored: bool | None = False,
+    in_stock: bool | None = True,
     metric: str | None = None,
 ) -> ClassifiedOffer:
     return ClassifiedOffer(
@@ -42,7 +46,7 @@ def _classified(
             store_number=store_number,
             latitude=1.0,
             longitude=2.0,
-            in_stock=False,
+            in_stock=in_stock,
             product_url="https://search.example/product",
             image_url="https://search.example/image.jpg",
             collected_at=collected_at,
@@ -135,8 +139,10 @@ def test_canonical_population_governs_authority_dedupe_identity_and_contract() -
     assert observation.location.store_number == "0017"
     assert observation.location.zipcode == "03038"
     assert observation.location.latitude == 42.8806
-    assert observation.is_sponsored is True
+    assert observation.is_sponsored is False
     assert observation.to_price_monitoring_row()["in_stock"] is True
+    assert observation.availability_status == "verified_in_stock"
+    assert observation.verified_local_availability is True
     assert dict(population.exclusion_counts) == {
         "missing_or_zero_price": 1,
         "out_of_scope": 1,
@@ -218,6 +224,225 @@ def test_canonical_population_excludes_known_third_party_sellers_but_keeps_missi
     assert dict(population.exclusion_counts) == {"known_third_party_seller": 1}
 
 
+def test_local_availability_requires_organic_explicit_in_stock_evidence() -> None:
+    population = _projector().build(
+        [
+            _classified(
+                offer_id="sponsored-out",
+                product_id="sponsored-out",
+                price="5.00",
+                collected_at="2026-08-07T06:00:00Z",
+                store_number="1",
+                sponsored=True,
+                in_stock=False,
+            ),
+            _classified(
+                offer_id="sponsored-unknown",
+                product_id="sponsored-unknown",
+                price="5.00",
+                collected_at="2026-08-07T06:00:00Z",
+                store_number="2",
+                sponsored=True,
+                in_stock=None,
+            ),
+            _classified(
+                offer_id="organic-in",
+                product_id="organic-in",
+                price="5.00",
+                collected_at="2026-08-07T06:00:00Z",
+                store_number="3",
+                sponsored=False,
+                in_stock=True,
+            ),
+            _classified(
+                offer_id="legacy-unknown-sponsorship",
+                product_id="legacy",
+                price="5.00",
+                collected_at="2026-08-07T06:00:00Z",
+                store_number="4",
+                sponsored=None,
+                in_stock=True,
+            ),
+        ],
+        retailer_id="walmart_us",
+    )
+
+    by_product = {row.product_id: row for row in population.observations}
+    assert by_product["sponsored-out"].availability_status == "explicitly_out_of_stock"
+    assert by_product["sponsored-unknown"].availability_status == "unverified_sponsored"
+    assert by_product["organic-in"].availability_status == "verified_in_stock"
+    assert by_product["legacy"].availability_status == "unverified"
+    assert {
+        product_id: len(rows)
+        for product_id, rows in population.comparison_observations(
+            set(by_product),
+            "package_price",
+        ).items()
+    } == {
+        "sponsored-out": 0,
+        "sponsored-unknown": 0,
+        "organic-in": 1,
+        "legacy": 0,
+    }
+    search_rows = population.comparison_observations(
+        set(by_product),
+        "package_price",
+        evidence_scope="search_presence",
+    )
+    assert all(len(rows) == 1 for rows in search_rows.values())
+    assert all(rows[0].search_observed for rows in search_rows.values())
+
+
+def test_same_timestamp_dedupe_prefers_verified_over_sponsored_and_flags_stock_conflict() -> None:
+    verified_over_sponsored = _projector().build(
+        [
+            _classified(
+                offer_id="z-sponsored",
+                price="5.00",
+                collected_at="2026-08-07T06:00:00Z",
+                sponsored=True,
+                in_stock=None,
+            ),
+            _classified(
+                offer_id="a-organic",
+                price="5.00",
+                collected_at="2026-08-07T06:00:00Z",
+                sponsored=False,
+                in_stock=True,
+            ),
+        ],
+        retailer_id="walmart_us",
+    )
+    assert verified_over_sponsored.observations[0].offer_id == "a-organic"
+    assert verified_over_sponsored.observations[0].verified_local_availability is True
+
+    contradictory_organic = _projector().build(
+        [
+            _classified(
+                offer_id="organic-in",
+                price="5.00",
+                collected_at="2026-08-07T06:00:00Z",
+                sponsored=False,
+                in_stock=True,
+            ),
+            _classified(
+                offer_id="organic-out",
+                price="5.00",
+                collected_at="2026-08-07T06:00:00Z",
+                sponsored=False,
+                in_stock=False,
+            ),
+        ],
+        retailer_id="walmart_us",
+    )
+    assert contradictory_organic.observations[0].availability_status == ("explicitly_out_of_stock")
+    assert contradictory_organic.conflicting_availability_keys == {
+        ("000123", "walmart_us|store|0017")
+    }
+
+
+def test_out_of_scope_availability_tombstone_retracts_older_verified_observation() -> None:
+    tombstone = replace(
+        _classified(
+            offer_id="later-out",
+            price="5.00",
+            collected_at="2026-08-07T07:00:00Z",
+            in_scope=False,
+            in_stock=False,
+        ),
+        scope_reason="explicitly out of stock",
+    )
+    population = _projector().build(
+        [
+            _classified(
+                offer_id="older-in",
+                price="5.00",
+                collected_at="2026-08-07T06:00:00Z",
+            ),
+            tombstone,
+        ],
+        retailer_id="walmart_us",
+    )
+
+    assert len(population.observations) == 1
+    assert population.observations[0].offer_id == "later-out"
+    assert population.observations[0].availability_status == "explicitly_out_of_stock"
+    assert population.comparison_observations({"000123"}, "package_price") == {"000123": ()}
+
+
+def test_newer_seller_policy_exclusion_retracts_older_verified_observation() -> None:
+    seller_exclusion = replace(
+        _classified(
+            offer_id="later-third-party",
+            price="5.00",
+            collected_at="2026-08-07T07:00:00Z",
+            in_scope=False,
+        ),
+        scope_reason=("known third-party marketplace seller excluded by Retailer Pack policy"),
+        attributes={
+            "_seller_governance": {
+                "status": "excluded_third_party",
+                "eligible": False,
+            }
+        },
+        metrics={},
+    )
+    population = _projector().build(
+        [
+            _classified(
+                offer_id="older-first-party",
+                price="5.00",
+                collected_at="2026-08-07T06:00:00Z",
+            ),
+            seller_exclusion,
+        ],
+        retailer_id="walmart_us",
+    )
+
+    assert population.observations == ()
+    assert population.duplicate_rows == 1
+    assert dict(population.exclusion_counts) == {"known_third_party_seller": 1}
+
+
+@pytest.mark.parametrize(
+    ("in_stock", "sponsored"),
+    [
+        (False, False),
+        (True, True),
+        (None, False),
+        (True, None),
+    ],
+)
+def test_newer_price_less_state_retracts_older_priced_verified_observation(
+    in_stock: bool | None,
+    sponsored: bool | None,
+) -> None:
+    later = _classified(
+        offer_id="later-price-less",
+        price=None,
+        collected_at="2026-08-07T07:00:00Z",
+        in_stock=in_stock,
+        sponsored=sponsored,
+    )
+    if in_stock is False:
+        later = replace(later, in_scope=False, scope_reason="explicitly out of stock")
+    population = _projector().build(
+        [
+            _classified(
+                offer_id="older-priced-in",
+                price="5.00",
+                collected_at="2026-08-07T06:00:00Z",
+            ),
+            later,
+        ],
+        retailer_id="walmart_us",
+    )
+
+    assert population.observations == ()
+    assert population.duplicate_rows == 1
+    assert dict(population.exclusion_counts) == {"missing_or_zero_price": 1}
+
+
 def test_unknown_location_is_excluded_from_every_downstream_projection() -> None:
     population = _projector().build(
         [
@@ -258,6 +483,7 @@ def test_canonical_population_recovers_missing_unit_metric_from_pdp() -> None:
         image_url=None,
         collected_at="2026-08-25T12:00:00Z",
         raw={},
+        is_sponsored=False,
     )
     projector = ProductLocationProjector(
         pack,

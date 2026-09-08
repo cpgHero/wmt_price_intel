@@ -22,6 +22,7 @@ export async function GET(
     return new Response(body, {
       status: upstream.status,
       headers: {
+        "cache-control": "private, no-store",
         "content-type":
           upstream.headers.get("content-type") ?? "text/csv; charset=utf-8",
         "content-disposition":
@@ -32,7 +33,10 @@ export async function GET(
   } catch {
     return Response.json(
       { error: "The evidence export is temporarily unavailable." },
-      { status: 503 },
+      {
+        status: 503,
+        headers: { "cache-control": "private, no-store" },
+      },
     );
   }
 }

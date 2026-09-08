@@ -20,6 +20,12 @@ from rci_results.service import AnalysisResultService
 from rci_retailer_packs import GovernedBrandResolver
 
 
+def _nonnegative_integer(value: Any) -> int | None:
+    if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+        return value
+    return None
+
+
 class BrandRevisionConflictError(RuntimeError):
     pass
 
@@ -974,11 +980,66 @@ class BrandReviewService:
                 )
                 product_ids = highlighted_products.get(key, set())
                 if row is not None:
-                    products = max(1, int(row.get("distinct_products") or len(product_ids) or 1))
-                    locations = max(0, int(row.get("observed_locations") or 0))
-                    zipcodes = max(0, int(row.get("observed_zipcodes") or 0))
-                    share = float(row.get("location_share") or 0)
-                    distribution_evidence = "search_brand_field"
+                    verified_count_keys = (
+                        "verified_available_products",
+                        "verified_available_locations",
+                        "verified_available_zipcodes",
+                    )
+                    has_explicit_verified_counts = any(
+                        count_key in row for count_key in verified_count_keys
+                    )
+                    verified_products_value = _nonnegative_integer(
+                        row.get("verified_available_products")
+                    )
+                    verified_locations_value = _nonnegative_integer(
+                        row.get("verified_available_locations")
+                    )
+                    verified_zipcodes_value = _nonnegative_integer(
+                        row.get("verified_available_zipcodes")
+                    )
+                    verified_counts_are_valid = all(
+                        value is not None
+                        for value in (
+                            verified_products_value,
+                            verified_locations_value,
+                            verified_zipcodes_value,
+                        )
+                    )
+                    has_verified_distribution = (
+                        has_explicit_verified_counts
+                        and verified_counts_are_valid
+                        and verified_products_value is not None
+                        and verified_products_value > 0
+                        and verified_locations_value is not None
+                        and verified_locations_value > 0
+                        and verified_zipcodes_value is not None
+                        and verified_zipcodes_value >= 0
+                    )
+                    if has_explicit_verified_counts:
+                        # Corrected availability counts are authoritative, including zero.
+                        # A partial or malformed corrected triplet fails closed rather than
+                        # falling back to legacy Search-observation reach.
+                        if verified_counts_are_valid:
+                            products = verified_products_value or 0
+                            locations = verified_locations_value or 0
+                            zipcodes = verified_zipcodes_value or 0
+                        else:
+                            products = locations = zipcodes = 0
+                    else:
+                        products = max(
+                            1,
+                            int(row.get("distinct_products") or len(product_ids) or 1),
+                        )
+                        locations = max(0, int(row.get("observed_locations") or 0))
+                        zipcodes = max(0, int(row.get("observed_zipcodes") or 0))
+                    share = (
+                        float(row.get("location_share") or 0) if has_verified_distribution else 0.0
+                    )
+                    distribution_evidence = (
+                        "verified_local_search_availability"
+                        if has_verified_distribution
+                        else "search_brand_field"
+                    )
                 else:
                     products = max(1, len(product_ids))
                     zipcodes = max(
@@ -1001,7 +1062,8 @@ class BrandReviewService:
                     )
                 tier = (
                     "unknown"
-                    if distribution_evidence != "search_brand_field" or locations <= 0
+                    if distribution_evidence != "verified_local_search_availability"
+                    or locations <= 0
                     else "single_location"
                     if locations <= 1
                     else "broad"

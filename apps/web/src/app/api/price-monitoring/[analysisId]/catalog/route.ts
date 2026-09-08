@@ -15,12 +15,15 @@ export async function GET(
   if (!response.data) {
     return NextResponse.json(
       { error: response.error },
-      { status: response.status },
+      {
+        status: response.status,
+        headers: { "Cache-Control": "private, no-store" },
+      },
     );
   }
   return NextResponse.json(response.data, {
     headers: {
-      "Cache-Control": "private, max-age=60, stale-while-revalidate=300",
+      "Cache-Control": "private, no-store",
     },
   });
 }

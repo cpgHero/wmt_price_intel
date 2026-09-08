@@ -1,7 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import type { ProductEvidenceResponse } from "./api";
-import { productEvidenceCsv, productEvidenceFilename } from "./evidence-csv";
+import type {
+  CompetitiveProductCoverage,
+  ProductEvidenceResponse,
+} from "./api";
+import {
+  competitiveProductCoverageCsv,
+  productEvidenceCsv,
+  productEvidenceFilename,
+} from "./evidence-csv";
 
 function evidence(): ProductEvidenceResponse {
   return {
@@ -57,5 +64,31 @@ describe("productEvidenceCsv", () => {
     expect(productEvidenceFilename(evidence())).toBe(
       "analysis-id-decision-1-store-evidence.csv",
     );
+  });
+});
+
+describe("competitiveProductCoverageCsv", () => {
+  it("labels the strict availability count as verified local coverage", () => {
+    const coverage = {
+      analysis_id: "analysis-1",
+      products: [
+        {
+          product_id: "46942839",
+          product_name: "Regional milk",
+          observed_locations: 0,
+          status: "benchmark_not_observed",
+          certified_relationships: 0,
+          selected_price_basis_relationships: 0,
+          selected_competitor_products: 0,
+          scored_product_locations: 0,
+        },
+      ],
+    } as CompetitiveProductCoverage;
+
+    const csv = competitiveProductCoverageCsv(coverage);
+
+    expect(csv.split("\r\n")[0]).toContain("verified_local_locations");
+    expect(csv.split("\r\n")[0]).not.toContain(",observed_locations,");
+    expect(csv).toContain('"46942839","Regional milk","0"');
   });
 });

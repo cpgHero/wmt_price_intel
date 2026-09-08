@@ -233,6 +233,7 @@ def _offer(
         image_url=None,
         collected_at=None,
         raw={},
+        is_sponsored=False,
     )
     return ClassifiedOffer(
         offer=normalized,

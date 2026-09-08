@@ -39,8 +39,16 @@ export default async function PriceMonitoringDetailPage({
     return (
       <main>
         <EmptyState
-          eyebrow="Price view unavailable"
-          title="The analysis could not be loaded"
+          eyebrow={
+            analysisResponse.status === 409
+              ? "Report quarantined"
+              : "Price view unavailable"
+          }
+          title={
+            analysisResponse.status === 409
+              ? "This report is not available for sharing"
+              : "The analysis could not be loaded"
+          }
           message={
             analysisResponse.error ?? "Try again when the API is available."
           }

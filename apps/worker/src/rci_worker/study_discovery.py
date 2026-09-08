@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 
 from rci_analytics import CanonicalOfferNormalizer
-from rci_analytics.normalization import RetailerIdentityMap
+from rci_analytics.normalization import BooleanAliasValidationError, RetailerIdentityMap
 from rci_providers import MetricsCartAdapterRegistry
 from rci_retailer_packs import GovernedBrandResolver
 from rci_studies import (
@@ -90,6 +90,10 @@ class StudyDiscoveryWorker:
                             "collected_at": page.collected_at.isoformat(),
                         }
                     )
+                except BooleanAliasValidationError:
+                    # Discovery feeds later analysis population. Do not silently
+                    # discard a newer untrusted state and retain an older row.
+                    raise
                 except ValueError:
                     continue
                 raw_fulfillment = offer.raw.get("fulfillment_type")

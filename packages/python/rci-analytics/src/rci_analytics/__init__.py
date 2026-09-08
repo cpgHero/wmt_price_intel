@@ -20,6 +20,13 @@ from rci_analytics.insights import (
     DeterministicInsightEngine,
     RankedInsightCandidate,
 )
+from rci_analytics.latest_product_location import (
+    LatestProductLocationSelector,
+    add_classified_offer,
+    is_product_location_state,
+    latest_classified_offers,
+    product_location_key,
+)
 from rci_analytics.matching import (
     ComparisonEngine,
     ComparisonInputReducer,
@@ -88,11 +95,14 @@ from rci_analytics.product_leadership_validation import (
 )
 from rci_analytics.product_location import (
     PRODUCT_LOCATION_OBSERVATION_SCHEMA_VERSION,
+    AvailabilityStatus,
+    PriceEvidenceScope,
     PriceLocation,
     ProductLocationObservation,
     ProductLocationPopulation,
     ProductLocationProjector,
     ProductPriceObservation,
+    classify_local_availability,
 )
 from rci_analytics.product_pack import (
     CatalogProductPackLoader,
@@ -107,6 +117,7 @@ __all__ = [
     "AssortmentAccumulator",
     "AttributePolicyV2",
     "AttributeValue",
+    "AvailabilityStatus",
     "CanonicalOfferNormalizer",
     "CatalogProductPackLoader",
     "ComparisonEngine",
@@ -123,6 +134,7 @@ __all__ = [
     "InMemoryDatasetStore",
     "InMemoryHistoricalInputRepository",
     "InMemoryHistoricalObjectStore",
+    "LatestProductLocationSelector",
     "ListingEvidence",
     "ListingEvidenceAccumulatorV2",
     "ListingLocationEvidence",
@@ -140,6 +152,7 @@ __all__ = [
     "PostgresAnalysisInputRepository",
     "PriceArchitectureMatrixProjector",
     "PriceArchitectureRetailerInput",
+    "PriceEvidenceScope",
     "PriceLocation",
     "PriceMonitoringFilters",
     "PriceMonitoringProjector",
@@ -155,6 +168,7 @@ __all__ = [
     "RelationshipInputReducer",
     "S3HistoricalObjectStore",
     "TieredMatchDecisionV2",
+    "add_classified_offer",
     "benchmark_product_decisions",
     "benchmark_product_evidence",
     "benchmark_product_map_points",
@@ -164,9 +178,12 @@ __all__ = [
     "certify_competitive_product_leadership",
     "certify_matching_v2",
     "classified_offer_from_record",
+    "classify_local_availability",
     "compile_matching_policy_v2",
     "complete_attributes_from_pdp",
     "evidence_set",
+    "is_product_location_state",
+    "latest_classified_offers",
     "location_scope_key",
     "merge_assortment_product_context",
     "merge_product_decision_context",
@@ -175,6 +192,7 @@ __all__ = [
     "primary_exact_profile",
     "product_context_index",
     "product_footprint",
+    "product_location_key",
     "queue_cases",
     "reconcile_local_comparisons",
     "resolve_one_to_one_relationships",

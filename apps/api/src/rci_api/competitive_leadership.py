@@ -22,7 +22,7 @@ from rci_analytics import (
     ProductLeadershipRelationship,
     certify_competitive_product_leadership,
 )
-from rci_api.analyses import get_analysis_service
+from rci_api.analyses import PublicAnalysisDependency, get_analysis_service
 from rci_api.competitive_release_audit import (
     audit_competitive_portfolio_set,
     require_competitive_portfolio_set,
@@ -304,6 +304,20 @@ def _attributes_match(
     return projected(candidate) == projected(segment)
 
 
+def _assortment_count(row: dict[str, Any], field: str) -> int:
+    value = row.get(field)
+    if isinstance(value, bool) or not isinstance(value, int):
+        return 0
+    return max(value, 0)
+
+
+def _is_verified_assortment_product(row: dict[str, Any]) -> bool:
+    return (
+        row.get("availability_status") == "verified_in_stock"
+        and _assortment_count(row, "verified_available_locations") > 0
+    )
+
+
 def _compact_assortment_products(rows: Any) -> list[dict[str, Any]]:
     if not isinstance(rows, list):
         return []
@@ -318,11 +332,23 @@ def _compact_assortment_products(rows: Any) -> list[dict[str, Any]]:
             "brand": row.get("brand"),
             "brand_type": str(row.get("brand_type") or "unclassified"),
             "image_url": row.get("image_url"),
-            "observed_locations": int(row.get("observed_locations") or 0),
-            "observed_zipcodes": int(row.get("observed_zipcodes") or 0),
+            "observed_locations": _assortment_count(row, "verified_available_locations"),
+            "observed_zipcodes": _assortment_count(row, "verified_available_zipcodes"),
+            "verified_available_locations": _assortment_count(row, "verified_available_locations"),
+            "verified_available_zipcodes": _assortment_count(row, "verified_available_zipcodes"),
+            "search_observed_locations": _assortment_count(row, "search_observed_locations"),
+            "search_observed_zipcodes": _assortment_count(row, "search_observed_zipcodes"),
+            "availability_status": str(row["availability_status"]),
+            "explicitly_out_of_stock_locations": _assortment_count(
+                row, "explicitly_out_of_stock_locations"
+            ),
+            "unverified_locations": _assortment_count(row, "unverified_locations"),
+            "unverified_sponsored_locations": _assortment_count(
+                row, "unverified_sponsored_locations"
+            ),
         }
         for row in rows
-        if isinstance(row, dict) and row.get("product_id")
+        if isinstance(row, dict) and row.get("product_id") and _is_verified_assortment_product(row)
     ]
 
 
@@ -341,7 +367,8 @@ def _assortment_products(assortment: Any, retailer_id: str) -> list[dict[str, An
         return sorted(
             products,
             key=lambda row: (
-                -int(row.get("observed_locations") or 0),
+                0 if _is_verified_assortment_product(row) else 1,
+                -_assortment_count(row, "verified_available_locations"),
                 str(row.get("name") or row.get("product_id") or "").casefold(),
             ),
         )
@@ -415,7 +442,7 @@ def _coverage_rows(
     observed_product_ids = {
         product_id
         for product_id in in_scope_product_ids
-        if int(observed_products.get(product_id, {}).get("observed_locations") or 0) > 0
+        if _is_verified_assortment_product(observed_products.get(product_id, {}))
     }
     certified_product_ids = observed_product_ids & set(identity_by_product)
     selected_product_ids = certified_product_ids & set(selected_by_product)
@@ -428,7 +455,11 @@ def _coverage_rows(
     status_counts: Counter[str] = Counter()
     for product_id in product_ids:
         observed = observed_products.get(product_id, {})
-        observed_locations = int(observed.get("observed_locations") or 0)
+        observed_locations = (
+            _assortment_count(observed, "verified_available_locations")
+            if _is_verified_assortment_product(observed)
+            else 0
+        )
         certified_relationships = len(identity_by_product.get(product_id, set()))
         selected_relationships = len(selected_by_product.get(product_id, set()))
         scored_locations = scored_by_product.get(product_id, 0)
@@ -722,6 +753,8 @@ class PostgresCompetitiveLeadershipRepository:
             WHERE result.analysis_id = :analysis_id
               AND materialization.profile_id = :profile_id
               AND materialization.radius_miles = :radius_miles
+              AND result.reporting_status = 'ready'
+              AND result.archived_at IS NULL
             """
         )
         async with self._engine.connect() as connection:
@@ -744,6 +777,8 @@ class PostgresCompetitiveLeadershipRepository:
             FROM competitive_portfolio_materialization materialization
             JOIN analysis_result result ON result.id = materialization.analysis_result_id
             WHERE result.analysis_id = :analysis_id
+              AND result.reporting_status = 'ready'
+              AND result.archived_at IS NULL
             ORDER BY materialization.profile_id, materialization.radius_miles
             """
         )
@@ -1123,7 +1158,7 @@ class CompetitiveProductLeadershipService:
         benchmark_observed_ids = {
             str(row.get("product_id"))
             for row in benchmark_assortment_products
-            if row.get("product_id")
+            if row.get("product_id") and _is_verified_assortment_product(row)
         }
         benchmark_catalog = await self._benchmark_catalog(
             analysis,
@@ -1372,11 +1407,8 @@ class CompetitiveProductLeadershipService:
             competitor_observed_ids = {
                 str(row.get("product_id"))
                 for row in competitor_assortment_products
-                if row.get("product_id")
+                if row.get("product_id") and _is_verified_assortment_product(row)
             }
-            has_observed_assortment = bool(
-                benchmark_assortment_products or competitor_assortment_products
-            )
             matched_observed_benchmark_ids = set(benchmark_product_ids) & benchmark_observed_ids
             matched_observed_competitor_ids = competitor_product_ids & competitor_observed_ids
             benchmark_only_ids = benchmark_observed_ids - matched_observed_benchmark_ids
@@ -1388,49 +1420,25 @@ class CompetitiveProductLeadershipService:
                     "competitor": competitor_name_index.get(retailer_id, retailer_id),
                     "profile_id": selected_profile,
                     "relationships": len(relationship_ids),
-                    "matched_benchmark_products": (
-                        len(matched_observed_benchmark_ids)
-                        if has_observed_assortment
-                        else len(benchmark_product_ids)
-                    ),
-                    "matched_competitor_products": (
-                        len(matched_observed_competitor_ids)
-                        if has_observed_assortment
-                        else len(competitor_product_ids)
-                    ),
-                    "benchmark_only_products": (
-                        len(benchmark_only_ids)
-                        if has_observed_assortment
-                        else int(legacy_assortment.get("benchmark_only_products") or 0)
-                    ),
-                    "competitor_whitespace_products": (
-                        len(competitor_whitespace_ids)
-                        if has_observed_assortment
-                        else int(legacy_assortment.get("competitor_whitespace_products") or 0)
-                    ),
+                    "matched_benchmark_products": len(matched_observed_benchmark_ids),
+                    "matched_competitor_products": len(matched_observed_competitor_ids),
+                    "benchmark_only_products": len(benchmark_only_ids),
+                    "competitor_whitespace_products": len(competitor_whitespace_ids),
                     "benchmark_match_coverage": (
-                        (
-                            round(
-                                len(matched_observed_benchmark_ids) / len(benchmark_observed_ids),
-                                4,
-                            )
-                            if benchmark_observed_ids
-                            else None
+                        round(
+                            len(matched_observed_benchmark_ids) / len(benchmark_observed_ids),
+                            4,
                         )
-                        if has_observed_assortment
-                        else legacy_assortment.get("benchmark_match_coverage")
+                        if benchmark_observed_ids
+                        else None
                     ),
                     "competitor_match_coverage": (
-                        (
-                            round(
-                                len(matched_observed_competitor_ids) / len(competitor_observed_ids),
-                                4,
-                            )
-                            if competitor_observed_ids
-                            else None
+                        round(
+                            len(matched_observed_competitor_ids) / len(competitor_observed_ids),
+                            4,
                         )
-                        if has_observed_assortment
-                        else legacy_assortment.get("competitor_match_coverage")
+                        if competitor_observed_ids
+                        else None
                     ),
                     "profiles": list(legacy_assortment.get("profiles") or []),
                     "top_benchmark_only": _compact_assortment_products(
@@ -1439,8 +1447,6 @@ class CompetitiveProductLeadershipService:
                             for row in benchmark_assortment_products
                             if str(row.get("product_id")) in benchmark_only_ids
                         ][:12]
-                        if has_observed_assortment
-                        else legacy_assortment.get("top_benchmark_only")
                     ),
                     "top_competitor_whitespace": _compact_assortment_products(
                         [
@@ -1448,8 +1454,6 @@ class CompetitiveProductLeadershipService:
                             for row in competitor_assortment_products
                             if str(row.get("product_id")) in competitor_whitespace_ids
                         ][:12]
-                        if has_observed_assortment
-                        else legacy_assortment.get("top_competitor_whitespace")
                     ),
                     "products": products,
                     **radius_summary,
@@ -1502,7 +1506,9 @@ class CompetitiveProductLeadershipService:
             "policy": {
                 "physical_store_rule": "within selected radius",
                 "service_area_rule": "same delivery ZIP",
-                "grain": "certified product relationship x observed Walmart product-store",
+                "grain": (
+                    "certified product relationship x verified-available Walmart product-store"
+                ),
             },
             "scorecards": scorecards,
             "cohorts": cohorts,
@@ -1757,19 +1763,17 @@ class CompetitiveProductLeadershipService:
         product_rows: dict[str, dict[str, Any]] = {}
         product_rank: dict[str, int] = {}
         assortment = report.get("assortment_analysis")
-        assortment_retailers = (
-            assortment.get("retailers", []) if isinstance(assortment, dict) else []
+        benchmark_assortment_products = _assortment_products(
+            assortment,
+            str(benchmark["id"]),
         )
-        benchmark_assortment = next(
-            (
-                row
-                for row in assortment_retailers
-                if isinstance(row, dict) and str(row.get("retailer")) == str(benchmark["id"])
-            ),
-            {},
-        )
-        for row in benchmark_assortment.get("products", []):
-            if not isinstance(row, dict):
+        verified_benchmark_product_ids = {
+            str(row.get("product_id"))
+            for row in benchmark_assortment_products
+            if row.get("product_id") and _is_verified_assortment_product(row)
+        }
+        for row in benchmark_assortment_products:
+            if not _is_verified_assortment_product(row):
                 continue
             product_id = str(row.get("product_id") or "")
             if not product_id:
@@ -1779,10 +1783,10 @@ class CompetitiveProductLeadershipService:
                 "name": str(row.get("name") or product_id),
                 "image_url": row.get("image_url"),
             }
-            product_rank[product_id] = int(row.get("observed_locations") or 0)
+            product_rank[product_id] = _assortment_count(row, "verified_available_locations")
         for row in candidates:
             product_id = str(row.get("benchmark_product_id") or "")
-            if not product_id:
+            if not product_id or product_id not in verified_benchmark_product_ids:
                 continue
             product_rows.setdefault(
                 product_id,
@@ -1791,10 +1795,6 @@ class CompetitiveProductLeadershipService:
                     "name": str(row.get("benchmark_product_name") or product_id),
                     "image_url": row.get("benchmark_image_url"),
                 },
-            )
-            product_rank[product_id] = max(
-                product_rank.get(product_id, 0),
-                int(row.get("geographies") or row.get("matches") or 0),
             )
         if not product_rows:
             raise LookupError("no decision-ready benchmark products are available")
@@ -1898,7 +1898,7 @@ class CompetitiveProductLeadershipService:
             for observation in observations
         ]
         if not benchmark_observations:
-            raise LookupError("positive benchmark Search observations are unavailable")
+            raise LookupError("verified-local benchmark Search price observations are unavailable")
 
         pack = await self._packs.load(
             analysis.product_pack_id,
@@ -2020,6 +2020,7 @@ async def materialize_competitive_portfolios(
 async def competitive_portfolio_scorecards_view(
     analysis_id: str,
     service: ServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
     competitor: str = "all",
     profile: str | None = None,
     radius_miles: int = Query(default=3, ge=1, le=5),
@@ -2053,6 +2054,7 @@ async def competitive_portfolio_scorecards_view(
 async def competitive_product_coverage_view(
     analysis_id: str,
     service: ServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
     competitor: str,
     profile: str | None = None,
     radius_miles: int = Query(default=3, ge=1, le=5),
@@ -2080,6 +2082,7 @@ async def competitive_product_coverage_view(
 async def competitive_decision_quality_view(
     analysis_id: str,
     service: ServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
 ) -> dict[str, Any]:
     try:
         return await service.decision_quality_view(analysis_id)
@@ -2093,6 +2096,7 @@ async def competitive_decision_quality_view(
 async def competitive_product_leadership_view(
     analysis_id: str,
     service: ServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
     competitor: str = "all",
     profile: str | None = None,
     product: str | None = None,

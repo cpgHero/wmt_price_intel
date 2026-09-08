@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -11,7 +12,7 @@ from rci_analytics import (
     PriceLocation,
     ProductLocationObservation,
 )
-from rci_contracts import validate_instance
+from rci_contracts import ContractError, validate_instance
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
@@ -23,6 +24,8 @@ def _observation(
     store_number: str,
     *,
     name: str | None = None,
+    in_stock: bool | None = True,
+    is_sponsored: bool | None = False,
 ) -> ProductLocationObservation:
     return ProductLocationObservation(
         observation_id=f"{retailer_id}:{product_id}:{store_number}",
@@ -56,10 +59,11 @@ def _observation(
         package_price=price,
         regular_price=price,
         discounted_price=None,
-        is_sponsored=False,
+        is_sponsored=is_sponsored,
         observed_at="2026-08-19T12:00:00Z",
         offer_id=f"offer:{retailer_id}:{product_id}:{store_number}",
         metric_values=(),
+        in_stock=in_stock,
     )
 
 
@@ -141,6 +145,41 @@ def test_benchmark_rungs_use_distinct_product_medians_and_true_midpoints() -> No
     assert [rung["rank"] for rung in matrix["rungs"]] == [1, 2, 3]
 
 
+@pytest.mark.parametrize(
+    "field",
+    [
+        "verified_available_locations",
+        "search_observed_locations",
+        "search_observed_skus",
+    ],
+)
+def test_matrix_contract_requires_explicit_retailer_evidence_counts(field: str) -> None:
+    matrix = deepcopy(_matrix())
+    del matrix["retailers"][0][field]
+
+    with pytest.raises(ContractError):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "price-architecture-matrix.schema.json",
+            matrix,
+            label=f"matrix missing {field}",
+        )
+
+
+def test_matrix_contract_rejects_available_status_without_verified_breadth() -> None:
+    matrix = deepcopy(_matrix())
+    matrix["retailers"][0]["verified_available_locations"] = 0
+    matrix["retailers"][0]["observed_locations"] = 0
+
+    with pytest.raises(ContractError):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "price-architecture-matrix.schema.json",
+            matrix,
+            label="available matrix retailer without verified breadth",
+        )
+
+
 def test_boundary_price_enters_the_higher_anchor_rung_and_skus_are_unique() -> None:
     matrix = _matrix()
     middle = next(rung for rung in matrix["rungs"] if rung["lower_bound"] == 3.0)
@@ -176,13 +215,63 @@ def test_store_coverage_is_union_of_distinct_locations_not_product_sum() -> None
         assert sum(float(value or 0) for value in shares) == pytest.approx(1, abs=0.0001)
 
 
-def test_products_within_each_rung_are_materialized_by_observed_store_count() -> None:
+def test_products_within_each_rung_are_materialized_by_verified_store_count() -> None:
     matrix = _matrix()
     middle = next(rung for rung in matrix["rungs"] if rung["lower_bound"] == 3.0)
     target_cell = next(cell for cell in middle["cells"] if cell["retailer_id"] == "target_us")
 
     assert [product["product_id"] for product in target_cell["products"]] == ["t2", "t1"]
     assert [product["observed_locations"] for product in target_cell["products"]] == [2, 1]
+
+
+def test_price_architecture_excludes_unverified_search_only_products() -> None:
+    walmart = _retailer(
+        "walmart_us",
+        [
+            _observation("walmart_us", "verified", 4.0, "1"),
+            _observation("walmart_us", "verified-high", 5.0, "4"),
+            _observation(
+                "walmart_us",
+                "sponsored",
+                3.0,
+                "2",
+                in_stock=None,
+                is_sponsored=True,
+            ),
+            _observation(
+                "walmart_us",
+                "out-of-stock",
+                2.0,
+                "3",
+                in_stock=False,
+                is_sponsored=True,
+            ),
+        ],
+    )
+    aldi = _retailer("aldi_us", [_observation("aldi_us", "verified-a", 4.5, "1")])
+
+    matrix = PriceArchitectureMatrixProjector().build(
+        analysis_id="verified-architecture-test",
+        generated_at=datetime.now(UTC).isoformat(),
+        product_pack={"id": "fresh_shell_eggs", "name": "Fresh shell eggs", "version": "1"},
+        anchor_retailer_id="walmart_us",
+        retailers=[walmart, aldi],
+    )
+
+    walmart_summary = next(row for row in matrix["retailers"] if row["id"] == "walmart_us")
+    assert walmart_summary["sku_count"] == 2
+    assert walmart_summary["observed_locations"] == 2
+    assert walmart_summary["verified_available_locations"] == 2
+    assert walmart_summary["search_observed_locations"] == 4
+    assert walmart_summary["search_observed_skus"] == 4
+    products = [
+        product
+        for rung in matrix["rungs"]
+        for cell in rung["cells"]
+        if cell["retailer_id"] == "walmart_us"
+        for product in cell["products"]
+    ]
+    assert {row["product_id"] for row in products} == {"verified", "verified-high"}
 
 
 def test_fixed_rungs_use_stable_intervals_with_benchmark_bounded_edges() -> None:
@@ -219,6 +308,14 @@ def test_brand_filter_preserves_walmart_rungs_and_filters_displayed_products() -
         for cell in rung["cells"]
         if cell["retailer_id"] != "walmart_us"
     )
+    walmart = next(row for row in matrix["retailers"] if row["id"] == "walmart_us")
+    aldi = next(row for row in matrix["retailers"] if row["id"] == "aldi_us")
+    assert walmart["verified_available_locations"] == 3
+    assert walmart["search_observed_locations"] == 3
+    assert walmart["search_observed_skus"] == 4
+    assert aldi["verified_available_locations"] == 0
+    assert aldi["search_observed_locations"] == 0
+    assert aldi["search_observed_skus"] == 0
 
 
 def test_brand_without_walmart_products_keeps_reference_rungs_contract_valid() -> None:

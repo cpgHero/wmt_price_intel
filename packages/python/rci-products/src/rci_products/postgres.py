@@ -1491,7 +1491,10 @@ class PostgresProductDetailRepository:
                     "retailer": str(row["retailer_id"]),
                     "name": str(normalized.get("name") or identity.get("name") or "Product"),
                     "brand": normalized.get("brand") or identity.get("brand"),
-                    "seller": normalized.get("seller") or identity.get("seller"),
+                    # Seller is volatile governance evidence, not durable product
+                    # identity.  A missing seller on the latest normalized PDP must
+                    # fail closed instead of reviving an older first-party seller.
+                    "seller": normalized.get("seller"),
                     "url": normalized.get("url") or identity.get("url"),
                     "image_url": (
                         (media.get("image_primary") if isinstance(media, dict) else None)

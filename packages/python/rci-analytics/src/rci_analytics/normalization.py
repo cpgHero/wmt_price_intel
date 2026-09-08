@@ -19,6 +19,10 @@ _SCIENTIFIC_IDENTIFIER = re.compile(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$")
 _URL_IDENTIFIER = re.compile(r"(?<!\d)(\d{6,24})(?!\d)")
 
 
+class BooleanAliasValidationError(ValueError):
+    """Raised when availability or sponsorship aliases cannot be trusted."""
+
+
 def _first(row: JsonObject, *names: str) -> Any:
     for name in names:
         value = row.get(name)
@@ -61,6 +65,31 @@ def _boolean(value: Any) -> bool | None:
     if normalized in {"0", "false", "no", "n", "out of stock"}:
         return False
     return None
+
+
+def _boolean_alias(row: JsonObject, semantic: str, *names: str) -> bool | None:
+    """Resolve every supplied alias and reject malformed or contradictory evidence."""
+
+    observed: list[tuple[str, bool]] = []
+    for name in names:
+        if name not in row:
+            continue
+        raw_value = row[name]
+        if raw_value is None or str(raw_value).strip() == "":
+            continue
+        value = _boolean(raw_value)
+        if value is None:
+            raise BooleanAliasValidationError(
+                f"offer {semantic} alias {name!r} has invalid boolean value {raw_value!r}"
+            )
+        observed.append((name, value))
+
+    if not observed:
+        return None
+    if len({value for _, value in observed}) > 1:
+        details = ", ".join(f"{name}={value}" for name, value in observed)
+        raise BooleanAliasValidationError(f"offer has conflicting {semantic} aliases: {details}")
+    return observed[0][1]
 
 
 def _datetime_utc(value: Any) -> str | None:
@@ -197,6 +226,22 @@ class CanonicalOfferNormalizer:
             if currency == "USD"
             else None
         )
+        in_stock = _boolean_alias(
+            source,
+            "availability",
+            "in_stock",
+            "stock_availability",
+            "available",
+            "Stock Availability",
+        )
+        is_sponsored = _boolean_alias(
+            source,
+            "sponsorship",
+            "is_sponsored",
+            "sponsored",
+            "Is Sponsored",
+        )
+        collected_at = _datetime_utc(_first(source, "collected_at", "Date", "Time Created"))
         identity = "|".join(
             [
                 retailer_id,
@@ -205,6 +250,9 @@ class CanonicalOfferNormalizer:
                 store_number or "",
                 title,
                 str(price) if price is not None else "",
+                str(in_stock) if in_stock is not None else "unknown-stock",
+                str(is_sponsored) if is_sponsored is not None else "unknown-sponsorship",
+                collected_at or "unknown-observation-time",
             ]
         )
         return NormalizedOffer(
@@ -219,16 +267,14 @@ class CanonicalOfferNormalizer:
             store_number=store_number,
             latitude=_float(_first(source, "latitude", "Latitude")),
             longitude=_float(_first(source, "longitude", "Longitude")),
-            in_stock=_boolean(
-                _first(source, "in_stock", "stock_availability", "Stock Availability")
-            ),
+            in_stock=in_stock,
             product_url=product_url,
             image_url=_text(source, "image_url", "image_primary", "Image Url"),
-            collected_at=_datetime_utc(_first(source, "collected_at", "Date", "Time Created")),
+            collected_at=collected_at,
             raw=dict(source),
             regular_price=regular_price,
             discounted_price=discounted_price,
-            is_sponsored=_boolean(_first(source, "is_sponsored", "sponsored", "Is Sponsored")),
+            is_sponsored=is_sponsored,
         )
 
     def normalize_many(self, rows: list[JsonObject]) -> list[NormalizedOffer]:
@@ -237,6 +283,11 @@ class CanonicalOfferNormalizer:
         for row in rows:
             try:
                 offer = self.normalize(row)
+            except BooleanAliasValidationError:
+                # This batch path also feeds the analytics CLI. Dropping an
+                # untrusted newer availability state could leave an older verified
+                # product-location alive, so callers must reject the batch.
+                raise
             except ValueError:
                 continue
             if offer.offer_id in seen_offer_ids:

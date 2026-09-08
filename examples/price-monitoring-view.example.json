@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.3.0",
+  "schema_version": "1.4.0",
   "analysis_id": "fresh_ground_beef-example",
   "generated_at": "2026-08-13T12:00:00Z",
   "product_pack": {
@@ -20,7 +20,7 @@
     "observed_end": null,
     "source_rows": 0,
     "classified_rows": 0,
-    "observation_schema_version": "1.1.0",
+    "observation_schema_version": "1.2.0",
     "observation_population_checksum": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
     "artifact_checksums": []
   },
@@ -47,10 +47,14 @@
   },
   "summary": {
     "observed_locations": 0,
+    "verified_available_locations": 0,
     "expected_locations": 0,
     "coverage_rate": null,
     "observed_products": 0,
+    "verified_available_products": 0,
     "eligible_observations": 0,
+    "search_price_observations": 0,
+    "verified_availability_observations": 0,
     "usable_price_rate": 0,
     "price_consistency_rate": null
   },
@@ -62,6 +66,15 @@
     "not_observed_locations": 0,
     "confirmed_gap_locations": 0,
     "definition": "Observed presence means the selected product appeared in successful Search evidence. A Search non-observation is not proof that a store does not carry the product."
+  },
+  "availability": {
+    "status": "unverified",
+    "verified_available_locations": 0,
+    "eligible_locations": 0,
+    "verified_availability_rate": null,
+    "explicitly_out_of_stock_locations": 0,
+    "unverified_locations": 0,
+    "definition": "Verified local availability requires an explicit in-stock signal from an organic Search result. Sponsored placements, unknown sponsorship, and missing stock signals remain Search presence only."
   },
   "distribution_gaps": {
     "status": "search_non_observation",
@@ -87,7 +100,20 @@
     "modal_share": null,
     "observation_count": 0
   },
+  "search_price_distribution": {
+    "minimum": null,
+    "q1": null,
+    "observation_median": null,
+    "product_equal_weighted_median": null,
+    "q3": null,
+    "maximum": null,
+    "range": null,
+    "modal_price": null,
+    "modal_share": null,
+    "observation_count": 0
+  },
   "price_histogram": [],
+  "search_price_histogram": [],
   "brand_portfolio": [],
   "geographies": [],
   "locations": [],

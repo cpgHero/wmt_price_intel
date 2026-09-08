@@ -493,7 +493,7 @@ def test_fixture_results_normalize_to_canonical_retailers(
     assert normalized["in_stock"] is True
 
 
-def test_search_price_is_authoritative_for_api_availability() -> None:
+def test_positive_search_price_does_not_override_explicit_provider_unavailability() -> None:
     registry = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH)
     adapter = registry.get("metricscart_walmart_search_zipcode_v2")
     result = {
@@ -514,8 +514,225 @@ def test_search_price_is_authoritative_for_api_availability() -> None:
         ),
     )
 
-    assert normalized["in_stock"] is True
+    assert normalized["price"] == 3.48
+    assert normalized["in_stock"] is False
     assert normalized["raw"]["stock_availability"] is False
+
+
+@pytest.mark.parametrize(
+    ("provider_field", "provider_value", "expected"),
+    [
+        ("stock_availability", True, True),
+        ("stock_availability", False, False),
+        ("in_stock", True, True),
+        ("available", False, False),
+    ],
+)
+def test_explicit_provider_stock_boolean_is_preserved(
+    provider_field: str, provider_value: bool, expected: bool
+) -> None:
+    registry = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH)
+    adapter = registry.get("metricscart_walmart_search_zipcode_v2")
+    result = {
+        "name": "Great Value Strawberries, 1 lb",
+        "retailer_product_id": "00123",
+        "price": 3.48,
+        "is_sponsored": False,
+        "retailer": "walmart.com",
+        provider_field: provider_value,
+    }
+
+    normalized = adapter.normalize_result(
+        result,
+        _task(
+            retailer_id="walmart_us",
+            adapter_id="metricscart_walmart_search_zipcode_v2",
+            store_number="0007",
+        ),
+    )
+
+    assert normalized["price"] == 3.48
+    assert normalized["in_stock"] is expected
+
+
+def test_consistent_provider_boolean_aliases_are_preserved() -> None:
+    registry = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH)
+    adapter = registry.get("metricscart_walmart_search_zipcode_v2")
+    result = {
+        "name": "Great Value Strawberries, 1 lb",
+        "retailer_product_id": "00123",
+        "price": 3.48,
+        "is_sponsored": False,
+        "sponsored": False,
+        "retailer": "walmart.com",
+        "stock_availability": True,
+        "in_stock": True,
+        "available": True,
+    }
+
+    adapter.audit_response({"results": [result]})
+    normalized = adapter.normalize_result(
+        result,
+        _task(
+            retailer_id="walmart_us",
+            adapter_id="metricscart_walmart_search_zipcode_v2",
+            store_number="0007",
+        ),
+    )
+
+    assert normalized["in_stock"] is True
+    assert normalized["is_sponsored"] is False
+
+
+@pytest.mark.parametrize(
+    ("aliases", "canonical"),
+    [
+        ({"stock_availability": True, "in_stock": False}, "stock_availability"),
+        ({"stock_availability": False, "available": True}, "stock_availability"),
+        ({"is_sponsored": True, "sponsored": False}, "is_sponsored"),
+    ],
+)
+def test_response_audit_rejects_conflicting_provider_boolean_aliases(
+    aliases: dict[str, object], canonical: str
+) -> None:
+    adapter = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH).get(
+        "metricscart_walmart_search_zipcode_v2"
+    )
+    result = {
+        "name": "Great Value Strawberries, 1 lb",
+        "retailer_product_id": "00123",
+        "price": 3.48,
+        "is_sponsored": False,
+        "retailer": "walmart.com",
+        "stock_availability": True,
+        **aliases,
+    }
+
+    with pytest.raises(ValueError, match=rf"{canonical} aliases conflict"):
+        adapter.audit_response({"results": [result]})
+
+
+@pytest.mark.parametrize(
+    ("aliases", "canonical", "field"),
+    [
+        ({"stock_availability": "false"}, "stock_availability", "stock_availability"),
+        (
+            {"stock_availability": True, "available": "sometimes"},
+            "stock_availability",
+            "available",
+        ),
+        ({"is_sponsored": "true"}, "is_sponsored", "is_sponsored"),
+        (
+            {"is_sponsored": False, "sponsored": "promoted"},
+            "is_sponsored",
+            "sponsored",
+        ),
+    ],
+)
+def test_response_audit_rejects_string_or_malformed_provider_boolean_aliases(
+    aliases: dict[str, object], canonical: str, field: str
+) -> None:
+    adapter = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH).get(
+        "metricscart_walmart_search_zipcode_v2"
+    )
+    result = {
+        "name": "Great Value Strawberries, 1 lb",
+        "retailer_product_id": "00123",
+        "price": 3.48,
+        "is_sponsored": False,
+        "retailer": "walmart.com",
+        "stock_availability": True,
+        **aliases,
+    }
+
+    with pytest.raises(
+        ValueError,
+        match=rf"{canonical} must be boolean or null; alias '{field}'",
+    ):
+        adapter.audit_response({"results": [result]})
+
+
+@pytest.mark.parametrize(
+    ("aliases", "error"),
+    [
+        (
+            {"stock_availability": True, "available": False},
+            "stock_availability aliases conflict",
+        ),
+        ({"is_sponsored": False, "sponsored": "false"}, "is_sponsored must be boolean"),
+    ],
+)
+def test_normalize_result_cannot_bypass_provider_boolean_alias_validation(
+    aliases: dict[str, object], error: str
+) -> None:
+    adapter = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH).get(
+        "metricscart_walmart_search_zipcode_v2"
+    )
+    result = {
+        "name": "Great Value Strawberries, 1 lb",
+        "retailer_product_id": "00123",
+        "price": 3.48,
+        "is_sponsored": False,
+        "retailer": "walmart.com",
+        "stock_availability": True,
+        **aliases,
+    }
+
+    with pytest.raises(ValueError, match=error):
+        adapter.normalize_result(
+            result,
+            _task(
+                retailer_id="walmart_us",
+                adapter_id="metricscart_walmart_search_zipcode_v2",
+                store_number="0007",
+            ),
+        )
+
+
+def test_positive_search_price_without_provider_stock_signal_is_unknown() -> None:
+    registry = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH)
+    adapter = registry.get("metricscart_walmart_search_zipcode_v2")
+    result = {
+        "name": "Great Value Strawberries, 1 lb",
+        "retailer_product_id": "00123",
+        "price": 3.48,
+        "is_sponsored": False,
+        "retailer": "walmart.com",
+    }
+
+    normalized = adapter.normalize_result(
+        result,
+        _task(
+            retailer_id="walmart_us",
+            adapter_id="metricscart_walmart_search_zipcode_v2",
+            store_number="0007",
+        ),
+    )
+
+    assert normalized["price"] == 3.48
+    assert normalized["in_stock"] is None
+
+
+def test_response_audit_rejects_non_boolean_provider_stock_signal() -> None:
+    adapter = MetricsCartAdapterRegistry.from_catalog(CATALOG_PATH).get(
+        "metricscart_walmart_search_zipcode_v2"
+    )
+
+    with pytest.raises(ValueError, match="stock_availability must be boolean or null"):
+        adapter.audit_response(
+            {
+                "results": [
+                    {
+                        "name": "Great Value Strawberries, 1 lb",
+                        "retailer_product_id": "00123",
+                        "price": 3.48,
+                        "is_sponsored": False,
+                        "retailer": "walmart.com",
+                        "stock_availability": "false",
+                    }
+                ]
+            }
+        )
 
 
 def test_request_overrides_cannot_replace_auth_or_location_identity() -> None:

@@ -10,7 +10,6 @@ export interface CompetitiveProductLeadershipRequest {
   cityFilter?: string | null;
 }
 
-const completed = new Map<string, CompetitiveProductLeadership>();
 const pending = new Map<string, Promise<CompetitiveProductLeadership>>();
 
 export function competitiveProductLeadershipPath(
@@ -32,8 +31,6 @@ export async function loadCompetitiveProductLeadership(
   request: CompetitiveProductLeadershipRequest,
 ) {
   const path = competitiveProductLeadershipPath(request);
-  const cached = completed.get(path);
-  if (cached) return cached;
   const inFlight = pending.get(path);
   if (inFlight) return inFlight;
 
@@ -42,13 +39,13 @@ export async function loadCompetitiveProductLeadership(
       const body = (await response.json()) as CompetitiveProductLeadership & {
         error?: string;
       };
+      if (response.status === 409 && typeof window !== "undefined") {
+        window.location.reload();
+      }
       if (!response.ok)
         throw new Error(
           body.error || `Leadership evidence returned ${response.status}`,
         );
-      if (completed.size >= 16)
-        completed.delete(completed.keys().next().value!);
-      completed.set(path, body);
       return body;
     })
     .finally(() => pending.delete(path));

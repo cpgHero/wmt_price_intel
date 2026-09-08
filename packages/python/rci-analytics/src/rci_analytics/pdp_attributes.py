@@ -7,6 +7,10 @@ from dataclasses import replace
 from typing import Any
 
 from rci_analytics.classification import OfferClassifier
+from rci_analytics.latest_product_location import (
+    SELLER_POLICY_EXCLUSION_REASON,
+    is_product_location_state,
+)
 from rci_analytics.models import ClassifiedOffer, JsonObject
 from rci_analytics.product_pack import ProductPack
 from rci_retailer_packs import GovernedSellerResolver
@@ -40,13 +44,15 @@ def complete_attributes_from_pdp(
 ) -> ClassifiedOffer:
     """Fill unresolved Product Pack attributes from PDP text without changing price.
 
-    The search result remains the admission, price, availability, store, and location
-    authority. PDP content is flattened into a classification-only text surface and
-    can fill an unresolved attribute; it never overwrites explicit Search, Product Pack
-    override, or configured-constant evidence. Inferred defaults are not evidence.
+    The Search result remains the admission and price-placement source. Explicit
+    ``in_stock=true`` and ``is_sponsored=false`` evidence is required for verified
+    local availability; a Search placement by itself proves neither availability nor
+    store carriage. PDP content is flattened into a classification-only text surface
+    and can fill an unresolved attribute; it never overwrites explicit Search, Product
+    Pack override, or configured-constant evidence. Inferred defaults are not evidence.
     """
 
-    if not classified.in_scope:
+    if not is_product_location_state(classified):
         return classified
     context = _flatten_product_context(context)
     attributes = dict(classified.attributes)
@@ -169,7 +175,7 @@ def complete_attributes_from_pdp(
         classified,
         in_scope=(classified.in_scope and (seller_decision is None or seller_decision.eligible)),
         scope_reason=(
-            "known third-party marketplace seller excluded by Retailer Pack policy"
+            SELLER_POLICY_EXCLUSION_REASON
             if seller_decision is not None and not seller_decision.eligible
             else classified.scope_reason
         ),

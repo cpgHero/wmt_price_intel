@@ -21,6 +21,7 @@ from rci_automation.models import (
     ScheduleRecord,
     ScheduleSource,
 )
+from rci_results.contracts import has_verified_local_availability_contract
 from rci_results.models import AnalysisRecord
 
 DEFAULT_ORGANIZATION_ID = "00000000-0000-0000-0000-000000000001"
@@ -80,6 +81,7 @@ def _context(row: RowMapping) -> AnalysisContext:
         checksum=str(row["analysis_checksum"]),
         result=dict(row["result"]),
         created_at=row["analysis_created_at"],
+        reporting_status=str(row["reporting_status"]),
     )
     return AnalysisContext(
         analysis=analysis,
@@ -164,7 +166,7 @@ _CONTEXT_SELECT = """
 SELECT r.id::text AS result_id, r.analysis_run_id::text AS analysis_run_id,
        r.analysis_id, ar.collection_run_id::text AS collection_run_id,
        ar.status AS analysis_status, ar.product_pack_id, ar.product_pack_version,
-       r.schema_version, r.checksum AS analysis_checksum, r.result,
+       r.schema_version, r.reporting_status, r.checksum AS analysis_checksum, r.result,
        r.created_at AS analysis_created_at,
        d.id::text AS collection_definition_id,
        d.stable_key AS collection_definition_key, cv.config AS collection_config
@@ -177,24 +179,145 @@ JOIN collection_definition d ON d.id = cv.definition_id
 
 _EVENT_SELECT = """
 SELECT e.*, d.stable_key AS alert_key, current.analysis_id,
-       baseline.analysis_id AS baseline_analysis_id
+       baseline.analysis_id AS baseline_analysis_id,
+       current.reporting_status AS public_reporting_status,
+       current.archived_at AS public_archived_at,
+       current.result AS public_result,
+       current.checksum AS public_result_checksum,
+       current_collection.organization_id::text AS public_organization_id,
+       d.organization_id::text AS public_alert_organization_id,
+       publication.id::text AS public_publication_id,
+       publication.analysis_result_id::text AS public_publication_analysis_result_id,
+       publication.status AS public_publication_status,
+       publication.source_result_checksum AS public_publication_source_result_checksum,
+       publication.result AS public_publication_result,
+       e.baseline_analysis_result_id::text AS public_baseline_analysis_result_id,
+       baseline.reporting_status AS public_baseline_reporting_status,
+       baseline.archived_at AS public_baseline_archived_at,
+       baseline.result AS public_baseline_result,
+       baseline_collection.organization_id::text AS public_baseline_organization_id
 FROM alert_event e
 JOIN alert_definition_version v ON v.id = e.alert_definition_version_id
 JOIN alert_definition d ON d.id = v.alert_definition_id
 JOIN analysis_result current ON current.id = e.analysis_result_id
+JOIN analysis_run current_run ON current_run.id = current.analysis_run_id
+JOIN collection_run current_collection ON current_collection.id = current_run.collection_run_id
 LEFT JOIN analysis_result baseline ON baseline.id = e.baseline_analysis_result_id
+LEFT JOIN analysis_run baseline_run ON baseline_run.id = baseline.analysis_run_id
+LEFT JOIN collection_run baseline_collection
+  ON baseline_collection.id = baseline_run.collection_run_id
+LEFT JOIN LATERAL (
+  SELECT p.id, p.analysis_result_id, p.status, p.source_result_checksum, p.result
+  FROM analysis_publication p
+  WHERE p.analysis_result_id = current.id
+  ORDER BY p.version DESC LIMIT 1
+) publication ON true
 """
 
 _EMAIL_SELECT = """
-SELECT e.*, r.analysis_id
+SELECT e.*, r.analysis_id,
+       r.reporting_status AS public_reporting_status,
+       r.archived_at AS public_archived_at,
+       r.result AS public_result,
+       r.checksum AS public_result_checksum,
+       collection.organization_id::text AS public_organization_id,
+       publication.id::text AS public_publication_id,
+       publication.analysis_result_id::text AS public_publication_analysis_result_id,
+       publication.status AS public_publication_status,
+       publication.source_result_checksum AS public_publication_source_result_checksum,
+       publication.result AS public_publication_result,
+       delivery_event.id::text AS public_alert_event_id,
+       delivery_event.analysis_result_id::text AS public_event_analysis_result_id,
+       delivery_event.baseline_analysis_result_id::text AS public_baseline_analysis_result_id,
+       baseline.reporting_status AS public_baseline_reporting_status,
+       baseline.archived_at AS public_baseline_archived_at,
+       baseline.result AS public_baseline_result,
+       baseline_collection.organization_id::text AS public_baseline_organization_id
 FROM email_delivery e
 JOIN analysis_result r ON r.id = e.analysis_result_id
+JOIN analysis_run run ON run.id = r.analysis_run_id
+JOIN collection_run collection ON collection.id = run.collection_run_id
+LEFT JOIN alert_event delivery_event ON delivery_event.id = e.alert_event_id
+LEFT JOIN analysis_result baseline
+  ON baseline.id = delivery_event.baseline_analysis_result_id
+LEFT JOIN analysis_run baseline_run ON baseline_run.id = baseline.analysis_run_id
+LEFT JOIN collection_run baseline_collection
+  ON baseline_collection.id = baseline_run.collection_run_id
+LEFT JOIN LATERAL (
+  SELECT p.id, p.analysis_result_id, p.status, p.source_result_checksum, p.result
+  FROM analysis_publication p
+  WHERE p.analysis_result_id = r.id
+  ORDER BY p.version DESC LIMIT 1
+) publication ON true
 """
 
 
+def _has_public_automation_lineage(
+    row: RowMapping | dict[str, Any], *, organization_id: str
+) -> bool:
+    """Fail closed unless the row's owner is the exact certified public result."""
+
+    if (
+        str(row.get("public_reporting_status") or "") != "ready"
+        or row.get("public_archived_at") is not None
+        or str(row.get("public_organization_id") or "") != organization_id
+    ):
+        return False
+    alert_organization_id = row.get("public_alert_organization_id")
+    if alert_organization_id is not None and str(alert_organization_id) != organization_id:
+        return False
+    result = row.get("public_result")
+    if not isinstance(result, dict) or not has_verified_local_availability_contract(result):
+        return False
+
+    publication_id = row.get("public_publication_id")
+    if publication_id is not None:
+        publication_result = row.get("public_publication_result")
+        if not (
+            str(row.get("public_publication_analysis_result_id") or "")
+            == str(row.get("analysis_result_id") or "")
+            and str(row.get("public_publication_status") or "") == "ready_to_share"
+            and str(row.get("public_publication_source_result_checksum") or "")
+            == str(row.get("public_result_checksum") or "")
+            and isinstance(publication_result, dict)
+            and has_verified_local_availability_contract(publication_result)
+        ):
+            return False
+
+    alert_event_id = row.get("alert_event_id")
+    if alert_event_id is not None and (
+        str(row.get("public_alert_event_id") or "") != str(alert_event_id)
+        or str(row.get("public_event_analysis_result_id") or "")
+        != str(row.get("analysis_result_id") or "")
+    ):
+        return False
+
+    baseline_result_id = row.get("public_baseline_analysis_result_id")
+    record_baseline_result_id = row.get("baseline_analysis_result_id")
+    if record_baseline_result_id is not None and (
+        str(baseline_result_id or "") != str(record_baseline_result_id)
+    ):
+        return False
+    if baseline_result_id is None:
+        return True
+    baseline_result = row.get("public_baseline_result")
+    return (
+        str(row.get("public_baseline_reporting_status") or "") == "ready"
+        and str(row.get("public_baseline_organization_id") or "") == organization_id
+        and isinstance(baseline_result, dict)
+        and has_verified_local_availability_contract(baseline_result)
+    )
+
+
 class PostgresAutomationRepository:
-    def __init__(self, engine: AsyncEngine) -> None:
+    def __init__(
+        self,
+        engine: AsyncEngine,
+        *,
+        organization_id: str = DEFAULT_ORGANIZATION_ID,
+    ) -> None:
         self._engine = engine
+        self._organization_id = organization_id
 
     async def schedule_sources(self) -> list[ScheduleSource]:
         async with self._engine.connect() as connection:
@@ -448,11 +571,23 @@ class PostgresAutomationRepository:
         async with self._engine.connect() as connection:
             rows = (
                 await connection.execute(
-                    text(f"{_EVENT_SELECT} ORDER BY e.created_at DESC LIMIT :limit"),
-                    {"limit": limit},
+                    text(
+                        f"{_EVENT_SELECT} "
+                        "WHERE current.reporting_status = 'ready' "
+                        "AND current.archived_at IS NULL "
+                        "AND current_collection.organization_id = "
+                        "CAST(:organization_id AS uuid) "
+                        "AND d.organization_id = CAST(:organization_id AS uuid) "
+                        "ORDER BY e.created_at DESC LIMIT :limit"
+                    ),
+                    {"limit": limit, "organization_id": self._organization_id},
                 )
             ).mappings()
-            return [_event(row) for row in rows]
+            return [
+                _event(row)
+                for row in rows
+                if _has_public_automation_lineage(row, organization_id=self._organization_id)
+            ]
 
     async def get_analysis(self, identifier: str) -> AnalysisContext | None:
         async with self._engine.connect() as connection:
@@ -471,6 +606,24 @@ class PostgresAutomationRepository:
             )
             return _context(row) if row is not None else None
 
+    async def get_active_analysis(self, identifier: str) -> AnalysisContext | None:
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            f"{_CONTEXT_SELECT} WHERE "
+                            "(r.analysis_id = :identifier OR r.id::text = :identifier) "
+                            "AND r.reporting_status = 'ready' AND r.archived_at IS NULL"
+                        ),
+                        {"identifier": identifier},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            return _context(row) if row is not None else None
+
     async def previous_analysis(self, current: AnalysisContext) -> AnalysisContext | None:
         async with self._engine.connect() as connection:
             row = (
@@ -479,6 +632,7 @@ class PostgresAutomationRepository:
                         text(
                             f"{_CONTEXT_SELECT} WHERE d.id::text = :definition_id "
                             "AND ar.product_pack_id = :product_pack_id "
+                            "AND r.reporting_status = 'ready' "
                             "AND r.created_at < :created_at ORDER BY r.created_at DESC LIMIT 1"
                         ),
                         {
@@ -505,8 +659,9 @@ class PostgresAutomationRepository:
                             SELECT r.id::text
                             FROM analysis_result r
                             LEFT JOIN analysis_automation_state s ON s.analysis_result_id = r.id
-                            WHERE s.analysis_result_id IS NULL OR s.status = 'failed'
-                               OR (s.status = 'processing' AND s.lease_expires_at <= now())
+                            WHERE r.reporting_status = 'ready' AND r.archived_at IS NULL
+                              AND (s.analysis_result_id IS NULL OR s.status = 'failed'
+                               OR (s.status = 'processing' AND s.lease_expires_at <= now()))
                             ORDER BY r.created_at, r.id
                             FOR UPDATE OF r SKIP LOCKED LIMIT :limit
                             """
@@ -715,11 +870,14 @@ class PostgresAutomationRepository:
                     text(
                         """
                         WITH candidates AS (
-                          SELECT id FROM email_delivery
-                          WHERE attempt_count < max_attempts AND (
-                            (status = 'pending' AND available_at <= now()) OR
-                            (status = 'sending' AND lease_expires_at <= now())
-                          ) ORDER BY created_at, id FOR UPDATE SKIP LOCKED LIMIT :limit
+                          SELECT e.id FROM email_delivery e
+                          JOIN analysis_result r ON r.id = e.analysis_result_id
+                          WHERE r.reporting_status = 'ready' AND r.archived_at IS NULL
+                            AND e.attempt_count < e.max_attempts AND (
+                              (e.status = 'pending' AND e.available_at <= now()) OR
+                              (e.status = 'sending' AND e.lease_expires_at <= now())
+                            ) ORDER BY e.created_at, e.id
+                          FOR UPDATE OF e SKIP LOCKED LIMIT :limit
                         ), claimed AS (
                           UPDATE email_delivery e SET status = 'sending',
                             attempt_count = attempt_count + 1, locked_by = :worker_id,
@@ -773,8 +931,17 @@ class PostgresAutomationRepository:
         async with self._engine.connect() as connection:
             rows = (
                 await connection.execute(
-                    text(f"{_EMAIL_SELECT} ORDER BY e.created_at DESC LIMIT :limit"),
-                    {"limit": limit},
+                    text(
+                        f"{_EMAIL_SELECT} "
+                        "WHERE r.reporting_status = 'ready' AND r.archived_at IS NULL "
+                        "AND collection.organization_id = CAST(:organization_id AS uuid) "
+                        "ORDER BY e.created_at DESC LIMIT :limit"
+                    ),
+                    {"limit": limit, "organization_id": self._organization_id},
                 )
             ).mappings()
-            return [_email(row) for row in rows]
+            return [
+                _email(row)
+                for row in rows
+                if _has_public_automation_lineage(row, organization_id=self._organization_id)
+            ]

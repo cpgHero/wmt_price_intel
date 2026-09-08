@@ -523,8 +523,9 @@ export function StudyDiscoveryAdmin() {
           <span className="section-kicker">Search-first governance</span>
           <h2>Category learning before certification</h2>
           <p>
-            Search supplies the population and store price. PDP supplies
-            reusable identity evidence.
+            Search supplies the population, query context, and listed price.
+            Explicit stock evidence and sponsorship status govern verified local
+            availability. PDP supplies reusable identity evidence.
           </p>
         </div>
         <button
@@ -925,7 +926,7 @@ export function StudyDiscoveryAdmin() {
                   <strong>
                     {metric(selected.profile_summary.raw_observations)}
                   </strong>
-                  <small>Store-level price evidence</small>
+                  <small>Store-context Search-price evidence</small>
                 </article>
                 <article>
                   <span>Unique products</span>
@@ -1019,9 +1020,10 @@ export function StudyDiscoveryAdmin() {
                         : "PDP enrichment complete"}
                     </h3>
                     <p>
-                      Search remains authoritative for store price and location.
-                      PDP data supports identity, attributes, imagery, and
-                      Product Pack design.
+                      Search remains authoritative for listed price and query
+                      context; a Search result alone does not prove store
+                      carriage. PDP data supports identity, attributes, imagery,
+                      and Product Pack design.
                     </p>
                   </div>
                   {pdpAudit ? (

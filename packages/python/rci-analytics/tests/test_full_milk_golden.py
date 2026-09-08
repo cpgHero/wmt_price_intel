@@ -3,18 +3,16 @@ from __future__ import annotations
 import csv
 import json
 import os
-import statistics
 from collections import Counter, defaultdict
 from dataclasses import replace
 from pathlib import Path
-from typing import Any
 
 import pytest
 
 from rci_analytics.classification import OfferClassifier
 from rci_analytics.matching import ComparisonEngine, ComparisonInputReducer
-from rci_analytics.models import MatchRecord
 from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
+from rci_analytics.product_location import classify_local_availability
 from rci_analytics.product_pack import ProductPackLoader
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
@@ -36,36 +34,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _summary(engine: ComparisonEngine, matches: list[MatchRecord]) -> dict[str, Any]:
-    if not matches:
-        return {
-            "matches": 0,
-            "unique_zips": 0,
-            "walmart_lower": 0,
-            "competitor_lower": 0,
-            "parity": 0,
-            "walmart_lower_rate": None,
-            "competitor_lower_rate": None,
-            "parity_rate": None,
-            "median_gap_per_gallon": None,
-            "mean_gap_per_gallon": None,
-        }
-    summary = engine.summarize(matches)
-    return {
-        "matches": summary.matches,
-        "unique_zips": summary.unique_geographies,
-        "walmart_lower": summary.benchmark_lower,
-        "competitor_lower": summary.competitor_lower,
-        "parity": summary.parity,
-        "walmart_lower_rate": summary.benchmark_lower_rate,
-        "competitor_lower_rate": summary.competitor_lower_rate,
-        "parity_rate": summary.parity_rate,
-        "median_gap_per_gallon": summary.median_gap,
-        "mean_gap_per_gallon": float(statistics.mean(match.gap for match in matches)),
-    }
-
-
-def test_full_milk_golden_regression() -> None:
+def test_full_milk_search_golden_is_quarantined_from_local_comparisons() -> None:
     expected = json.loads(
         (REPOSITORY_ROOT / "fixtures/golden/milk/validated_summary.json").read_text()
     )
@@ -81,6 +50,20 @@ def test_full_milk_golden_regression() -> None:
     qualifying_zips: dict[str, set[str]] = defaultdict(set)
     qualifying_stores: dict[str, set[str]] = defaultdict(set)
     qualifying_products: dict[str, set[str]] = defaultdict(set)
+    availability_statuses: dict[str, Counter[str]] = defaultdict(Counter)
+    walmart_locations: dict[str, tuple[str, str]] = {}
+    with (REPOSITORY_ROOT / "fixtures/location_master/locations.csv").open(
+        newline="", encoding="utf-8-sig"
+    ) as handle:
+        for row in csv.DictReader(handle):
+            if row["Provider"] == "Walmart":
+                walmart_locations[row["Store_No"]] = (row["State"], row["City"])
+    audited_product_rows = 0
+    audited_product_stores: set[str] = set()
+    audited_product_zips: set[str] = set()
+    audited_product_states: set[str] = set()
+    audited_product_cities: set[str] = set()
+    audited_product_statuses: Counter[str] = Counter()
 
     for expected_retailer, input_path in INPUTS.items():
         assert input_path is not None
@@ -89,6 +72,24 @@ def test_full_milk_golden_regression() -> None:
                 normalized = replace(normalizer.normalize(dict(row)), raw={})
                 assert normalized.retailer_id == expected_retailer
                 raw_rows[expected_retailer] += 1
+                availability_status = classify_local_availability(
+                    in_stock=normalized.in_stock,
+                    is_sponsored=normalized.is_sponsored,
+                )
+                availability_statuses[expected_retailer][availability_status] += 1
+                if (
+                    expected_retailer == "walmart_us"
+                    and normalized.retailer_product_id == "46942839"
+                ):
+                    audited_product_rows += 1
+                    audited_product_statuses[availability_status] += 1
+                    assert normalized.store_number is not None
+                    assert normalized.zipcode is not None
+                    audited_product_stores.add(normalized.store_number)
+                    audited_product_zips.add(normalized.zipcode)
+                    state, city = walmart_locations[normalized.store_number]
+                    audited_product_states.add(state)
+                    audited_product_cities.add(city)
                 classified = classifier.classify(normalized)
                 if classified.in_scope:
                     qualifying_rows[expected_retailer] += 1
@@ -110,6 +111,23 @@ def test_full_milk_golden_regression() -> None:
 
     offers = reducer.offers()
     engine = ComparisonEngine(pack)
+    assert availability_statuses == {
+        "walmart_us": Counter({"unverified": 184_750, "unverified_sponsored": 56_029}),
+        "aldi_us": Counter({"unverified": 41_321}),
+        "amazon_us_same_day": Counter(
+            {"verified_in_stock": 63_854, "explicitly_out_of_stock": 3_026}
+        ),
+    }
+    assert audited_product_rows == 83
+    assert len(audited_product_stores) == 83
+    assert len(audited_product_zips) == 78
+    assert audited_product_states == {"CA"}
+    assert len(audited_product_cities) == 59
+    assert audited_product_statuses == Counter({"unverified": 83})
+    # These immutable historical Search exports remain valid discovery and
+    # price evidence, but Walmart and ALDI contain no explicit stock signal.
+    # They must therefore produce no local comparisons instead of recreating
+    # the legacy Search-placement footprint as store carriage.
     profile_by_mode = {
         "same_brand": "same_brand_exact",
         "private_label": "private_label",
@@ -126,14 +144,7 @@ def test_full_milk_golden_regression() -> None:
                 competitor_id=competitor_id,
                 profile_id=profile_id,
             )
-            actual = _summary(engine, matches)
-            comparison = expected["comparisons"][f"{display_name}_{mode}"]
-            for field, expected_value in comparison.items():
-                if field in {"competitor", "comparison_mode"}:
-                    continue
-                if expected_value is None:
-                    assert actual[field] is None
-                elif isinstance(expected_value, float):
-                    assert actual[field] == pytest.approx(expected_value, abs=1e-12)
-                else:
-                    assert actual[field] == expected_value
+            assert matches == [], (
+                f"legacy {display_name} {mode} Search rows must remain quarantined "
+                "from verified-local comparisons"
+            )

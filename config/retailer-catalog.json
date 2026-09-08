@@ -34,12 +34,13 @@
     "data"
   ],
   "search_response_contract": {
-    "schema_version": "1.0.0",
+    "schema_version": "1.1.0",
     "source_catalog_date": "2026-08-16",
     "source_archive_sha256": "19cce83776b0d8af8d6b0846a0ab68908b726a0d74a7b15baa7ba86b95a6bf54",
     "source_endpoint_export_sha256": "ed3d9b8809cae52ce444208e2421b786b9dffd504e0e3c32fa573d55cb751183",
     "sampled_endpoint_count": 14,
-    "availability_authority": "positive_search_price",
+    "availability_authority": "explicit_provider_stock_availability",
+    "search_presence_price_authority": "positive_search_price",
     "sponsorship_authority": "is_sponsored",
     "required_canonical_fields": [
       "name",

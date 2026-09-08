@@ -131,6 +131,9 @@ def test_price_monitoring_examples_are_contract_valid_and_search_authoritative()
         (REPOSITORY_ROOT / "examples/price-observation.example.json").read_text()
     )
     view = json.loads((REPOSITORY_ROOT / "examples/price-monitoring-view.example.json").read_text())
+    map_view = json.loads(
+        (REPOSITORY_ROOT / "examples/price-monitoring-map.example.json").read_text()
+    )
 
     validate_instance(
         REPOSITORY_ROOT,
@@ -144,8 +147,66 @@ def test_price_monitoring_examples_are_contract_valid_and_search_authoritative()
         view,
         label="price monitoring view example",
     )
+    validate_instance(
+        REPOSITORY_ROOT,
+        "price-monitoring-map.schema.json",
+        map_view,
+        label="price monitoring map example",
+    )
     assert observation["source_authority"] == "search_location_observation"
     assert view["source"]["authority"] == "Search"
+
+
+def test_availability_contracts_reject_contradictory_verified_and_search_states() -> None:
+    observation = json.loads(
+        (REPOSITORY_ROOT / "examples/price-observation.example.json").read_text()
+    )
+    sponsored_verified = deepcopy(observation)
+    sponsored_verified["is_sponsored"] = True
+
+    with pytest.raises(ContractError):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "price-observation.schema.json",
+            sponsored_verified,
+            label="sponsored row claiming verified local availability",
+        )
+
+    map_view = json.loads(
+        (REPOSITORY_ROOT / "examples/price-monitoring-map.example.json").read_text()
+    )
+    not_observed_with_price = deepcopy(map_view)
+    not_observed_with_price["points"][2]["search_observed"] = True
+    not_observed_with_price["points"][2]["price"] = 12.34
+
+    with pytest.raises(ContractError):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "price-monitoring-map.schema.json",
+            not_observed_with_price,
+            label="not-observed map point claiming Search price evidence",
+        )
+
+    zero_reference_price = deepcopy(map_view)
+    zero_reference_price["reference_price"] = 0
+    with pytest.raises(ContractError):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "price-monitoring-map.schema.json",
+            zero_reference_price,
+            label="zero map reference price",
+        )
+
+    view = json.loads((REPOSITORY_ROOT / "examples/price-monitoring-view.example.json").read_text())
+    zero_aggregate_price = deepcopy(view)
+    zero_aggregate_price["price_distribution"]["observation_median"] = 0
+    with pytest.raises(ContractError):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "price-monitoring-view.schema.json",
+            zero_aggregate_price,
+            label="zero aggregate price",
+        )
 
 
 def test_matching_v2_examples_preserve_evidence_and_search_price_authority() -> None:

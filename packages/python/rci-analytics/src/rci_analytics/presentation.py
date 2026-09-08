@@ -503,7 +503,7 @@ def benchmark_product_evidence(
         evidence[decision_id] = {
             "decision_id": decision_id,
             "comparison_grain": (
-                f"one row per observed benchmark store; exact product pair; same ZIP; "
+                f"one row per verified-available benchmark store; exact product pair; same ZIP; "
                 f"outcomes use {comparison_metric}"
             ),
             "comparison_metric": comparison_metric,

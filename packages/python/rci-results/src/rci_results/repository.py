@@ -375,6 +375,47 @@ class PostgresResultsRepository:
             )
             return _analysis(row) if row is not None else None
 
+    async def get_active(self, identifier: str) -> AnalysisRecord | None:
+        """Return only a currently published report without changing operator reads."""
+
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            f"{_ANALYSIS_SELECT} "
+                            "WHERE (r.analysis_id = :identifier OR r.id::text = :identifier) "
+                            "AND r.reporting_status = 'ready' AND r.archived_at IS NULL"
+                        ),
+                        {"identifier": identifier},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            return _analysis(row) if row is not None else None
+
+    async def get_by_artifact(self, artifact_id: str) -> AnalysisRecord | None:
+        """Resolve an artifact owner, including archived reports, for access checks."""
+
+        async with self._engine.connect() as connection:
+            row = (
+                (
+                    await connection.execute(
+                        text(
+                            f"{_ANALYSIS_SELECT} "
+                            "JOIN report_artifact ra ON ra.analysis_run_id = ar.id "
+                            "WHERE ra.id::text = :artifact_id "
+                            "ORDER BY r.created_at DESC LIMIT 1"
+                        ),
+                        {"artifact_id": artifact_id},
+                    )
+                )
+                .mappings()
+                .first()
+            )
+            return _analysis(row) if row is not None else None
+
     async def get_by_collection_run(self, run_id: str) -> AnalysisRecord | None:
         async with self._engine.connect() as connection:
             row = (

@@ -530,6 +530,18 @@ def test_pdp_seller_policy_excludes_known_third_party_but_retains_missing() -> N
         pack=pack,
         seller_resolver=seller_resolver,
     )
+    out_of_stock_tombstone = complete_attributes_from_pdp(
+        replace(
+            classified,
+            offer=replace(classified.offer, in_stock=False),
+            in_scope=False,
+            scope_reason="explicitly out of stock",
+        ),
+        {"name": offer.title, "seller": "Food Service Direct"},
+        classifier=classifier,
+        pack=pack,
+        seller_resolver=seller_resolver,
+    )
 
     assert third_party.in_scope is False
     assert third_party.metrics == {}
@@ -537,3 +549,9 @@ def test_pdp_seller_policy_excludes_known_third_party_but_retains_missing() -> N
     assert missing.in_scope is True
     assert missing.attributes["_seller_governance"]["status"] == "seller_unverified"
     assert missing.attributes["_brand_governance"]["canonical_brand_name"] == "Marketside"
+    assert out_of_stock_tombstone.scope_reason == (
+        "known third-party marketplace seller excluded by Retailer Pack policy"
+    )
+    assert out_of_stock_tombstone.attributes["_seller_governance"]["status"] == (
+        "excluded_third_party"
+    )

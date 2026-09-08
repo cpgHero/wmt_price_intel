@@ -70,6 +70,7 @@
           "minLength": 1
         },
         "availability_policy": {
+          "description": "Category-discovery admission policy. It does not establish local carriage; reporting requires explicit in-stock, non-sponsored local Search evidence.",
           "enum": [
             "search_presence",
             "in_stock_only",
@@ -374,6 +375,7 @@
             "additionalProperties": false
           },
           "availability_policy": {
+            "description": "Legacy comparison-policy selector retained for compatibility. Location-scoped comparisons always require explicit in-stock, non-sponsored local Search evidence.",
             "enum": [
               "search_presence",
               "in_stock_only",

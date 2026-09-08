@@ -14,6 +14,12 @@ from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from rci_analytics.classification import OfferClassifier
+from rci_analytics.latest_product_location import (
+    LatestProductLocationSelector,
+    add_classified_offer,
+    is_product_location_state,
+    is_seller_policy_exclusion,
+)
 from rci_analytics.matching_v2 import (
     AttributeValue,
     DeterministicMatchEngineV2,
@@ -25,7 +31,21 @@ from rci_analytics.matching_v2 import (
     compile_matching_policy_v2,
 )
 from rci_analytics.models import ClassifiedOffer, JsonObject
+from rci_analytics.product_location import classify_local_availability
 from rci_analytics.product_pack import ProductPack
+
+
+def _is_verified_local_observation(item: ClassifiedOffer) -> bool:
+    """Return whether a placement may support a local footprint or candidate."""
+
+    return (
+        item.in_scope
+        and classify_local_availability(
+            in_stock=item.offer.in_stock,
+            is_sponsored=item.offer.is_sponsored,
+        )
+        == "verified_in_stock"
+    )
 
 
 def _canonical(value: Any) -> str:
@@ -97,6 +117,7 @@ def _identifier_rows(rows: Sequence[ClassifiedOffer]) -> tuple[IdentifierEvidenc
 class _ListingAccumulatorState:
     retailer_id: str
     retailer_product_id: str
+    has_positive_price_evidence: bool = False
     attribute_values: dict[str, dict[str, Any]] = field(default_factory=lambda: defaultdict(dict))
     attribute_sources: dict[str, Counter[str]] = field(default_factory=lambda: defaultdict(Counter))
     identifiers: dict[tuple[str, str], IdentifierEvidence] = field(default_factory=dict)
@@ -112,7 +133,9 @@ class _ListingAccumulatorState:
     seller_governance: Counter[str] = field(default_factory=Counter)
     pdp_evidence: Counter[str] = field(default_factory=Counter)
     retrieval_contexts: set[str] = field(default_factory=set)
-    locations: dict[str, ListingLocationEvidence] = field(default_factory=dict)
+    location_states: LatestProductLocationSelector[ClassifiedOffer] = field(
+        default_factory=LatestProductLocationSelector
+    )
 
 
 class ListingEvidenceAccumulatorV2:
@@ -126,7 +149,7 @@ class ListingEvidenceAccumulatorV2:
 
     def add(self, item: ClassifiedOffer) -> None:
         offer = item.offer
-        if not item.in_scope or offer.price is None or offer.price <= 0:
+        if not is_product_location_state(item):
             return
         key = (offer.retailer_id, offer.retailer_product_id)
         state = self._states.setdefault(
@@ -136,20 +159,16 @@ class ListingEvidenceAccumulatorV2:
                 retailer_product_id=offer.retailer_product_id,
             ),
         )
-        location_key = "|".join(
-            (
-                str(offer.retailer_id),
-                str(offer.zipcode or "unknown"),
-                str(offer.store_number or f"zip:{offer.zipcode or 'unknown'}"),
-            )
-        )
-        if location_key:
-            state.locations[location_key] = ListingLocationEvidence(
-                scope_key=location_key,
-                zipcode=offer.zipcode,
-                latitude=offer.latitude,
-                longitude=offer.longitude,
-            )
+        # Availability is stateful even when the latest Search placement has no
+        # usable price. Retain that state before applying the positive-price gate
+        # so it can retract an older verified location without creating a new
+        # price-less listing by itself.
+        add_classified_offer(state.location_states, item)
+        if is_seller_policy_exclusion(item):
+            return
+        if offer.price is None or offer.price <= 0:
+            return
+        state.has_positive_price_evidence = True
         context = _retrieval_context(offer.raw.get("collection_keyword"))
         if context:
             state.retrieval_contexts.add(context)
@@ -241,8 +260,32 @@ class ListingEvidenceAccumulatorV2:
     def listings(self, retailer_id: str) -> tuple[ListingEvidence, ...]:
         results: list[ListingEvidence] = []
         for (state_retailer, product_id), state in sorted(self._states.items()):
-            if state_retailer != retailer_id:
+            if state_retailer != retailer_id or not state.has_positive_price_evidence:
                 continue
+            selected_locations = tuple(
+                sorted(
+                    (
+                        ListingLocationEvidence(
+                            scope_key="|".join(
+                                (
+                                    str(item.offer.retailer_id),
+                                    str(item.offer.zipcode or "unknown"),
+                                    str(
+                                        item.offer.store_number
+                                        or f"zip:{item.offer.zipcode or 'unknown'}"
+                                    ),
+                                )
+                            ),
+                            zipcode=item.offer.zipcode,
+                            latitude=item.offer.latitude,
+                            longitude=item.offer.longitude,
+                        )
+                        for item in state.location_states.values()
+                        if _is_verified_local_observation(item)
+                    ),
+                    key=lambda location: location.scope_key,
+                )
+            )
             attributes: dict[str, AttributeValue] = {}
             for definition in self._pack.attributes:
                 name = str(definition["name"])
@@ -295,10 +338,8 @@ class ListingEvidenceAccumulatorV2:
                     seller_governance=_representative_document(state.seller_governance),
                     pdp_evidence=_representative_document(state.pdp_evidence),
                     retrieval_contexts=tuple(sorted(state.retrieval_contexts)),
-                    observed_location_count=len(state.locations),
-                    observed_locations=tuple(
-                        state.locations[key] for key in sorted(state.locations)
-                    ),
+                    observed_location_count=len(selected_locations),
+                    observed_locations=selected_locations,
                 )
             )
         return tuple(results)
@@ -327,8 +368,9 @@ def build_listing_evidence_v2(
     """Collapse positive Search placements into conservative listing evidence.
 
     Conflicting product-level attributes are retained as conflicted unknowns so
-    they cannot create automatic exact matches. Search placements remain
-    separate from the listing identity in the underlying source artifacts.
+    they cannot create automatic exact matches. Search placements remain useful
+    for product identity, while only explicitly in-stock, non-sponsored rows
+    contribute observed-location evidence.
     """
 
     accumulator = ListingEvidenceAccumulatorV2(pack)
@@ -810,12 +852,9 @@ class MatchingShadowEvaluatorV2:
                                 <= radius
                             ):
                                 matched.add(index)
-            if (
-                not matched
-                and self._policy.candidate_missing_location_policy == "allow"
-                and not listing.observed_locations
-            ):
-                matched.update(range(len(competitor)))
+            # Missing verified location evidence must fail closed for local
+            # candidate generation. Search presence can still establish listing
+            # identity when geographic candidate gating is disabled.
             results.append(matched)
         return tuple(results)
 

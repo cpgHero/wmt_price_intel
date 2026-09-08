@@ -6351,7 +6351,11 @@ class PostgresMatchingV2ReviewRepository:
                                run.product_pack_version, run.code_version, run.max_attempts
                         FROM analysis_result result
                         JOIN analysis_run run ON run.id = result.analysis_run_id
+                        JOIN collection_run source_collection
+                          ON source_collection.id = run.collection_run_id
                         WHERE result.result->>'analysis_id' = :analysis_id
+                          AND source_collection.organization_id =
+                            CAST(:organization_id AS uuid)
                           AND (result.archived_at IS NULL OR :include_archived_source)
                         ORDER BY result.created_at DESC
                         LIMIT 1
@@ -6359,6 +6363,7 @@ class PostgresMatchingV2ReviewRepository:
                         ),
                         {
                             "analysis_id": source_analysis_id,
+                            "organization_id": queue["organization_id"],
                             "include_archived_source": force_rebuild,
                         },
                     )

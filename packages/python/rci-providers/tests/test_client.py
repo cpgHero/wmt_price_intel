@@ -182,10 +182,11 @@ async def test_mocked_retailer_requests_persist_raw_pages_before_success(
         "s3://test-raw/raw/provider=metricscart/run_id="
     )
     response_audit = page.raw_artifact.metadata["search_response_audit"]
-    assert response_audit["contract_version"] == "1.0.0"
+    assert response_audit["contract_version"] == "1.1.0"
     assert response_audit["result_path"] == "results"
     assert response_audit["result_count"] == 1
-    assert response_audit["availability_authority"] == "positive_search_price"
+    assert response_audit["availability_authority"] == "explicit_provider_stock_availability"
+    assert response_audit["search_presence_price_authority"] == "positive_search_price"
 
 
 @pytest.mark.parametrize(

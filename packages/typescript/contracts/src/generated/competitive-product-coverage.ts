@@ -35,6 +35,9 @@ export interface Product {
   product_id: string;
   product_name: string;
   image_url: string | null;
+  /**
+   * Legacy field name for distinct benchmark locations with explicit in-stock, non-sponsored local availability. It must never contain Search reach.
+   */
   observed_locations: number;
   status:
     | "benchmark_not_observed"

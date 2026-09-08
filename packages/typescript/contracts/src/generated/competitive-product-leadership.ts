@@ -8,7 +8,7 @@ export type GeographySummary = Summary & {
 };
 
 export interface RetailCompetitiveIntelligenceCompetitiveProductLeadership {
-  schema_version: "1.2.0";
+  schema_version: "1.3.0";
   analysis_id: string;
   generated_at: string;
   benchmark_retailer: IdName;
@@ -78,6 +78,9 @@ export interface FilterOption {
   [k: string]: unknown;
 }
 export interface Summary {
+  /**
+   * Legacy field name for distinct benchmark stores with verified local availability evidence. It must never contain Search-only reach.
+   */
   benchmark_observed_stores: number;
   scored_stores: number;
   coverage_rate: number | null;
@@ -94,6 +97,9 @@ export interface Summary {
 }
 export interface FootprintPriceLadder {
   definition: string;
+  /**
+   * Legacy field name for distinct benchmark locations with verified local availability evidence. It must never contain Search-only reach.
+   */
   benchmark_observed_locations: number;
   comparable_benchmark_locations: number;
   benchmark_rank_one_locations: number;
@@ -174,8 +180,11 @@ export interface Location {
   package_price: number;
   regular_price: number | null;
   discounted_price: number | null;
-  is_sponsored: boolean | null;
-  in_stock: boolean;
+  search_observed: true;
+  is_sponsored: false;
+  in_stock: true;
+  availability_status: "verified_in_stock";
+  verified_local_availability: true;
   offer_id: string | null;
   comparison_value: number;
   observed_at: string | null;

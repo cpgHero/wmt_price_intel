@@ -1,7 +1,7 @@
 /* Generated from the normative JSON Schema. Do not edit manually. */
 
-export interface RetailCompetitiveIntelligencePriceObservation {
-  schema_version: "1.1.0";
+export type RetailCompetitiveIntelligencePriceObservation = AvailabilityInvariant & {
+  schema_version: "1.2.0";
   observation_id: string;
   analysis_id: string;
   product_pack_id: string;
@@ -33,8 +33,11 @@ export interface RetailCompetitiveIntelligencePriceObservation {
   regular_price: number | null;
   discounted_price: number | null;
   currency: string;
-  in_stock: true;
+  search_observed: true;
+  in_stock: boolean | null;
   is_sponsored: boolean | null;
+  availability_status: "verified_in_stock" | "explicitly_out_of_stock" | "unverified_sponsored" | "unverified";
+  verified_local_availability: boolean;
   price_metrics: {
     [k: string]: number | null;
   };
@@ -46,4 +49,32 @@ export interface RetailCompetitiveIntelligencePriceObservation {
    * @maxItems 0
    */
   exclusion_reasons: [];
-}
+};
+export type AvailabilityInvariant =
+  | {
+      availability_status: "verified_in_stock";
+      in_stock: true;
+      is_sponsored: false;
+      verified_local_availability: true;
+      [k: string]: unknown;
+    }
+  | {
+      availability_status: "explicitly_out_of_stock";
+      in_stock: false;
+      verified_local_availability: false;
+      [k: string]: unknown;
+    }
+  | {
+      availability_status: "unverified_sponsored";
+      in_stock: true | null;
+      is_sponsored: true;
+      verified_local_availability: false;
+      [k: string]: unknown;
+    }
+  | {
+      availability_status: "unverified";
+      in_stock: true | null;
+      is_sponsored: false | null;
+      verified_local_availability: false;
+      [k: string]: unknown;
+    };

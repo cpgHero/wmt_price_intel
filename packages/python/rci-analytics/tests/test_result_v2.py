@@ -130,6 +130,9 @@ def test_builder_accepts_complete_matching_v2_identity_without_legacy_row_per_re
                 "in_scope_offers": 20,
                 "in_scope_zips": 10,
                 "in_scope_stores": 10,
+                "verified_available_offers": 20,
+                "verified_available_zips": 10,
+                "verified_available_stores": 10,
                 "evidence_ref": f"evidence.classified.{retailer}",
             }
         )
@@ -285,6 +288,12 @@ def test_generic_builder_emits_contract_valid_evidence_linked_result() -> None:
                 "in_scope_offers": 20,
                 "in_scope_zips": 20,
                 "in_scope_stores": 20,
+                "verified_available_offers": 5,
+                "verified_available_zips": 4,
+                "verified_available_stores": 4,
+                "explicitly_out_of_stock_search_offers": 3,
+                "sponsored_search_offers": 10,
+                "unverified_availability_search_offers": 12,
                 "evidence_ref": "evidence.classified.walmart_us",
             },
             {
@@ -293,6 +302,12 @@ def test_generic_builder_emits_contract_valid_evidence_linked_result() -> None:
                 "in_scope_offers": 20,
                 "in_scope_zips": 20,
                 "in_scope_stores": 0,
+                "verified_available_offers": 0,
+                "verified_available_zips": 0,
+                "verified_available_stores": 0,
+                "explicitly_out_of_stock_search_offers": 4,
+                "sponsored_search_offers": 9,
+                "unverified_availability_search_offers": 16,
                 "evidence_ref": "evidence.classified.amazon_us_same_day",
             },
         ],
@@ -321,6 +336,18 @@ def test_generic_builder_emits_contract_valid_evidence_linked_result() -> None:
     assert result["recommendations"][0]["metric_refs"]
     assert result["validation"]["unsupported_numeric_claims"] == 0
     assert result["validation"]["metric_reference_coverage"] == 1
+    assert result["validation"]["status"] == "needs_review"
+    assert result["data_quality"]["status"] == "blocked"
+    availability_check = next(
+        row for row in result["validation"]["checks"] if row["id"] == "verified-local-availability"
+    )
+    assert availability_check["status"] == "failed"
+    metrics = {row["metric_id"]: row for row in result["metrics"]}
+    verified_metric_id = "coverage.walmart_us.verified_available_offers"
+    assert metrics[verified_metric_id]["value"] == 5
+    assert metrics[verified_metric_id]["name"].endswith("Verified locally available offers")
+    assert verified_metric_id in result["assortment"]["metric_refs"]
+    assert "coverage.walmart_us.qualifying_offers" not in result["assortment"]["metric_refs"]
     narrative_ids = {section["id"] for section in result["narratives"]["sections"]}
     assert {
         "executive_summary",
@@ -444,3 +471,10 @@ def test_executive_summary_prefers_governed_scorecard_profile_over_larger_sensit
     )
     assert "strict same-zip and exact-package comparison" in summary
     assert "10 mile" not in summary
+    assert result["validation"]["status"] == "needs_review"
+    availability_check = next(
+        check
+        for check in result["validation"]["checks"]
+        if check["id"] == "verified-local-availability"
+    )
+    assert availability_check["status"] == "failed"

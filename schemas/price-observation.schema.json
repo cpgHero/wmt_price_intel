@@ -4,6 +4,7 @@
   "title": "RetailCompetitiveIntelligencePriceObservation",
   "type": "object",
   "additionalProperties": false,
+  "allOf": [{ "$ref": "#/$defs/availabilityInvariant" }],
   "required": [
     "schema_version",
     "observation_id",
@@ -26,8 +27,11 @@
     "regular_price",
     "discounted_price",
     "currency",
+    "search_observed",
     "in_stock",
     "is_sponsored",
+    "availability_status",
+    "verified_local_availability",
     "price_metrics",
     "observed_at",
     "source_authority",
@@ -36,7 +40,7 @@
     "exclusion_reasons"
   ],
   "properties": {
-    "schema_version": { "const": "1.1.0" },
+    "schema_version": { "const": "1.2.0" },
     "observation_id": { "type": "string", "minLength": 1 },
     "analysis_id": { "type": "string", "minLength": 1 },
     "product_pack_id": { "type": "string", "minLength": 1 },
@@ -85,11 +89,21 @@
       }
     },
     "price": { "type": "number", "exclusiveMinimum": 0 },
-    "regular_price": { "type": ["number", "null"], "minimum": 0 },
-    "discounted_price": { "type": ["number", "null"], "minimum": 0 },
+    "regular_price": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+    "discounted_price": { "type": ["number", "null"], "exclusiveMinimum": 0 },
     "currency": { "type": "string", "pattern": "^[A-Z]{3}$" },
-    "in_stock": { "const": true },
+    "search_observed": { "const": true },
+    "in_stock": { "type": ["boolean", "null"] },
     "is_sponsored": { "type": ["boolean", "null"] },
+    "availability_status": {
+      "enum": [
+        "verified_in_stock",
+        "explicitly_out_of_stock",
+        "unverified_sponsored",
+        "unverified"
+      ]
+    },
+    "verified_local_availability": { "type": "boolean" },
     "price_metrics": {
       "type": "object",
       "additionalProperties": { "type": ["number", "null"], "minimum": 0 }
@@ -103,6 +117,78 @@
       "items": { "type": "string", "minLength": 1 },
       "uniqueItems": true,
       "maxItems": 0
+    }
+  },
+  "$defs": {
+    "availabilityInvariant": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "availability_status": { "const": "verified_in_stock" },
+            "in_stock": { "const": true },
+            "is_sponsored": { "const": false },
+            "verified_local_availability": { "const": true }
+          },
+          "required": [
+            "availability_status",
+            "in_stock",
+            "is_sponsored",
+            "verified_local_availability"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "availability_status": { "const": "explicitly_out_of_stock" },
+            "in_stock": { "const": false },
+            "verified_local_availability": { "const": false }
+          },
+          "required": [
+            "availability_status",
+            "in_stock",
+            "verified_local_availability"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "availability_status": { "const": "unverified_sponsored" },
+            "in_stock": { "enum": [true, null] },
+            "is_sponsored": { "const": true },
+            "verified_local_availability": { "const": false }
+          },
+          "required": [
+            "availability_status",
+            "in_stock",
+            "is_sponsored",
+            "verified_local_availability"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "availability_status": { "const": "unverified" },
+            "in_stock": { "enum": [true, null] },
+            "is_sponsored": { "enum": [false, null] },
+            "verified_local_availability": { "const": false }
+          },
+          "required": [
+            "availability_status",
+            "in_stock",
+            "is_sponsored",
+            "verified_local_availability"
+          ],
+          "not": {
+            "type": "object",
+            "properties": {
+              "in_stock": { "const": true },
+              "is_sponsored": { "const": false }
+            },
+            "required": ["in_stock", "is_sponsored"]
+          }
+        }
+      ]
     }
   }
 }

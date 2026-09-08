@@ -6,6 +6,7 @@ from pathlib import Path
 
 from httpx import ASGITransport, AsyncClient
 
+from rci_api.analyses import require_public_analysis
 from rci_api.automation import get_automation_service
 from rci_api.main import create_app
 from rci_automation.memory import InMemoryAutomationRepository, RecordingEmailSender
@@ -24,11 +25,51 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
 def _context(analysis_id: str, created_at: datetime, rate: float) -> AnalysisContext:
     document = json.loads(
-        (REPOSITORY_ROOT / "examples" / "analysis-result.strawberries.json").read_text()
+        (REPOSITORY_ROOT / "examples" / "analysis-result-v2.ground-beef.json").read_text()
     )
     document["analysis_id"] = analysis_id
     document["generated_at"] = created_at.isoformat()
-    document["comparisons"][1]["competitor_lower_rate"] = rate
+    document["metrics"].append(
+        {
+            "metric_id": "automation.competitor_lower_rate",
+            "name": "Automation competitor-lower rate",
+            "value": rate,
+            "unit": "rate",
+            "method": "automation API regression fixture",
+            "source": "deterministic",
+            "evidence_refs": ["evidence-source-manifest"],
+        }
+    )
+    availability_evidence = []
+    for coverage in document["coverage"]:
+        retailer_id = str(coverage["retailer_id"])
+        evidence_ref = str(coverage["evidence_refs"][0])
+        availability_evidence.append(evidence_ref)
+        for field, unit in (
+            ("verified_available_offers", "offers"),
+            ("verified_available_zips", "zipcodes"),
+            ("verified_available_stores", "stores"),
+        ):
+            metric_id = f"coverage.{retailer_id}.{field}"
+            coverage["metric_refs"].append(metric_id)
+            document["metrics"].append(
+                {
+                    "metric_id": metric_id,
+                    "name": metric_id,
+                    "value": 1,
+                    "unit": unit,
+                    "method": "verified automation API regression fixture",
+                    "source": "deterministic",
+                    "evidence_refs": [evidence_ref],
+                }
+            )
+    document["validation"]["checks"].append(
+        {
+            "id": "verified-local-availability",
+            "status": "passed",
+            "evidence_refs": availability_evidence,
+        }
+    )
     result_id = f"result-{analysis_id}"
     record = AnalysisRecord(
         id=result_id,
@@ -38,7 +79,7 @@ def _context(analysis_id: str, created_at: datetime, rate: float) -> AnalysisCon
         status="succeeded",
         product_pack_id="fresh_strawberries",
         product_pack_version="1.0.0",
-        schema_version="1.0.0",
+        schema_version="2.0.0",
         checksum=f"checksum-{analysis_id}",
         result=document,
         created_at=created_at,
@@ -79,10 +120,16 @@ def _service() -> AutomationService:
 async def test_automation_crud_history_evaluation_and_delivery_apis() -> None:
     service = _service()
     app = create_app()
+    app.dependency_overrides[require_public_analysis] = lambda: None
     app.dependency_overrides[get_automation_service] = lambda: service
     alert = json.loads(
         (REPOSITORY_ROOT / "examples" / "alert-definition.amazon-pressure.json").read_text()
     )
+    alert["metric"] = {
+        "path": ["metrics"],
+        "where": {"metric_id": "automation.competitor_lower_rate"},
+        "field": "value",
+    }
     async with (
         app.router.lifespan_context(app),
         AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
@@ -101,8 +148,7 @@ async def test_automation_crud_history_evaluation_and_delivery_apis() -> None:
         metric = next(
             row
             for row in history.json()["changes"]
-            if row["metric_key"].endswith("competitor_lower_rate")
-            and "segment_id=conventional_1lb" in row["metric_key"]
+            if row["metric_key"] == "automation.competitor_lower_rate"
         )
         assert float(metric["change_value"]) == 0.2
 
@@ -121,6 +167,7 @@ async def test_automation_crud_history_evaluation_and_delivery_apis() -> None:
 async def test_automation_api_rejects_invalid_alert_and_missing_history() -> None:
     service = _service()
     app = create_app()
+    app.dependency_overrides[require_public_analysis] = lambda: None
     app.dependency_overrides[get_automation_service] = lambda: service
     async with (
         app.router.lifespan_context(app),

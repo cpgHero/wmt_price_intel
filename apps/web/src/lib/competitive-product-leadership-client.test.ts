@@ -1,8 +1,23 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { competitiveProductLeadershipPath } from "./competitive-product-leadership-client";
+import {
+  competitiveProductLeadershipPath,
+  loadCompetitiveProductLeadership,
+} from "./competitive-product-leadership-client";
+
+const request = {
+  analysisId: "egg-report",
+  competitorId: "target_us",
+  profileId: "compatible",
+  productId: "10449724",
+  radiusMiles: 5 as const,
+};
 
 describe("competitive product leadership client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it("builds one canonical request path for prewarm and visible views", () => {
     expect(
       competitiveProductLeadershipPath({
@@ -30,5 +45,48 @@ describe("competitive product leadership client", () => {
         cityFilter: "Bentonville",
       }),
     ).not.toContain("city=");
+  });
+
+  it("does not reuse completed leadership responses", async () => {
+    const fetchMock = vi.fn(async () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ schema_version: "1.3.0" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await loadCompetitiveProductLeadership(request);
+    await loadCompetitiveProductLeadership(request);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, expect.any(String), {
+      cache: "no-store",
+    });
+  });
+
+  it("deduplicates only concurrent leadership requests", async () => {
+    let resolveResponse!: (response: Response) => void;
+    const fetchMock = vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          resolveResponse = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const first = loadCompetitiveProductLeadership(request);
+    const second = loadCompetitiveProductLeadership(request);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    resolveResponse(
+      new Response(JSON.stringify({ schema_version: "1.3.0" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    await Promise.all([first, second]);
   });
 });

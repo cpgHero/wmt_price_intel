@@ -49,23 +49,25 @@ export function productEvidenceFilename(evidence: ProductEvidenceResponse) {
 }
 
 const coverageColumns = [
-  "product_id",
-  "product_name",
-  "observed_locations",
-  "status",
-  "certified_relationships",
-  "selected_price_basis_relationships",
-  "selected_competitor_products",
-  "scored_product_locations",
-] as const;
+  ["product_id", "product_id"],
+  ["product_name", "product_name"],
+  ["verified_local_locations", "observed_locations"],
+  ["status", "status"],
+  ["certified_relationships", "certified_relationships"],
+  ["selected_price_basis_relationships", "selected_price_basis_relationships"],
+  ["selected_competitor_products", "selected_competitor_products"],
+  ["scored_product_locations", "scored_product_locations"],
+] as const satisfies ReadonlyArray<
+  readonly [string, keyof CompetitiveProductCoverage["products"][number]]
+>;
 
 export function competitiveProductCoverageCsv(
   coverage: CompetitiveProductCoverage,
 ) {
   return [
-    coverageColumns.join(","),
+    coverageColumns.map(([label]) => label).join(","),
     ...coverage.products.map((row) =>
-      coverageColumns.map((column) => csvCell(row[column])).join(","),
+      coverageColumns.map(([, key]) => csvCell(row[key])).join(","),
     ),
   ].join("\r\n");
 }

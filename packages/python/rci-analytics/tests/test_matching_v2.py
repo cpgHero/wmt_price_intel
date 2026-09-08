@@ -38,6 +38,7 @@ from rci_analytics.matching_v2_shadow import (
     shadow_result_checksum,
 )
 from rci_analytics.models import ClassifiedOffer, NormalizedOffer
+from rci_analytics.normalization import BooleanAliasValidationError
 from rci_analytics.product_pack import ProductPackLoader
 from rci_contracts import validate_instance
 
@@ -602,6 +603,34 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
     )
 
 
+def test_evidence_profiler_fails_closed_on_conflicting_availability_aliases(
+    tmp_path: Path,
+) -> None:
+    walmart = tmp_path / "walmart-conflict.csv"
+    walmart.write_text(
+        (
+            "Retailer,Product Name,Price,Zipcode,Retailer Store Id,"
+            "Retailer Product Id,Stock Availability,in_stock,Is Sponsored,Date\n"
+            "Walmart,Great Value Whole Milk 1 Gallon,3.98,72712,100,wm1,"
+            "true,,false,2026-08-15T10:00:00Z\n"
+            "Walmart,Great Value Whole Milk 1 Gallon,3.98,72712,100,wm1,"
+            "true,false,false,2026-08-15T10:05:00Z\n"
+        ),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(BooleanAliasValidationError, match="conflicting availability aliases"):
+        build_matching_v2_evidence_profile(
+            REPOSITORY_ROOT,
+            product_pack_id="fresh_fluid_milk",
+            benchmark_retailer_id="walmart_us",
+            inputs=(MatchingV2SourceInput(walmart, "walmart_us"),),
+            decided_at=DECIDED_AT,
+            competitor_retailer_ids=(),
+            per_stratum_limit=1,
+        )
+
+
 def test_certification_fails_a_false_exact_approval() -> None:
     decision = DeterministicMatchEngineV2().evaluate(
         _listing("walmart_us", "w1"),
@@ -987,8 +1016,12 @@ def _classified_offer(
     *,
     retailer: str,
     product: str,
-    store: str,
-    price: str = "3.50",
+    store: str | None,
+    zipcode: str | None = "72712",
+    price: str | None = "3.50",
+    in_stock: bool | None = True,
+    is_sponsored: bool | None = False,
+    collected_at: str | None = "2026-08-15T10:00:00Z",
 ) -> ClassifiedOffer:
     return ClassifiedOffer(
         offer=NormalizedOffer(
@@ -997,17 +1030,18 @@ def _classified_offer(
             retailer_product_id=product,
             title=f"Product {product}",
             brand=None,
-            price=Decimal(price),
+            price=Decimal(price) if price is not None else None,
             currency="USD",
-            zipcode="72712",
+            zipcode=zipcode,
             store_number=store,
             latitude=36.37,
             longitude=-94.21,
-            in_stock=True,
+            in_stock=in_stock,
             product_url=None,
             image_url=None,
-            collected_at="2026-08-15T10:00:00Z",
+            collected_at=collected_at,
             raw={},
+            is_sponsored=is_sponsored,
         ),
         in_scope=True,
         scope_reason="milk",
@@ -1015,7 +1049,9 @@ def _classified_offer(
             **pack_attributes,
             "_attribute_provenance": {name: "search" for name in pack_attributes},
         },
-        metrics={"package_price": Decimal(price)},
+        metrics=(
+            {"package_price": Decimal(price)} if price is not None and Decimal(price) > 0 else {}
+        ),
         review_reasons=(),
     )
 
@@ -1566,6 +1602,249 @@ def test_incremental_listing_accumulator_matches_batch_collapse() -> None:
     assert accumulator.listings("walmart_us") == build_listing_evidence_v2(
         offers, pack=pack, retailer_id="walmart_us"
     )
+
+
+def test_listing_identity_retains_search_evidence_but_location_footprint_is_verified() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    values = {str(name): "same" for name in pack.profile("private_label")["dimensions"]}
+    offers = (
+        _classified_offer(values, retailer="walmart_us", product="w1", store="verified"),
+        _classified_offer(
+            values,
+            retailer="walmart_us",
+            product="w1",
+            store="out-of-stock",
+            in_stock=False,
+        ),
+        _classified_offer(
+            values,
+            retailer="walmart_us",
+            product="w1",
+            store="sponsored",
+            is_sponsored=True,
+        ),
+        _classified_offer(
+            values,
+            retailer="walmart_us",
+            product="w1",
+            store="unknown-stock",
+            in_stock=None,
+        ),
+        _classified_offer(
+            values,
+            retailer="walmart_us",
+            product="w1",
+            store="unknown-sponsorship",
+            is_sponsored=None,
+        ),
+        _classified_offer(
+            values,
+            retailer="walmart_us",
+            product="identity-only",
+            store="search-only",
+            is_sponsored=True,
+        ),
+    )
+
+    listings = build_listing_evidence_v2(offers, pack=pack, retailer_id="walmart_us")
+    by_product = {listing.retailer_product_id: listing for listing in listings}
+
+    assert set(by_product) == {"w1", "identity-only"}
+    assert by_product["w1"].observed_location_count == 1
+    assert [row.scope_key for row in by_product["w1"].observed_locations] == [
+        "walmart_us|72712|verified"
+    ]
+    assert by_product["identity-only"].title == "Product identity-only"
+    assert by_product["identity-only"].observed_location_count == 0
+    assert by_product["identity-only"].observed_locations == ()
+
+
+def test_listing_footprint_uses_latest_location_state_and_fails_closed_on_timestamp_ties() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    values = {str(name): "same" for name in pack.profile("private_label")["dimensions"]}
+    listings = build_listing_evidence_v2(
+        (
+            # Intentionally arrive newest first: stale stock cannot be resurrected.
+            replace(
+                _classified_offer(
+                    values,
+                    retailer="walmart_us",
+                    product="chronological",
+                    store="1",
+                    in_stock=False,
+                    collected_at="2026-08-15T10:05:00Z",
+                ),
+                in_scope=False,
+                scope_reason="explicitly out of stock",
+            ),
+            _classified_offer(
+                values,
+                retailer="walmart_us",
+                product="chronological",
+                store="1",
+                collected_at="2026-08-15T10:00:00Z",
+            ),
+            # Verified organic evidence wins a same-time tie with a sponsored row.
+            _classified_offer(
+                values,
+                retailer="walmart_us",
+                product="organic-tie",
+                store="2",
+                is_sponsored=True,
+                collected_at="2026-08-15T10:00:00Z",
+            ),
+            _classified_offer(
+                values,
+                retailer="walmart_us",
+                product="organic-tie",
+                store="2",
+                collected_at="2026-08-15T10:00:00Z",
+            ),
+            # Contradictory organic stock flags at one instant fail closed.
+            _classified_offer(
+                values,
+                retailer="walmart_us",
+                product="stock-conflict",
+                store="3",
+                in_stock=False,
+                collected_at="2026-08-15T10:00:00Z",
+            ),
+            _classified_offer(
+                values,
+                retailer="walmart_us",
+                product="stock-conflict",
+                store="3",
+                collected_at="2026-08-15T10:00:00Z",
+            ),
+            _classified_offer(
+                values,
+                retailer="walmart_us",
+                product="missing-location",
+                store=None,
+                zipcode=None,
+            ),
+        ),
+        pack=pack,
+        retailer_id="walmart_us",
+    )
+    by_product = {listing.retailer_product_id: listing for listing in listings}
+
+    assert by_product["chronological"].observed_location_count == 0
+    assert by_product["organic-tie"].observed_location_count == 1
+    assert by_product["stock-conflict"].observed_location_count == 0
+    assert by_product["missing-location"].observed_location_count == 0
+
+
+@pytest.mark.parametrize(
+    ("later_price", "later_in_stock", "later_is_sponsored", "is_tombstone"),
+    [
+        (None, False, False, True),
+        ("0", True, True, False),
+        (None, None, False, False),
+    ],
+    ids=("out-of-stock", "sponsored", "unknown-stock"),
+)
+@pytest.mark.parametrize("reverse_order", (False, True), ids=("chronological", "reversed"))
+def test_price_less_latest_state_retracts_v2_location_without_creating_a_listing(
+    later_price: str | None,
+    later_in_stock: bool | None,
+    later_is_sponsored: bool | None,
+    is_tombstone: bool,
+    reverse_order: bool,
+) -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    values = {str(name): "same" for name in pack.profile("private_label")["dimensions"]}
+    older = _classified_offer(
+        values,
+        retailer="walmart_us",
+        product="stateful",
+        store="1",
+        collected_at="2026-08-15T10:00:00Z",
+    )
+    later = _classified_offer(
+        values,
+        retailer="walmart_us",
+        product="stateful",
+        store="1",
+        price=later_price,
+        in_stock=later_in_stock,
+        is_sponsored=later_is_sponsored,
+        collected_at="2026-08-15T10:05:00Z",
+    )
+    if is_tombstone:
+        later = replace(later, in_scope=False, scope_reason="explicitly out of stock")
+    rows = (later, older) if reverse_order else (older, later)
+
+    listings = build_listing_evidence_v2(rows, pack=pack, retailer_id="walmart_us")
+
+    assert len(listings) == 1
+    assert listings[0].retailer_product_id == "stateful"
+    assert listings[0].observed_location_count == 0
+    assert listings[0].observed_locations == ()
+    assert build_listing_evidence_v2((later,), pack=pack, retailer_id="walmart_us") == ()
+
+
+def test_seller_policy_exclusion_retracts_v2_verified_location() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    values = {str(name): "same" for name in pack.profile("private_label")["dimensions"]}
+    older = _classified_offer(
+        values,
+        retailer="walmart_us",
+        product="seller-transition",
+        store="1",
+        collected_at="2026-08-15T10:00:00Z",
+    )
+    later = replace(
+        _classified_offer(
+            values,
+            retailer="walmart_us",
+            product="seller-transition",
+            store="1",
+            collected_at="2026-08-15T10:05:00Z",
+        ),
+        in_scope=False,
+        scope_reason=("known third-party marketplace seller excluded by Retailer Pack policy"),
+        metrics={},
+    )
+
+    listings = build_listing_evidence_v2((older, later), pack=pack, retailer_id="walmart_us")
+
+    assert len(listings) == 1
+    assert listings[0].retailer_product_id == "seller-transition"
+    assert listings[0].observed_location_count == 0
+    assert listings[0].observed_locations == ()
+
+
+def test_local_shadow_candidates_fail_closed_without_verified_locations() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_fluid_milk")
+    values = {str(name): "same" for name in pack.profile("private_label")["dimensions"]}
+    policy = replace(
+        _policy(),
+        candidate_geography_mode="observed_overlap",
+        candidate_missing_location_policy="allow",
+    )
+    evaluator = MatchingShadowEvaluatorV2(pack, "private_label", policy=policy)
+
+    result = evaluator.evaluate(
+        (
+            _classified_offer(
+                values,
+                retailer="walmart_us",
+                product="w1",
+                store="sponsored",
+                is_sponsored=True,
+            ),
+            _classified_offer(values, retailer="aldi_us", product="a1", store="verified"),
+        ),
+        benchmark_retailer_id="walmart_us",
+        competitor_retailer_id="aldi_us",
+        decided_at=DECIDED_AT,
+    )
+
+    assert result.benchmark_listings == 1
+    assert result.competitor_listings == 1
+    assert result.evaluated_pairs == 0
+    assert result.geography_blocked_pairs == 1
 
 
 def test_shadow_listing_conflict_fails_closed() -> None:

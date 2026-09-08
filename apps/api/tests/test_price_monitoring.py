@@ -6,15 +6,18 @@ import json
 import threading
 import time
 from contextlib import suppress
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 from types import MethodType, SimpleNamespace
 
 import polars as pl
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from rci_analytics import PriceMonitoringFilters, ProductPackLoader
+from rci_api.analyses import require_public_analysis
 from rci_api.main import create_app
 from rci_api.price_monitoring import (
     ClassifiedArtifact,
@@ -23,6 +26,10 @@ from rci_api.price_monitoring import (
     get_price_monitoring_service,
     select_evidence_artifacts,
 )
+
+
+def _allow_public_reads(app: FastAPI) -> None:
+    app.dependency_overrides[require_public_analysis] = lambda: None
 
 
 async def test_materialized_catalog_is_filtered_sorted_and_paged() -> None:
@@ -351,6 +358,8 @@ async def test_product_observation_batch_reads_only_requested_products_once() ->
                     "zipcode": zipcode,
                     "store_number": str(index),
                     "in_scope": True,
+                    "in_stock": True,
+                    "is_sponsored": False,
                     "metrics_json": "{}",
                     "collected_at": "2026-08-07T06:00:00Z",
                 }
@@ -418,6 +427,7 @@ async def test_price_monitoring_api_passes_governed_filters() -> None:
             return {"analysis_id": analysis_id, "retailer": filters.retailer_id}
 
     app = create_app()
+    _allow_public_reads(app)
     app.dependency_overrides[get_price_monitoring_service] = lambda: PriceService()
     async with (
         app.router.lifespan_context(app),
@@ -456,6 +466,7 @@ async def test_default_price_monitoring_api_uses_publication_catalog() -> None:
             raise AssertionError("the default view must not rebuild classified Search evidence")
 
     app = create_app()
+    _allow_public_reads(app)
     app.dependency_overrides[get_price_monitoring_service] = lambda: PriceService()
     async with (
         app.router.lifespan_context(app),
@@ -485,6 +496,7 @@ async def test_default_price_monitoring_api_falls_back_when_catalog_is_absent() 
             return {"analysis_id": analysis_id, "source": "live-fallback"}
 
     app = create_app()
+    _allow_public_reads(app)
     app.dependency_overrides[get_price_monitoring_service] = lambda: PriceService()
     async with (
         app.router.lifespan_context(app),
@@ -502,6 +514,7 @@ async def test_default_price_monitoring_api_falls_back_when_catalog_is_absent() 
 
 async def test_price_monitoring_api_rejects_unknown_brand_filter() -> None:
     app = create_app()
+    _allow_public_reads(app)
     app.dependency_overrides[get_price_monitoring_service] = lambda: object()
     async with (
         app.router.lifespan_context(app),
@@ -534,6 +547,7 @@ async def test_price_architecture_api_passes_governed_scope_and_rung_method() ->
             return {"analysis_id": analysis_id, "mode": filters["mode"]}
 
     app = create_app()
+    _allow_public_reads(app)
     app.dependency_overrides[get_price_monitoring_service] = lambda: PriceService()
     async with (
         app.router.lifespan_context(app),
@@ -555,6 +569,84 @@ async def test_price_architecture_api_passes_governed_scope_and_rung_method() ->
 
     assert response.status_code == 200
     assert response.json() == {"analysis_id": "analysis-1", "mode": "fixed_range"}
+
+
+async def test_price_architecture_unavailable_retailer_emits_zero_evidence_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class Analyses:
+        async def get(self, analysis_id: str) -> SimpleNamespace:
+            assert analysis_id == "analysis-1"
+            return SimpleNamespace(
+                product_pack_id="fresh_ground_beef",
+                product_pack_version="1.0.0",
+                created_at=datetime(2026, 8, 7, tzinfo=UTC),
+                result={
+                    "benchmark_retailer": "walmart_us",
+                    "competitors": ["aldi_us"],
+                },
+            )
+
+    class Packs:
+        async def load(self, pack_id: str, version: str) -> SimpleNamespace:
+            assert (pack_id, version) == ("fresh_ground_beef", "1.0.0")
+            return SimpleNamespace(id=pack_id, name="Fresh Ground Beef", version=version)
+
+    class Projector:
+        def build(self, **kwargs: object) -> dict[str, object]:
+            captured.update(kwargs)
+            return {"matrix": "test"}
+
+    service = object.__new__(PriceMonitoringService)
+    service._analyses = Analyses()
+    service._packs = Packs()
+    service._retailer_names = {"walmart_us": "Walmart", "aldi_us": "ALDI"}
+    service._architecture_cache = {}
+    service._root = Path(".")
+
+    async def prepare(
+        _service: PriceMonitoringService, analysis_id: str, retailer_id: str
+    ) -> SimpleNamespace:
+        assert analysis_id == "analysis-1"
+        if retailer_id == "aldi_us":
+            raise RuntimeError("competitor Search evidence unavailable")
+        return SimpleNamespace(
+            population=SimpleNamespace(
+                checksum="benchmark-checksum",
+                retailer_id=retailer_id,
+                observations=(),
+                eligible_scope_keys=frozenset(),
+                source_locations={},
+            ),
+            product_context_revision="benchmark-context",
+        )
+
+    service._prepare = MethodType(prepare, service)
+    monkeypatch.setattr("rci_api.price_monitoring.PriceArchitectureMatrixProjector", Projector)
+    monkeypatch.setattr(
+        "rci_api.price_monitoring.validate_instance", lambda *_args, **_kwargs: None
+    )
+
+    assert await service.architecture_matrix("analysis-1", publish=False) == {"matrix": "test"}
+    unavailable = captured["unavailable_retailers"]
+    assert isinstance(unavailable, list)
+    assert len(unavailable) == 1
+    competitor = unavailable[0]
+    assert isinstance(competitor, dict)
+    assert {
+        field: competitor[field]
+        for field in (
+            "verified_available_locations",
+            "search_observed_locations",
+            "search_observed_skus",
+        )
+    } == {
+        "verified_available_locations": 0,
+        "search_observed_locations": 0,
+        "search_observed_skus": 0,
+    }
 
 
 async def test_price_architecture_materialization_requires_internal_token(
@@ -631,6 +723,7 @@ async def test_price_monitoring_map_passes_exact_product_and_detail_scope() -> N
             return {"analysis_id": analysis_id, "detail": detail}
 
     app = create_app()
+    _allow_public_reads(app)
     app.dependency_overrides[get_price_monitoring_service] = lambda: PriceService()
     async with (
         app.router.lifespan_context(app),
@@ -681,6 +774,7 @@ async def test_price_monitoring_map_projects_observed_and_not_observed_store_poi
                     "product_id": "123",
                     "name": "Product 123",
                     "price_stats": {"observation_median": 5.0},
+                    "search_price_stats": {"observation_median": 5.0},
                 }
             ],
             "location_display": {"total": 2},
@@ -697,6 +791,12 @@ async def test_price_monitoring_map_projects_observed_and_not_observed_store_poi
                     "latitude": 36.37,
                     "longitude": -94.21,
                     "median_price": 4.5,
+                    "search_median_price": 4.5,
+                    "search_observed": True,
+                    "in_stock": True,
+                    "is_sponsored": False,
+                    "availability_status": "verified_in_stock",
+                    "verified_local_availability": True,
                 },
                 {
                     "scope_key": "store:2",
@@ -707,9 +807,15 @@ async def test_price_monitoring_map_projects_observed_and_not_observed_store_poi
                     "city": "Rogers",
                     "state": "AR",
                     "country": "USA",
-                    "latitude": None,
-                    "longitude": None,
-                    "median_price": 5.5,
+                    "latitude": 36.33,
+                    "longitude": -94.12,
+                    "median_price": None,
+                    "search_median_price": 5.5,
+                    "search_observed": True,
+                    "in_stock": True,
+                    "is_sponsored": True,
+                    "availability_status": "unverified_sponsored",
+                    "verified_local_availability": False,
                 },
             ],
             "distribution_gaps": {
@@ -741,8 +847,12 @@ async def test_price_monitoring_map_projects_observed_and_not_observed_store_poi
     assert result["reference_price"] == 5.0
     assert result["display"] == {
         "observed_locations": 2,
-        "observed_points": 1,
-        "observed_missing_coordinates": 1,
+        "search_observed_locations": 2,
+        "verified_available_locations": 1,
+        "explicitly_out_of_stock_locations": 0,
+        "unverified_locations": 1,
+        "observed_points": 2,
+        "observed_missing_coordinates": 0,
         "observed_sampled": False,
         "below_reference_locations": 1,
         "at_reference_locations": 0,
@@ -753,9 +863,17 @@ async def test_price_monitoring_map_projects_observed_and_not_observed_store_poi
         "not_observed_sampled": False,
     }
     assert result["points"][0]["status"] == "observed"
+    assert result["points"][0]["availability_status"] == "verified_in_stock"
+    assert result["points"][0]["verified_local_availability"] is True
     assert result["points"][0]["difference_from_reference"] == -0.5
-    assert result["points"][1]["status"] == "not_observed"
-    assert result["points"][1]["price"] is None
+    assert result["points"][1]["status"] == "observed"
+    assert result["points"][1]["availability_status"] == "unverified_sponsored"
+    assert result["points"][1]["verified_local_availability"] is False
+    assert result["points"][1]["price"] == 5.5
+    assert result["points"][2]["status"] == "not_observed"
+    assert result["points"][2]["availability_status"] == "unverified"
+    assert result["points"][2]["verified_local_availability"] is False
+    assert result["points"][2]["price"] is None
 
 
 async def test_price_monitoring_evidence_export_passes_exact_product_scope() -> None:
@@ -770,6 +888,7 @@ async def test_price_monitoring_evidence_export_passes_exact_product_scope() -> 
             return "retailer,product_id\nWalmart,123\n"
 
     app = create_app()
+    _allow_public_reads(app)
     app.dependency_overrides[get_price_monitoring_service] = lambda: PriceService()
     async with (
         app.router.lifespan_context(app),

@@ -98,7 +98,11 @@
         "product_id": { "type": "string", "minLength": 1 },
         "product_name": { "type": "string", "minLength": 1 },
         "image_url": { "type": ["string", "null"] },
-        "observed_locations": { "type": "integer", "minimum": 0 },
+        "observed_locations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Legacy field name for distinct benchmark locations with explicit in-stock, non-sponsored local availability. It must never contain Search reach."
+        },
         "status": {
           "enum": [
             "benchmark_not_observed",

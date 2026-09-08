@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from io import BytesIO
@@ -10,6 +11,7 @@ from typing import Any
 
 import pytest
 
+import rci_worker.analysis as analysis_module
 from rci_analytics import (
     ComparisonEngine,
     InMemoryDatasetStore,
@@ -18,6 +20,7 @@ from rci_analytics import (
     ProductPackLoader,
 )
 from rci_analytics.models import ClassifiedOffer, NormalizedOffer
+from rci_analytics.normalization import BooleanAliasValidationError
 from rci_collections.models import QueueTask, RawArtifact
 from rci_providers import MetricsCartAdapterRegistry
 from rci_results import (
@@ -898,6 +901,7 @@ def _payload(product_id: str, price: str) -> dict[str, Any]:
                 "retailer_product_id": product_id,
                 "url": f"https://retailer.example/items/{product_id}",
                 "stock_availability": True,
+                "is_sponsored": False,
             }
         ]
     }
@@ -1051,6 +1055,191 @@ async def test_completed_collection_runs_through_generic_product_pack_pipeline()
         "Requires at least 25 retained observations" in row["suppression_reasons"]
         for row in suppressed
     )
+
+
+async def test_worker_coverage_uses_latest_product_location_availability_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_completion = analysis_module.complete_attributes_from_pdp
+
+    def complete_with_temporal_seller_transition(
+        classified: ClassifiedOffer,
+        *args: object,
+        **kwargs: object,
+    ) -> ClassifiedOffer:
+        completed = original_completion(classified, *args, **kwargs)  # type: ignore[arg-type]
+        if not completed.offer.raw.get("seller_transition"):
+            return completed
+        attributes = dict(completed.attributes)
+        attributes["_seller_governance"] = {
+            "status": "excluded_third_party",
+            "eligible": False,
+            "resolution_method": "exact_non_first_party",
+        }
+        return replace(
+            completed,
+            in_scope=False,
+            scope_reason=("known third-party marketplace seller excluded by Retailer Pack policy"),
+            attributes=attributes,
+            metrics={},
+        )
+
+    monkeypatch.setattr(
+        analysis_module,
+        "complete_attributes_from_pdp",
+        complete_with_temporal_seller_transition,
+    )
+    observed_at = datetime(2026, 8, 7, 6, tzinfo=UTC)
+    later_at = observed_at + timedelta(hours=1)
+    walmart_old_task = replace(
+        _task(
+            "walmart_us",
+            "metricscart_walmart_search_zipcode_v2",
+            "000000000111",
+            "2040",
+        ),
+        result_count=7,
+        raw_artifact_id="raw-walmart-old",
+    )
+    walmart_later_task = replace(
+        _task(
+            "walmart_us",
+            "metricscart_walmart_search_zipcode_v2",
+            "000000000112",
+            "2040",
+        ),
+        result_count=4,
+        raw_artifact_id="raw-walmart-later",
+    )
+    aldi_task = replace(
+        _task(
+            "aldi_us",
+            "metricscart_new_aldi_serp_zipcode",
+            "000000000113",
+            "463-048",
+        ),
+        raw_artifact_id="raw-aldi-current",
+    )
+
+    def result(
+        product_id: str,
+        *,
+        price: str | None = "$2.98",
+        in_stock: bool | None = True,
+        is_sponsored: bool | None = False,
+    ) -> dict[str, Any]:
+        return {
+            "name": "Fresh Strawberries, 1 lb",
+            "brand": "Fresh Produce",
+            "price": price,
+            "retailer_product_id": product_id,
+            "url": f"https://retailer.example/items/{product_id}",
+            "stock_availability": in_stock,
+            "is_sponsored": is_sponsored,
+        }
+
+    payloads: dict[str, object] = {
+        walmart_old_task.id: {
+            "results": [
+                result("44391605"),
+                result("22660282"),
+                result("1175460573"),
+                result("649701131"),
+                result("767905460"),
+                result("767905460", in_stock=False),
+                result("45618183"),
+            ]
+        },
+        walmart_later_task.id: {
+            "results": [
+                result("22660282", price=None, in_stock=False),
+                result("1175460573", price=None, is_sponsored=True),
+                result("649701131", price=None, in_stock=None),
+                {
+                    **result("45618183"),
+                    "seller_transition": True,
+                },
+            ]
+        },
+        aldi_task.id: _payload("16383764", "$2.49"),
+    }
+    pages = [
+        CollectedPage(
+            task=walmart_old_task,
+            storage_uri="s3://raw/walmart-old.json.gz",
+            checksum="1" * 64,
+            collected_at=observed_at,
+            latitude=40.7584,
+            longitude=-82.5154,
+        ),
+        CollectedPage(
+            task=walmart_later_task,
+            storage_uri="s3://raw/walmart-later.json.gz",
+            checksum="2" * 64,
+            collected_at=later_at,
+            latitude=40.7584,
+            longitude=-82.5154,
+        ),
+        CollectedPage(
+            task=aldi_task,
+            storage_uri="s3://raw/aldi-current.json.gz",
+            checksum="3" * 64,
+            collected_at=later_at,
+            latitude=40.7584,
+            longitude=-82.5154,
+        ),
+    ]
+    result_service = AnalysisResultService(
+        InMemoryResultsRepository(),
+        AnalysisResultValidator(REPOSITORY_ROOT),
+        InMemoryReportObjectStore(),
+    )
+    processor = AnalysisProcessor(
+        repository_root=REPOSITORY_ROOT,
+        queue=PageQueue(pages),  # type: ignore[arg-type]
+        adapters=MetricsCartAdapterRegistry.from_catalog(
+            REPOSITORY_ROOT / "config" / "retailer-catalog.json"
+        ),
+        raw_reader=RawReader(payloads),  # type: ignore[arg-type]
+        dataset_writer=ParquetDatasetWriter(InMemoryDatasetStore()),
+        collections=ArtifactRecorder(),  # type: ignore[arg-type]
+        results=result_service,
+        code_version="test-version",
+    )
+    job = AnalysisJob(
+        id="00000000-0000-0000-0000-000000000115",
+        collection_run_id=RUN_ID,
+        input_set_id="00000000-0000-0000-0000-000000000116",
+        source_kind="live_collection",
+        product_pack_id="fresh_strawberries",
+        product_pack_version="1.1.0",
+        definition_config={
+            "benchmark_retailer": "walmart_us",
+            "retailers": [
+                {"retailer_id": "walmart_us", "enabled": True},
+                {"retailer_id": "aldi_us", "enabled": True},
+            ],
+            "delivery": {
+                "web_report": False,
+                "excel": False,
+                "leadership_email": False,
+                "audit_package": False,
+            },
+        },
+        attempt_count=1,
+        max_attempts=3,
+    )
+
+    await processor.process(job)
+
+    analysis = await result_service.get_by_collection_run(RUN_ID)
+    metrics = {row["metric_id"]: row["value"] for row in analysis.result["metrics"]}
+    assert metrics["coverage.walmart_us.verified_available_offers"] == 1
+    assert metrics["coverage.walmart_us.verified_available_stores"] == 1
+    assert metrics["coverage.walmart_us.verified_available_zips"] == 1
+    assert metrics["coverage.walmart_us.explicitly_out_of_stock_search_offers"] == 2
+    assert metrics["coverage.walmart_us.sponsored_search_offers"] == 1
+    assert metrics["coverage.walmart_us.unverified_availability_search_offers"] == 3
 
 
 async def test_composite_unavailable_competitor_is_declared_but_never_scored() -> None:
@@ -1217,6 +1406,7 @@ async def test_historical_input_replays_through_same_generic_pipeline() -> None:
                 "Product Name": "Fresh Strawberries, 1 lb",
                 "Price": price,
                 "Stock Availability": "true",
+                "Is Sponsored": "false",
                 "Date": timestamps[retailer_id],
             }
         ]
@@ -1274,6 +1464,93 @@ async def test_historical_input_replays_through_same_generic_pipeline() -> None:
         source.dataset_artifact_id for source in sources
     )
     assert analysis.result["comparisons"]
+
+
+@pytest.mark.parametrize(
+    "newer_alias",
+    (
+        {"in_stock": "false"},
+        {"available": "sometimes"},
+        {"sponsored": "true"},
+        {"sponsored": "promoted"},
+    ),
+    ids=(
+        "conflicting-stock",
+        "malformed-stock",
+        "conflicting-sponsorship",
+        "malformed-sponsorship",
+    ),
+)
+async def test_historical_replay_fails_closed_on_newer_untrusted_availability_aliases(
+    newer_alias: dict[str, str],
+) -> None:
+    input_set_id = "00000000-0000-0000-0000-000000000704"
+    source = HistoricalSource(
+        dataset_artifact_id="artifact-walmart-alias-conflict",
+        input_set_id=input_set_id,
+        ordinal=0,
+        retailer_id="walmart_us",
+        adapter_id="historical_metricscart_search_monitor_csv",
+        source_name="walmart.csv",
+        source_format="metricscart_search_monitor_csv",
+        storage_uri="s3://raw/walmart.csv",
+        checksum="a" * 64,
+        row_count=2,
+    )
+    older_verified = {
+        "Retailer Store Id": "2040",
+        "Zipcode": "72712",
+        "Retailer Product Id": "44391605",
+        "Product Name": "Fresh Strawberries, 1 lb",
+        "Price": "2.98",
+        "Stock Availability": "true",
+        "Is Sponsored": "false",
+        "Date": "2026-08-07T06:00:00Z",
+    }
+    newer_untrusted = {
+        **older_verified,
+        "Date": "2026-08-07T07:00:00Z",
+        **newer_alias,
+    }
+    result_service = AnalysisResultService(
+        InMemoryResultsRepository(),
+        AnalysisResultValidator(REPOSITORY_ROOT),
+        InMemoryReportObjectStore(),
+    )
+    processor = AnalysisProcessor(
+        repository_root=REPOSITORY_ROOT,
+        queue=HistoricalQueue([source]),  # type: ignore[arg-type]
+        adapters=MetricsCartAdapterRegistry.from_catalog(
+            REPOSITORY_ROOT / "config" / "retailer-catalog.json"
+        ),
+        raw_reader=RawReader({}),  # type: ignore[arg-type]
+        historical_reader=HistoricalReader(
+            {"walmart_us": [older_verified, newer_untrusted]}  # type: ignore[list-item]
+        ),  # type: ignore[arg-type]
+        dataset_writer=ParquetDatasetWriter(InMemoryDatasetStore()),
+        collections=ArtifactRecorder(),  # type: ignore[arg-type]
+        results=result_service,
+        code_version="test-version",
+    )
+    job = AnalysisJob(
+        id="00000000-0000-0000-0000-000000000706",
+        collection_run_id=RUN_ID,
+        input_set_id=input_set_id,
+        source_kind="historical_import",
+        product_pack_id="fresh_strawberries",
+        product_pack_version="1.1.0",
+        definition_config={
+            "benchmark_retailer": "walmart_us",
+            "retailers": [{"retailer_id": "walmart_us", "enabled": True}],
+            "analysis": {"comparison_profiles": ["strict"]},
+            "delivery": {},
+        },
+        attempt_count=1,
+        max_attempts=3,
+    )
+
+    with pytest.raises(BooleanAliasValidationError):
+        await processor.process(job)
 
 
 def test_analysis_orchestrator_has_no_product_category_branches() -> None:

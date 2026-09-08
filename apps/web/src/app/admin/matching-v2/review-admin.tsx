@@ -709,10 +709,8 @@ function ProductIdentity({ listing }: Readonly<{ listing: ListingSummary }>) {
         <span>{listing.brand || "Brand unresolved"}</span>
         {listing.observed_location_count !== undefined ? (
           <span>
-            {listing.observed_location_count.toLocaleString()} observed{" "}
-            {listing.retailer_id === "amazon_us_same_day"
-              ? "ZIPs"
-              : "stores/locations"}
+            {listing.observed_location_count.toLocaleString()} Search-observed
+            matching-footprint contexts · availability unverified
           </span>
         ) : null}
         <code>{listing.retailer_product_id}</code>
@@ -750,7 +748,8 @@ function BulkProductIdentity({
         <strong>{product.title || product.retailer_product_id}</strong>
         <small>
           {product.brand || "Brand unresolved"} ·{" "}
-          {product.observed_location_count.toLocaleString()} observed
+          {product.observed_location_count.toLocaleString()} Search-observed
+          footprint contexts
         </small>
       </span>
     </span>
@@ -2387,7 +2386,7 @@ export function MatchingV2ReviewAdmin({
                                   ID {claim.listing.retailer_product_id}
                                   {claim.listing.observed_location_count !==
                                   undefined
-                                    ? ` · ${claim.listing.observed_location_count.toLocaleString()} observed`
+                                    ? ` · ${claim.listing.observed_location_count.toLocaleString()} Search-observed footprint contexts`
                                     : ""}
                                 </span>
                               </div>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { BrandWorkbench, BrandWorkbenchBrand } from "@/lib/api";
+import { brandDistributionPresentation } from "@/lib/brand-availability-presentation";
 
 type BrandRole = BrandWorkbenchBrand["role"];
 type BrandDecision = "confirmed" | "rejected" | "reset";
@@ -292,8 +293,9 @@ export function BrandWorkbenchPanel({
         <p>
           <strong>Human-governed brand intelligence</strong>
           Product Packs propose private-label, regional, and national brand
-          roles. Search evidence determines where each brand is actually
-          distributed; a broad footprint alone never proves a national role.{" "}
+          roles. Only an explicit in-stock, non-sponsored local Search result
+          verifies availability; Search discovery alone does not prove where a
+          brand is distributed. A broad footprint never proves a national role.{" "}
           {readOnly
             ? "This report view is read-only; open the Administration Brand Workbench to govern classifications."
             : ""}
@@ -410,6 +412,7 @@ export function BrandWorkbenchPanel({
             (candidate) =>
               candidate.canonical_brand_id === canonicalSelections[key],
           );
+          const distribution = brandDistributionPresentation(brand);
           return (
             <article className={`brand-card ${brand.status}`} key={key}>
               <header>
@@ -439,49 +442,31 @@ export function BrandWorkbenchPanel({
 
               <div className="brand-evidence-grid">
                 <span>
-                  <b>{brand.observed_products.toLocaleString()}</b>
-                  products
+                  <b>{distribution.productValue}</b>
+                  {distribution.productLabel}
                 </span>
                 <span>
-                  <b>
-                    {(brand.distribution_evidence === "search_brand_field"
-                      ? brand.observed_locations
-                      : brand.observed_zipcodes
-                    ).toLocaleString()}
-                  </b>
-                  {brand.distribution_evidence === "search_brand_field"
-                    ? "locations"
-                    : brand.observed_zipcodes === 1
-                      ? "matched ZIP"
-                      : "matched ZIPs"}
+                  <b>{distribution.locationValue}</b>
+                  {distribution.locationLabel}
                 </span>
                 <span>
-                  <b>
-                    {brand.distribution_evidence === "search_brand_field"
-                      ? brand.observed_zipcodes.toLocaleString()
-                      : "PDP + Search"}
-                  </b>
-                  {brand.distribution_evidence === "search_brand_field"
-                    ? "ZIPs"
-                    : "evidence"}
+                  <b>{distribution.evidenceValue}</b>
+                  {distribution.evidenceLabel}
                 </span>
               </div>
               <div className="brand-footprint">
                 <span>
-                  <b>{distributionLabels[brand.distribution_tier]}</b>
-                  <em>
-                    {brand.distribution_evidence === "search_brand_field"
-                      ? `${(brand.location_share * 100).toFixed(1)}% of observed retailer locations`
-                      : brand.distribution_evidence ===
-                          "pdp_identity_joined_to_matched_search"
-                        ? `At least ${brand.observed_zipcodes.toLocaleString()} matched ZIP${brand.observed_zipcodes === 1 ? "" : "s"}; full footprint will refine on the next analysis`
-                        : "PDP identity is available; Search footprint is not resolved in this publication"}
-                  </em>
+                  <b>
+                    {distribution.verified
+                      ? distributionLabels[brand.distribution_tier]
+                      : "Availability unverified"}
+                  </b>
+                  <em>{distribution.footprintLabel}</em>
                 </span>
                 <i>
                   <b
                     style={{
-                      width: `${brand.location_share ? Math.max(2, brand.location_share * 100) : 0}%`,
+                      width: `${distribution.footprintShare ? Math.max(2, distribution.footprintShare * 100) : 0}%`,
                     }}
                   />
                 </i>
@@ -495,8 +480,9 @@ export function BrandWorkbenchPanel({
                 </ul>
               ) : (
                 <p className="brand-no-pdp">
-                  No PDP image is persisted; Search distribution evidence is
-                  still available.
+                  No PDP image is persisted; the evidence labels above still
+                  distinguish verified local availability from Search-only
+                  discovery.
                 </p>
               )}
 
@@ -649,7 +635,9 @@ export function BrandWorkbenchPanel({
       ) : null}
 
       <p className="brand-authority-note">
-        Price and store distribution remain authoritative from Search. PDP
+        Search is authoritative for listed price and its explicit stock and
+        sponsorship fields. Only in-stock, non-sponsored local Search evidence
+        verifies availability; legacy Search reach remains unverified. PDP
         enrichment supplies identity, descriptions, specifications, URLs, and
         imagery. Role changes are staged until a user explicitly re-evaluates.
       </p>

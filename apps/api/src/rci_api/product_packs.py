@@ -265,7 +265,7 @@ def _starter_documents(
                     "unknown_policy": "reject",
                     "price_selection": "lowest_positive",
                     "comparison_metric": "package_price",
-                    "availability_policy": "search_presence",
+                    "availability_policy": "in_stock_only",
                 }
             ],
             "brand_rules": {"aliases": {}, "private_labels": {}},
@@ -280,7 +280,10 @@ def _starter_documents(
     template["reporting"] = {
         "headline_segments": [],
         "required_caveats": [
-            "Search observations are authoritative for store-specific price and availability.",
+            (
+                "Search observations establish price placement, not local availability. "
+                "Verified local availability requires explicit in-stock, non-sponsored evidence."
+            ),
             "Comparison eligibility follows the configured Product Pack attributes.",
         ],
         "recommended_charts": ["footprint", "segment_win_rate", "price_position"],

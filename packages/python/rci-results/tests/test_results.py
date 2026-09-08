@@ -20,7 +20,9 @@ from rci_results import (
     InMemoryResultsRepository,
     S3ReportObjectStore,
 )
+from rci_results.contracts import result_checksum
 from rci_results.models import ArtifactPayload
+from rci_results.service import ArtifactNotCurrentError
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
 
@@ -80,7 +82,7 @@ def test_renderers_preserve_result_and_create_auditable_formats() -> None:
     renderer = ArtifactRenderer()
 
     html = renderer.render(result, "html")
-    assert html.renderer_version == renderer.version == "2.15.1"
+    assert html.renderer_version == renderer.version == "2.15.2"
     assert html.body.startswith(b"<!doctype html>")
     assert b"0.99964" in html.body
 
@@ -146,6 +148,8 @@ async def test_artifact_generation_is_immutable_and_uses_short_lived_downloads()
     ]
 
     assert len(store.objects) == 4
+    assert (await service.get_active(analysis.analysis_id)).id == analysis.id
+    assert (await service.get_by_artifact(artifacts[0].id)).id == analysis.id
     assert {artifact.artifact_type for artifact in artifacts} == {
         "html",
         "xlsx",
@@ -187,6 +191,11 @@ async def test_governed_publication_drives_report_view_and_versioned_artifacts()
     assert repeated.id == publication.id
     assert publication.version == 1
     assert publication.source_result_checksum == analysis.checksum
+    checksum_document = copy.deepcopy(publication.result)
+    checksum_document["provenance"]["final_result_checksum_sha256"] = "0" * 64
+    assert publication.result["provenance"]["final_result_checksum_sha256"] == result_checksum(
+        checksum_document
+    )
     assert view["publication"]["id"] == publication.id
     assert view["sections"][0]["narrative"]["body"] == "Published leadership answer."
     assert artifact.publication_id == publication.id
@@ -199,6 +208,12 @@ async def test_governed_publication_drives_report_view_and_versioned_artifacts()
     assert next_publication.version == 2
     assert next_artifact.publication_id == next_publication.id
     assert next_artifact.id != artifact.id
+    assert [row.id for row in await service.list_artifacts(analysis.analysis_id)] == [
+        next_artifact.id
+    ]
+    with pytest.raises(ArtifactNotCurrentError, match="superseded"):
+        await service.download_link(artifact.id)
+    assert (await service.download_link(next_artifact.id)).artifact_id == next_artifact.id
 
 
 async def test_publication_cannot_change_authoritative_metrics() -> None:
@@ -212,6 +227,38 @@ async def test_publication_cannot_change_authoritative_metrics() -> None:
 
     with pytest.raises(ValueError, match="authoritative metrics"):
         await service.publish_publication(analysis.analysis_id, changed)
+
+
+async def test_publication_cannot_change_availability_scope_or_coverage() -> None:
+    service, _ = _service()
+    base = json.loads(
+        (REPOSITORY_ROOT / "examples" / "analysis-result-v2.ground-beef.json").read_text()
+    )
+    analysis = await service.publish(base, collection_run_id="ground-beef-example-run")
+
+    for field in (
+        "benchmark_retailer",
+        "competitors",
+        "coverage",
+        "comparisons",
+        "validation",
+        "provenance",
+    ):
+        changed = copy.deepcopy(base)
+        if field == "benchmark_retailer":
+            changed[field] = "target_us"
+        elif field == "competitors":
+            changed[field] = ["target_us", "amazon_us_same_day"]
+        elif field == "coverage":
+            changed[field][0]["retailer_id"] = "target_us"
+        elif field == "comparisons":
+            changed[field][0]["competitor_id"] = "target_us"
+        elif field == "validation":
+            changed[field]["checks"][0]["status"] = "warning"
+        else:
+            changed[field]["analytics_code_version"] = "untrusted-rewrite"
+        with pytest.raises(ValueError, match=f"authoritative {field}"):
+            await service.publish_publication(analysis.analysis_id, changed)
 
 
 async def test_new_renderer_version_generates_a_new_immutable_artifact() -> None:
@@ -240,12 +287,12 @@ async def test_new_renderer_version_generates_a_new_immutable_artifact() -> None
     second = await upgraded.generate_artifact(analysis.analysis_id, "html")
 
     assert first.id != second.id
-    assert first.renderer_version == "2.15.1"
+    assert first.renderer_version == "2.15.2"
     assert second.renderer_version == "3.0.0"
     assert len(store.objects) == 2
     listed = await upgraded.list_artifacts(analysis.analysis_id)
     assert {artifact.renderer_version for artifact in listed} == {
-        "2.15.1",
+        "2.15.2",
         "3.0.0",
     }
 

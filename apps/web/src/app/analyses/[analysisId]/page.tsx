@@ -26,8 +26,16 @@ export default async function AnalysisPage({
     return (
       <main>
         <EmptyState
-          eyebrow="Analysis unavailable"
-          title="The result could not be loaded"
+          eyebrow={
+            response.status === 409
+              ? "Report quarantined"
+              : "Analysis unavailable"
+          }
+          title={
+            response.status === 409
+              ? "This report is not available for sharing"
+              : "The result could not be loaded"
+          }
           message={response.error ?? "Try again when the API is available."}
         />
       </main>

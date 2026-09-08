@@ -27,7 +27,7 @@ def _classified(
     collected_at: str,
     in_scope: bool = True,
     in_stock: bool | None = True,
-    is_sponsored: bool | None = None,
+    is_sponsored: bool | None = False,
     price_per_lb: str | None = None,
 ) -> ClassifiedOffer:
     return ClassifiedOffer(
@@ -162,10 +162,14 @@ def test_price_monitoring_is_search_authoritative_and_contract_valid() -> None:
     )
     assert view["summary"] == {
         "observed_locations": 2,
+        "verified_available_locations": 2,
         "expected_locations": 2,
         "coverage_rate": 1.0,
         "observed_products": 2,
+        "verified_available_products": 2,
         "eligible_observations": 3,
+        "search_price_observations": 3,
+        "verified_availability_observations": 3,
         "usable_price_rate": 0.6667,
         "price_consistency_rate": 1.0,
     }
@@ -360,6 +364,48 @@ def test_classified_parquet_record_round_trip_preserves_provider_ids() -> None:
     assert restored.offer.price == Decimal("6.59")
 
 
+def test_legacy_classified_record_without_availability_flags_fails_closed() -> None:
+    source = _classified(
+        offer_id="legacy-offer",
+        product_id="legacy-product",
+        store="0042",
+        price="6.59",
+        collected_at="2026-08-07T06:00:00Z",
+    )
+    record = source.to_record()
+    record.pop("in_stock", None)
+    record.pop("is_sponsored", None)
+
+    restored = classified_offer_from_record(record)
+
+    assert restored.offer.in_stock is None
+    assert restored.offer.is_sponsored is None
+    population = PriceMonitoringProjector(
+        ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef"),
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    ).canonical_population([restored], retailer_id="walmart_us")
+    observation = population.observations[0]
+    assert observation.availability_status == "unverified"
+    assert observation.verified_local_availability is False
+    assert (
+        population.comparison_observations(
+            {"legacy-product"},
+            "package_price",
+        )["legacy-product"]
+        == ()
+    )
+    assert (
+        len(
+            population.comparison_observations(
+                {"legacy-product"},
+                "package_price",
+                evidence_scope="search_presence",
+            )["legacy-product"]
+        )
+        == 1
+    )
+
+
 def test_classified_parquet_record_preserves_explicit_price_components() -> None:
     source = _classified(
         offer_id="offer-promo",
@@ -385,9 +431,7 @@ def test_classified_parquet_record_preserves_explicit_price_components() -> None
     assert restored.offer.is_sponsored is True
 
 
-def test_price_monitoring_uses_positive_search_price_for_stock_and_boolean_for_sponsorship() -> (
-    None
-):
+def test_price_monitoring_separates_search_presence_from_verified_local_availability() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef")
     projector = PriceMonitoringProjector(
         pack,
@@ -404,13 +448,31 @@ def test_price_monitoring_uses_positive_search_price_for_stock_and_boolean_for_s
             is_sponsored=True,
         ),
         _classified(
-            offer_id="organic",
+            offer_id="sponsored-unknown",
             product_id="100",
             store="2",
             price="5.25",
             collected_at="2026-08-07T06:00:00Z",
             in_stock=None,
+            is_sponsored=True,
+        ),
+        _classified(
+            offer_id="organic-in-stock",
+            product_id="100",
+            store="3",
+            price="5.50",
+            collected_at="2026-08-07T06:00:00Z",
+            in_stock=True,
             is_sponsored=False,
+        ),
+        _classified(
+            offer_id="legacy-flags",
+            product_id="100",
+            store="4",
+            price="5.75",
+            collected_at="2026-08-07T06:00:00Z",
+            in_stock=True,
+            is_sponsored=None,
         ),
     ]
     locations = {
@@ -435,6 +497,20 @@ def test_price_monitoring_uses_positive_search_price_for_stock_and_boolean_for_s
             "state": "TX",
             "country": "USA",
         },
+        ("walmart_us", "4"): {
+            "store_name": "Store Four",
+            "zipcode": "90001",
+            "city": "Los Angeles",
+            "state": "CA",
+            "country": "USA",
+        },
+        ("walmart_us", "5"): {
+            "store_name": "Store Five",
+            "zipcode": "98101",
+            "city": "Seattle",
+            "state": "WA",
+            "country": "USA",
+        },
     }
     view = projector.build(
         offers,
@@ -446,26 +522,135 @@ def test_price_monitoring_uses_positive_search_price_for_stock_and_boolean_for_s
         ),
         location_index=locations,
         eligible_location_index=locations,
-        expected_location_count=3,
+        expected_location_count=5,
     )
 
     product = view["products"][0]
     assert product["availability"] == {
-        "status": "observed",
+        "status": "verified",
+        "search_observations": 4,
         "known_observations": 2,
-        "in_stock_observations": 2,
-        "rate": 1.0,
+        "in_stock_observations": 1,
+        "verified_in_stock_observations": 1,
+        "explicitly_out_of_stock_observations": 1,
+        "unverified_observations": 2,
+        "search_observed_locations": 4,
+        "verified_available_locations": 1,
+        "explicitly_out_of_stock_locations": 1,
+        "unverified_locations": 2,
+        "rate": 0.5,
         "definition": (
-            "A product observed in Search with a price greater than zero is treated "
-            "as available/in stock at that location."
+            "Verified local availability requires an explicit in-stock signal from "
+            "an organic Search result. Sponsored placements, unknown sponsorship, "
+            "and missing stock signals are retained as Search presence only."
         ),
     }
-    assert product["sponsorship"]["rate"] == 0.5
+    assert product["locations"] == 1
+    assert product["search_observed_locations"] == 4
+    assert product["price_stats"]["observation_count"] == 1
+    assert product["search_price_stats"]["observation_count"] == 4
+    assert product["sponsorship"]["rate"] == 0.6667
     assert view["presence"]["not_observed_locations"] == 1
-    assert view["distribution_gaps"]["locations"][0]["store_name"] == "Store Three"
-    tx_gap = next(row for row in view["distribution_gaps"]["geographies"] if row["key"] == "TX")
-    assert tx_gap["not_observed_locations"] == 1
-    assert tx_gap["observed_rate"] == 0.0
+    assert view["availability"]["verified_available_locations"] == 1
+    assert view["availability"]["verified_availability_rate"] == 0.2
+    assert view["distribution_gaps"]["locations"][0]["store_name"] == "Store Five"
+    wa_gap = next(row for row in view["distribution_gaps"]["geographies"] if row["key"] == "WA")
+    assert wa_gap["not_observed_locations"] == 1
+    assert wa_gap["observed_rate"] == 0.0
+    statuses = {
+        row["store_number"]: row["availability_status"] for row in product["sample_locations"]
+    }
+    assert statuses == {
+        "1": "explicitly_out_of_stock",
+        "2": "unverified_sponsored",
+        "3": "verified_in_stock",
+        "4": "unverified",
+    }
+
+
+def test_price_monitoring_blocks_availability_release_when_scope_is_search_only() -> None:
+    pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef")
+    projector = PriceMonitoringProjector(
+        pack,
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+    view = projector.build(
+        [
+            _classified(
+                offer_id="sponsored-only",
+                product_id="100",
+                store="1",
+                price="5.00",
+                collected_at="2026-08-07T06:00:00Z",
+                in_stock=None,
+                is_sponsored=True,
+            )
+        ],
+        analysis_id="blocked-availability-test",
+        generated_at=datetime.now(UTC).isoformat(),
+        filters=PriceMonitoringFilters(retailer_id="walmart_us", product_id="100"),
+        location_index={
+            ("walmart_us", "1"): {
+                "store_name": "Store One",
+                "zipcode": "72712",
+                "city": "Bentonville",
+                "state": "AR",
+                "country": "USA",
+            }
+        },
+        expected_location_count=1,
+    )
+
+    assert view["summary"]["observed_locations"] == 1
+    assert view["summary"]["verified_available_locations"] == 0
+    assert view["price_distribution"]["observation_count"] == 0
+    assert view["search_price_distribution"]["observation_count"] == 1
+    assert view["products"][0]["locations"] == 0
+    assert view["products"][0]["search_observed_locations"] == 1
+    assert view["quality"]["status"] == "blocked"
+    checks = {row["id"]: row for row in view["quality"]["checks"]}
+    assert checks["zero-verified-local-availability"]["count"] == 1
+    assert checks["zero-verified-local-availability"]["severity"] == "blocker"
+
+
+def test_price_monitoring_blocks_conflicting_same_timestamp_organic_stock_signals() -> None:
+    projector = PriceMonitoringProjector(
+        ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef"),
+        GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+    offers = [
+        _classified(
+            offer_id="organic-in",
+            product_id="100",
+            store="1",
+            price="5.00",
+            collected_at="2026-08-07T06:00:00Z",
+            in_stock=True,
+            is_sponsored=False,
+        ),
+        _classified(
+            offer_id="organic-out",
+            product_id="100",
+            store="1",
+            price="5.00",
+            collected_at="2026-08-07T06:00:00Z",
+            in_stock=False,
+            is_sponsored=False,
+        ),
+    ]
+    view = projector.build(
+        offers,
+        analysis_id="conflicting-availability-test",
+        generated_at=datetime.now(UTC).isoformat(),
+        filters=PriceMonitoringFilters(retailer_id="walmart_us", product_id="100"),
+    )
+
+    assert view["products"][0]["availability"]["status"] == "unverified"
+    assert view["products"][0]["availability"]["explicitly_out_of_stock_locations"] == 1
+    assert view["quality"]["status"] == "blocked"
+    checks = {row["id"]: row for row in view["quality"]["checks"]}
+    assert checks["conflicting-product-location-availability"]["count"] == 1
+    assert checks["conflicting-product-location-availability"]["severity"] == "blocker"
 
 
 def test_price_monitoring_flags_exact_product_modal_price_exception() -> None:

@@ -18,7 +18,7 @@ function fixture(productId: string | null): PriceMonitoringView {
           authority: {
             identity: "pdp",
             price: "search",
-            availability: "search",
+            availability: "explicit_provider_stock_availability",
           },
           description_full: "Large catalog-only payload",
           images: ["one", "two"],
@@ -39,7 +39,7 @@ describe("compactPriceMonitoringCatalog", () => {
       authority: {
         identity: "pdp",
         price: "search",
-        availability: "search",
+        availability: "explicit_provider_stock_availability",
       },
     });
     expect(compacted.products[0]?.price_histogram).toEqual([]);

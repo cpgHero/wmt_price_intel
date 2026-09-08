@@ -158,7 +158,11 @@ test("explains the reviewer prerequisite before a bounded AI review", async ({
   await expect(statusSummary).toContainText("Estimated remaining: About 2 min");
   await expect(statusSummary).toContainText("Recorded cost $0.1234");
   await expect(
-    page.getByText("1 observed stores/locations").first(),
+    page
+      .getByText(
+        "1 Search-observed matching-footprint contexts · availability unverified",
+      )
+      .first(),
   ).toBeVisible();
   await expect(statusSummary).toContainText(
     "Queue-wide status refreshes automatically",

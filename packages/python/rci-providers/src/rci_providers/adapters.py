@@ -117,9 +117,8 @@ class MetricsCartRetailerAdapter:
                     and (value is None or (isinstance(value, str) and not value.strip()))
                 ):
                     missing_counts[field] += 1
-            sponsored = self._field(result, "is_sponsored")
-            if sponsored is not None and not isinstance(sponsored, bool):
-                raise ValueError("MetricsCart is_sponsored must be boolean or null")
+            self._boolean_field(result, "is_sponsored")
+            self._boolean_field(result, "stock_availability")
             price = self._field(result, "price")
             if price is not None and self._decimal(price) is None:
                 raise ValueError("MetricsCart price is not numeric")
@@ -135,6 +134,9 @@ class MetricsCartRetailerAdapter:
             "result_count": len(extraction.results),
             "result_field_names": sorted(field_names),
             "availability_authority": self.response_contract.get("availability_authority"),
+            "search_presence_price_authority": self.response_contract.get(
+                "search_presence_price_authority"
+            ),
             "sponsorship_authority": self.response_contract.get("sponsorship_authority"),
         }
 
@@ -142,6 +144,8 @@ class MetricsCartRetailerAdapter:
         identifiers = self._field(result, "product_identifiers")
         product_id = self._field(result, "retailer_product_id") or self._identifier(identifiers)
         price = self._field(result, "price")
+        stock_availability = self._boolean_field(result, "stock_availability")
+        is_sponsored = self._boolean_field(result, "is_sponsored")
         return {
             "retailer_id": self.retailer_id,
             "source_retailer": self._field(result, "retailer"),
@@ -153,14 +157,14 @@ class MetricsCartRetailerAdapter:
             "price_discounted": self._field(result, "price_discounted"),
             "rating": self._field(result, "rating"),
             "rating_count": self._field(result, "rating_count"),
-            "is_sponsored": self._field(result, "is_sponsored"),
+            "is_sponsored": is_sponsored,
             "retailer_product_id": str(product_id) if product_id is not None else None,
             "product_identifiers": dict(identifiers) if isinstance(identifiers, dict) else {},
             "url": self._field(result, "url"),
             "image_url": self._field(result, "image_primary"),
-            # Search presence with a positive Search price is the governed availability rule.
-            # Provider stock flags remain immutable in raw evidence for diagnosis only.
-            "in_stock": bool((numeric_price := self._decimal(price)) and numeric_price > 0),
+            # Search price remains price/presence evidence, but it cannot establish stock.
+            # Only an explicit provider boolean is normalized as verified availability.
+            "in_stock": (stock_availability if isinstance(stock_availability, bool) else None),
             "zipcode": task.zipcode,
             "store_number": task.store_number,
             "page": task.page_number,
@@ -176,6 +180,30 @@ class MetricsCartRetailerAdapter:
 
     def _field_present(self, result: Mapping[str, Any], canonical: str) -> bool:
         return any(alias in result for alias in self.field_aliases.get(canonical, (canonical,)))
+
+    def _boolean_field(self, result: Mapping[str, Any], canonical: str) -> bool | None:
+        """Resolve all mapped boolean aliases without trusting catalog order."""
+
+        observed: list[tuple[str, bool]] = []
+        for alias in self.field_aliases.get(canonical, (canonical,)):
+            if alias not in result:
+                continue
+            value = result[alias]
+            if value is None or (isinstance(value, str) and not value.strip()):
+                continue
+            if not isinstance(value, bool):
+                raise ValueError(
+                    f"MetricsCart {canonical} must be boolean or null; "
+                    f"alias {alias!r} has type {type(value).__name__}"
+                )
+            observed.append((alias, value))
+
+        if not observed:
+            return None
+        if len({value for _, value in observed}) > 1:
+            details = ", ".join(f"{alias}={value}" for alias, value in observed)
+            raise ValueError(f"MetricsCart {canonical} aliases conflict: {details}")
+        return observed[0][1]
 
     @staticmethod
     def _identifier(value: Any) -> Any:

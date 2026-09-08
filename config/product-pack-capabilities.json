@@ -25,7 +25,7 @@
   "geographies": [
     { "id": "exact_zip", "label": "Exact ZIP", "description": "Compare observations in the same normalized ZIP.", "status": "available" },
     { "id": "same_store_market", "label": "Same store market", "description": "Compare observations in the same configured market.", "status": "available" },
-    { "id": "radius", "label": "Store radius", "description": "Compare observed stores within an explicit radius.", "status": "available" },
+    { "id": "radius", "label": "Store radius", "description": "Compare verified-local stores within an explicit radius.", "status": "available" },
     { "id": "national", "label": "National", "description": "Compare a national product rollup without local price claims.", "status": "available" }
   ],
   "brand_policies": [

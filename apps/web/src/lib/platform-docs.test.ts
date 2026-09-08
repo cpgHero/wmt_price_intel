@@ -33,7 +33,10 @@ describe("platform owner and administrator documentation", () => {
 
   it("documents the complete authority and certification boundaries", () => {
     const text = allText();
-    expect(text).toContain("search data owns store-specific price");
+    expect(text).toContain("search data owns listed price");
+    expect(text).toContain(
+      "only in_stock=true on a non-sponsored result verifies local availability",
+    );
     expect(text).toContain("location master owns");
     expect(text).toContain("pdp");
     expect(text).toContain("retailer packs");
@@ -46,6 +49,12 @@ describe("platform owner and administrator documentation", () => {
     expect(text).toContain("kroger product details uses the provider-catalog");
     expect(text).toContain("kroger pdp contract is verified");
     expect(text).toContain("cache-adjusted estimate");
+    expect(text).toContain(
+      "select the latest search availability state before admitting price evidence",
+    );
+    expect(text).toContain(
+      "including one with null or zero price—retracts an older verified state",
+    );
   });
 
   it("maintains valid tables, internal links, limitations, and change orders", () => {
@@ -220,7 +229,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.81");
+    expect(platformDocumentation.version).toBe("1.3.82");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -243,5 +252,68 @@ describe("platform owner and administrator documentation", () => {
       "landing-page readiness now distinguishes durable publication authority from source-quality disclosures",
     );
     expect(allText()).toContain("8d6c4756-c44f-487e-9a6a-393dc1661b96");
+  });
+
+  it("separates Search reach from verified local availability", () => {
+    const guides = Object.fromEntries(
+      platformDocumentation.guides.map((guide) => [
+        guide.id,
+        JSON.stringify(guide).toLocaleLowerCase(),
+      ]),
+    );
+
+    expect(guides["analytics-reporting"]).toContain(
+      "search reach and search-listed price remain distinct from verified local availability",
+    );
+    expect(guides["analytics-reporting"]).toContain(
+      "sponsored results, unknown sponsorship, missing stock flags, and legacy rows remain unverified",
+    );
+    expect(guides["analytics-reporting"]).toContain(
+      "price monitoring map 1.2.0",
+    );
+    expect(guides["analytics-reporting"]).toContain(
+      "both use the active geography, brand-type, and brand filter scope",
+    );
+    expect(guides["source-metric-lineage"]).toContain(
+      "verified locally available location",
+    );
+    expect(guides["source-metric-lineage"]).toContain(
+      "measures search reach only; never proves local availability or carriage",
+    );
+    expect(guides["source-metric-lineage"]).toContain(
+      "verified locally available locations ÷ all eligible retailer location queries",
+    );
+    expect(guides["source-metric-lineage"]).toContain(
+      "matched positive search prices with explicit in_stock=true and is_sponsored=false",
+    );
+    expect(guides["metric-dictionary"]).toContain(
+      "the browser never infers this status from price",
+    );
+    expect(guides["metric-dictionary"]).toContain(
+      "a sparse verified subset cannot appear as 100% carriage",
+    );
+    expect(guides.limitations).toContain(
+      "treat those counts as search reach only",
+    );
+    expect(guides["change-orders"]).toContain("2026-09-08");
+    expect(guides["change-orders"]).toContain("unverified_sponsored");
+    expect(guides.matching).toContain(
+      "compatibility counts on older immutable queues may support identity-oriented ai review",
+    );
+    expect(guides.matching).toContain(
+      "never authorize local availability, comparison, or reporting",
+    );
+    expect(guides["change-orders"]).toContain(
+      "selects the latest availability state before positive-price admission",
+    );
+    expect(guides["change-orders"]).toContain(
+      "all eligible local queries as its denominator",
+    );
+    expect(guides["change-orders"]).toContain(
+      "historical availability language is obsolete",
+    );
+    expect(guides["change-orders"]).toContain(
+      "must be read as search reach only",
+    );
   });
 });

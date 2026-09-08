@@ -10,6 +10,12 @@ from dataclasses import dataclass, replace
 from decimal import Decimal
 from typing import Any
 
+from rci_analytics.latest_product_location import (
+    LatestProductLocationSelector,
+    add_classified_offer,
+    is_product_location_state,
+    latest_classified_offers,
+)
 from rci_analytics.models import (
     ClassifiedOffer,
     ComparisonSummary,
@@ -18,8 +24,30 @@ from rci_analytics.models import (
     ProductMatchRule,
 )
 from rci_analytics.package_semantics import labeled_unit_packs_are_compatible
+from rci_analytics.product_location import classify_local_availability
 from rci_analytics.product_pack import ProductPack
 from rci_retailer_packs import GovernedBrandResolver
+
+
+def _is_verified_local_observation(item: ClassifiedOffer | None) -> bool:
+    """Return whether Search supplied affirmative, organic local availability.
+
+    A positive Search price proves that a product was returned by Search; it does
+    not prove that the product is carried at the requested location. Local
+    comparisons and distribution footprints therefore fail closed unless the
+    provider explicitly reports the offer in stock and explicitly identifies the
+    placement as non-sponsored.
+    """
+
+    return bool(
+        item is not None
+        and item.in_scope
+        and classify_local_availability(
+            in_stock=item.offer.in_stock,
+            is_sponsored=item.offer.is_sponsored,
+        )
+        == "verified_in_stock"
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -221,17 +249,22 @@ def resolve_one_to_one_relationships(
     Evidence volume and stable IDs never decide product identity.
     """
 
-    offer_rows = list(offers)
-    match_rows = list(matches)
+    offer_rows = latest_classified_offers(offers)
     priorities = {str(profile_id): index for index, profile_id in enumerate(profile_priority)}
     classified_index = {item.offer.offer_id: item for item in offer_rows}
     offer_index = {offer_id: item.offer for offer_id, item in classified_index.items()}
+    match_rows = [
+        match
+        for match in matches
+        if _is_verified_local_observation(classified_index.get(match.benchmark_offer_id))
+        and _is_verified_local_observation(classified_index.get(match.competitor_offer_id))
+    ]
     configured_scope_policies = profile_scope_policies or {}
     product_locations: dict[str, set[str]] = {}
     for item in offer_rows:
         offer = item.offer
         if (
-            item.in_scope
+            _is_verified_local_observation(item)
             and offer.retailer_id == benchmark_retailer
             and offer.zipcode is not None
             and offer.price is not None
@@ -653,17 +686,18 @@ def haversine_miles(
 def geographic_overlap(
     offers: Iterable[ClassifiedOffer], benchmark_id: str, competitor_id: str
 ) -> set[str]:
+    latest = latest_classified_offers(offers)
     benchmark = {
         item.offer.zipcode
-        for item in offers
-        if item.in_scope
+        for item in latest
+        if _is_verified_local_observation(item)
         and item.offer.retailer_id == benchmark_id
         and item.offer.zipcode is not None
     }
     competitor = {
         item.offer.zipcode
-        for item in offers
-        if item.in_scope
+        for item in latest
+        if _is_verified_local_observation(item)
         and item.offer.retailer_id == competitor_id
         and item.offer.zipcode is not None
     }
@@ -671,7 +705,7 @@ def geographic_overlap(
 
 
 def location_scope_key(offer: Any) -> str:
-    """Return the stable Search-evidence grain used by scoped relationships."""
+    """Return the stable location grain used by verified scoped relationships."""
 
     zipcode = str(offer.zipcode or "unknown")
     store = str(offer.store_number or f"zip:{zipcode}")
@@ -681,13 +715,13 @@ def location_scope_key(offer: Any) -> str:
 def product_footprint(
     offers: Iterable[ClassifiedOffer], *, analysis_id: str, retailer_id: str, product_id: str
 ) -> JsonObject:
-    """Project an auditable product footprint from authoritative Search observations."""
+    """Project an auditable footprint from verified local Search observations."""
 
     locations: dict[str, JsonObject] = {}
-    for item in offers:
+    for item in latest_classified_offers(offers):
         offer = item.offer
         if (
-            not item.in_scope
+            not _is_verified_local_observation(item)
             or offer.retailer_id != retailer_id
             or offer.retailer_product_id != product_id
             or offer.zipcode is None
@@ -750,6 +784,7 @@ class ComparisonEngine:
         competitor_id: str,
         profile_id: str,
     ) -> list[MatchRecord]:
+        offers = latest_classified_offers(offers)
         profile = self.pack.profile(profile_id)
         if profile["geography"] == "radius":
             return self._radius_matches(offers, benchmark_id, competitor_id, profile)
@@ -775,6 +810,7 @@ class ComparisonEngine:
         prevents a price winner from masquerading as a unique product relationship.
         """
 
+        offers = latest_classified_offers(offers)
         profile = self.pack.profile(profile_id)
         if profile["geography"] == "radius":
             return self.compare(
@@ -806,6 +842,7 @@ class ComparisonEngine:
     ) -> list[MatchRecord]:
         """Apply an immutable, context-one-to-one decision snapshot to generic matches."""
 
+        offers = latest_classified_offers(offers)
         applicable = [
             rule
             for rule in rules
@@ -1039,7 +1076,7 @@ class ComparisonEngine:
         observed = {
             location_scope_key(item.offer)
             for item in offers
-            if item.in_scope
+            if _is_verified_local_observation(item)
             and item.offer.retailer_id == benchmark_id
             and item.offer.retailer_product_id == rule.benchmark_product_id
             and item.offer.zipcode is not None
@@ -1126,7 +1163,7 @@ class ComparisonEngine:
         scope_mode: str,
         comparison_family_key: str,
     ) -> list[MatchRecord]:
-        """Score one certified product pair across nearby observed stores.
+        """Score one certified product pair across nearby verified-local stores.
 
         Certification supplies product identity; Search coordinates and prices supply
         the store-radius evidence. The rule's benchmark footprint remains the scope
@@ -1221,7 +1258,7 @@ class ComparisonEngine:
         for item in offers:
             value = self._metric_value(item, metric)
             if (
-                not item.in_scope
+                not _is_verified_local_observation(item)
                 or item.offer.retailer_id != retailer_id
                 or item.offer.retailer_product_id != product_id
                 or value is None
@@ -1250,7 +1287,7 @@ class ComparisonEngine:
         for item in offers:
             value = self._metric_value(item, metric)
             if (
-                not item.in_scope
+                not _is_verified_local_observation(item)
                 or item.offer.retailer_id != retailer_id
                 or item.offer.retailer_product_id != product_id
                 or item.offer.zipcode is None
@@ -1278,7 +1315,7 @@ class ComparisonEngine:
         for item in offers:
             value = self._metric_value(item, metric)
             if (
-                not item.in_scope
+                not _is_verified_local_observation(item)
                 or item.offer.retailer_id != retailer_id
                 or item.offer.retailer_product_id != product_id
                 or item.offer.zipcode is None
@@ -1393,11 +1430,13 @@ class ComparisonEngine:
                 item.offer.retailer_id, {}
             )
             policy = str(retailer.get("matching_availability_policy", "search_presence"))
-        if policy == "search_presence":
-            return True
-        if policy == "in_stock_only":
-            return item.offer.in_stock is True
-        raise ValueError(f"matching availability policy {policy!r} is not implemented")
+        if policy not in {"search_presence", "in_stock_only"}:
+            raise ValueError(f"matching availability policy {policy!r} is not implemented")
+        # ``search_presence`` remains useful for product discovery and identity
+        # evidence, but this engine produces location-scoped price comparisons.
+        # Every local comparison must use the stricter verified-availability
+        # invariant regardless of the legacy discovery policy name.
+        return _is_verified_local_observation(item)
 
     def _selected(
         self,
@@ -1413,7 +1452,7 @@ class ComparisonEngine:
         selected: dict[tuple[str, tuple[Any, ...]], tuple[ClassifiedOffer, Decimal]] = {}
         for item in offers:
             if (
-                not item.in_scope
+                not _is_verified_local_observation(item)
                 or item.offer.retailer_id != retailer_id
                 or item.offer.zipcode is None
                 or not self._available_for_matching(item, profile)
@@ -1489,7 +1528,7 @@ class ComparisonEngine:
         selected: dict[tuple[str, str, tuple[Any, ...]], tuple[ClassifiedOffer, Decimal]] = {}
         for item in offers:
             if (
-                not item.in_scope
+                not _is_verified_local_observation(item)
                 or item.offer.retailer_id != retailer_id
                 or item.offer.zipcode is None
                 or not self._available_for_matching(item, profile)
@@ -1718,7 +1757,7 @@ class ComparisonEngine:
         for item in offers:
             value = self._metric_value(item, metric)
             if (
-                item.in_scope
+                _is_verified_local_observation(item)
                 and item.offer.retailer_id == retailer_id
                 and item.offer.zipcode is not None
                 and self._available_for_matching(item, profile)
@@ -1887,7 +1926,7 @@ class ComparisonEngine:
         brand_policy = str(profile.get("brand_policy", "ignore_brand"))
         for item in offers:
             if (
-                not item.in_scope
+                not _is_verified_local_observation(item)
                 or item.offer.retailer_id != retailer_id
                 or not self._available_for_matching(item, profile)
                 or not self._satisfies_constraints(item, profile, role)
@@ -2038,16 +2077,30 @@ class ComparisonInputReducer:
             if not requested or str(profile["id"]) in requested
         )
         self._preserve_products = preserve_products
-        self._selected: dict[
-            tuple[str, str, str, tuple[Any, ...]],
-            tuple[ClassifiedOffer, Decimal],
-        ] = {}
+        self._latest: LatestProductLocationSelector[ClassifiedOffer] = (
+            LatestProductLocationSelector()
+        )
         self.input_offers = 0
 
     def add(self, item: ClassifiedOffer) -> None:
         self.input_offers += 1
-        if not item.in_scope:
+        if not is_product_location_state(item):
             return
+        add_classified_offer(self._latest, item)
+
+    def _reduced(
+        self,
+    ) -> dict[tuple[Any, ...], tuple[ClassifiedOffer, Decimal]]:
+        selected: dict[tuple[Any, ...], tuple[ClassifiedOffer, Decimal]] = {}
+        for item in self._latest.values():
+            self._reduce_latest_item(item, selected)
+        return selected
+
+    def _reduce_latest_item(
+        self,
+        item: ClassifiedOffer,
+        selected: dict[tuple[Any, ...], tuple[ClassifiedOffer, Decimal]],
+    ) -> None:
         for profile in self._profiles:
             satisfies_either_role = self._engine._satisfies_constraints(
                 item, profile, "benchmark"
@@ -2096,9 +2149,9 @@ class ComparisonInputReducer:
                 *((item.offer.retailer_product_id,) if self._preserve_products else ()),
                 dimension_key,
             )
-            previous = self._selected.get(key)
+            previous = selected.get(key)
             if previous is None or value < previous[1]:
-                self._selected[key] = (item, value)
+                selected[key] = (item, value)
 
     def extend(self, items: Iterable[ClassifiedOffer]) -> None:
         for item in items:
@@ -2106,13 +2159,13 @@ class ComparisonInputReducer:
 
     def offers(self) -> list[ClassifiedOffer]:
         retained: dict[str, ClassifiedOffer] = {}
-        for item, _ in self._selected.values():
+        for item, _ in self._reduced().values():
             retained[item.offer.offer_id] = item
         return list(retained.values())
 
     @property
     def retained_offers(self) -> int:
-        return len({item.offer.offer_id for item, _ in self._selected.values()})
+        return len({item.offer.offer_id for item, _ in self._reduced().values()})
 
 
 class RelationshipInputReducer(ComparisonInputReducer):

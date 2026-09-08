@@ -31,7 +31,7 @@ from rci_analytics import (
     resolve_one_to_one_relationships,
 )
 from rci_analytics.models import ClassifiedOffer
-from rci_analytics.normalization import RetailerIdentityMap
+from rci_analytics.normalization import BooleanAliasValidationError, RetailerIdentityMap
 from rci_core import APP_VERSION, AppSettings
 from rci_db import DatabaseProbe
 from rci_product_packs import PostgresProductPackCatalog
@@ -333,6 +333,8 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                     source_row = historical_source_row(row, historical_source)
                     try:
                         normalized = normalizer.normalize(source_row)
+                    except BooleanAliasValidationError:
+                        raise
                     except ValueError as exc:
                         quality_sampler.add(
                             _raw_quality_observation(
@@ -500,6 +502,8 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                         normalized = normalizer.normalize(
                             historical_source_row(row, historical_source)
                         )
+                    except BooleanAliasValidationError:
+                        raise
                     except ValueError:
                         continue
                     if (

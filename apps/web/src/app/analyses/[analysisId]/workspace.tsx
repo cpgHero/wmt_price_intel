@@ -76,7 +76,11 @@ import {
   legacyLeadershipTab,
 } from "@/lib/competitive-report-tabs";
 import { prewarmCompetitiveProductLeadership } from "@/lib/competitive-product-leadership-client";
-import { productsForObservedBrand } from "@/lib/assortment-presentation";
+import {
+  productsForObservedBrand,
+  verifiedAssortmentBrands,
+  verifiedAssortmentProducts,
+} from "@/lib/assortment-presentation";
 
 const tabs = [
   "Executive Summary",
@@ -172,7 +176,7 @@ function LegacyAnalysisWorkspace({
         {activeTab === "Geographic Coverage" && (
           <Section
             title="Geographic coverage"
-            note="Fresh ZIP and store coverage supplied by the canonical result."
+            note="Fresh ZIP and store geography supplied by the canonical result."
           >
             <DataTable rows={asRows(result.coverage)} />
           </Section>
@@ -339,11 +343,12 @@ function BlueprintAnalysisWorkspace({
     const controller = new AbortController();
     fetch(
       `/api/analyses/${encodeURIComponent(analysis.analysis_id)}/competitive-decision-quality`,
-      { signal: controller.signal },
+      { cache: "no-store", signal: controller.signal },
     )
       .then(async (response) => {
         const body = (await response.json().catch(() => ({}))) as
           CompetitiveDecisionQuality | { error?: string };
+        if (response.status === 409) window.location.reload();
         if (!response.ok || !("contexts" in body)) {
           throw new Error(
             "error" in body && body.error
@@ -587,10 +592,14 @@ function BlueprintAnalysisWorkspace({
       requestTimedOut = true;
       controller.abort();
     }, 20_000);
-    fetch(portfolioRequestKey, { signal: controller.signal })
+    fetch(portfolioRequestKey, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
       .then(async (response) => {
         const body = (await response.json().catch(() => ({}))) as
           CompetitivePortfolioScorecards | { error?: string };
+        if (response.status === 409) window.location.reload();
         if (!response.ok || !("scorecards" in body)) {
           throw new Error(
             "error" in body && body.error
@@ -961,19 +970,19 @@ function BlueprintAnalysisWorkspace({
                 label: "Benchmark Geography",
                 title: `Choose the ${reportView.retailer_scope.benchmark.name} store geography`,
                 description:
-                  "Scope every product-leadership tab to all observed benchmark stores or one state. Select a state to unlock city drill-down.",
+                  "Scope every product-leadership tab to all benchmark stores with verified local evidence or one state. Select a state to unlock city drill-down.",
                 value: leadershipState ?? "All benchmark stores",
                 options: [
                   {
                     value: "all",
                     label: "All benchmark stores",
                     description:
-                      "Use the complete observed benchmark footprint.",
+                      "Use the complete verified-local benchmark footprint.",
                   },
                   ...leadershipStateOptions.map((option) => ({
                     value: option.value,
                     label: option.label,
-                    description: `${option.count.toLocaleString()} observed benchmark stores`,
+                    description: `${option.count.toLocaleString()} benchmark stores with verified local evidence`,
                   })),
                 ],
                 queryParameter: "state",
@@ -994,12 +1003,12 @@ function BlueprintAnalysisWorkspace({
                         {
                           value: "all",
                           label: `All ${leadershipState} cities`,
-                          description: `Use every observed benchmark store in ${leadershipState}.`,
+                          description: `Use every benchmark store with verified local evidence in ${leadershipState}.`,
                         },
                         ...leadershipCityOptions.map((option) => ({
                           value: option.value,
                           label: option.label,
-                          description: `${option.count.toLocaleString()} observed benchmark stores`,
+                          description: `${option.count.toLocaleString()} benchmark stores with verified local evidence`,
                         })),
                       ],
                       queryParameter: "city",
@@ -1469,6 +1478,7 @@ function AssortmentProductList({
   retailerId?: string;
   showProductFootprintLink?: boolean;
 }>) {
+  const verifiedProducts = verifiedAssortmentProducts(products);
   return (
     <section className="assortment-product-list">
       <header>
@@ -1476,7 +1486,7 @@ function AssortmentProductList({
         <p>{note}</p>
       </header>
       <div>
-        {products.slice(0, limit).map((product) => (
+        {verifiedProducts.slice(0, limit).map((product) => (
           <article key={product.canonical_product_id}>
             <span className="assortment-product-image">
               {product.image_url ? (
@@ -1492,20 +1502,23 @@ function AssortmentProductList({
               </small>
               <strong>{product.name}</strong>
               <em>
-                Seen at {product.observed_locations.toLocaleString()} store
-                {product.observed_locations === 1 ? "" : "s"}
+                Verified in stock at{" "}
+                {product.verified_available_locations?.toLocaleString()} local{" "}
+                {product.verified_available_locations === 1
+                  ? "location"
+                  : "locations"}
               </em>
               {showProductFootprintLink && analysisId && retailerId ? (
                 <Link
                   href={`/price-monitoring/${encodeURIComponent(analysisId)}?retailer=${encodeURIComponent(retailerId)}&tab=overview&product_id=${encodeURIComponent(product.product_id)}`}
                 >
-                  Open product footprint →
+                  Open product evidence →
                 </Link>
               ) : null}
             </span>
           </article>
         ))}
-        {!products.length ? (
+        {!verifiedProducts.length ? (
           <p className="empty-copy">No products meet this definition.</p>
         ) : null}
       </div>
@@ -1532,7 +1545,7 @@ function AssortmentBrandPanel({
 }>) {
   if (!topBrands.length) return null;
   const maxLocations = Math.max(
-    ...topBrands.map((brand) => brand.observed_locations),
+    ...topBrands.map((brand) => brand.verified_available_locations ?? 0),
     1,
   );
   return (
@@ -1540,7 +1553,7 @@ function AssortmentBrandPanel({
       <header>
         <div>
           <small>{retailerName}</small>
-          <h4>Observed brand breadth</h4>
+          <h4>Verified-availability brand breadth</h4>
         </div>
         <button
           type="button"
@@ -1561,14 +1574,16 @@ function AssortmentBrandPanel({
             <span>
               <b>{brand.brand}</b>
               <small>
-                {brand.distinct_products.toLocaleString()} products ·{" "}
-                {brand.observed_locations.toLocaleString()} locations
+                {(brand.verified_available_products ?? 0).toLocaleString()}{" "}
+                verified-available products ·{" "}
+                {(brand.verified_available_locations ?? 0).toLocaleString()}{" "}
+                local locations
               </small>
             </span>
             <i>
               <b
                 style={{
-                  width: `${Math.max(2, (brand.observed_locations / maxLocations) * 100)}%`,
+                  width: `${Math.max(2, ((brand.verified_available_locations ?? 0) / maxLocations) * 100)}%`,
                 }}
               />
             </i>
@@ -1579,9 +1594,9 @@ function AssortmentBrandPanel({
         <div className="assortment-regional-signals">
           <small>Geographically concentrated brand signals</small>
           <p>
-            Observed in no more than 25% of this retailer&apos;s collected
-            locations. Concentration is a review signal—not proof of local
-            distribution.
+            Verified in stock in no more than 25% of this retailer&apos;s
+            verified-availability locations. Concentration is a review
+            signal—not proof of chainwide distribution.
           </p>
           <div>
             {concentratedBrands.slice(0, 6).map((brand) => (
@@ -1703,30 +1718,52 @@ function AssortmentAnalysisPanel({
             (relationship) => relationship.competitor_product_id,
           ),
         );
-        const observedBenchmarkProducts = benchmarkSummary?.products ?? [];
-        const observedCompetitorProducts = competitorSummary?.products ?? [];
-        const matchedBenchmarkProducts = observedBenchmarkProducts.filter(
+        const verifiedBenchmarkProducts = verifiedAssortmentProducts(
+          benchmarkSummary?.products ?? [],
+        );
+        const verifiedCompetitorProducts = verifiedAssortmentProducts(
+          competitorSummary?.products ?? [],
+        );
+        const matchedBenchmarkProducts = verifiedBenchmarkProducts.filter(
           (product) => matchedBenchmarkIds.has(product.product_id),
         );
-        const matchedCompetitorProducts = observedCompetitorProducts.filter(
+        const matchedCompetitorProducts = verifiedCompetitorProducts.filter(
           (product) => matchedCompetitorIds.has(product.product_id),
         );
         const unmatchedBenchmarkProducts = localPrice
-          ? observedBenchmarkProducts.filter(
+          ? verifiedBenchmarkProducts.filter(
               (product) => !matchedBenchmarkIds.has(product.product_id),
             )
-          : comparison.top_benchmark_only;
+          : verifiedAssortmentProducts(comparison.top_benchmark_only);
         const unmatchedCompetitorProducts = localPrice
-          ? observedCompetitorProducts.filter(
+          ? verifiedCompetitorProducts.filter(
               (product) => !matchedCompetitorIds.has(product.product_id),
             )
-          : comparison.top_competitor_whitespace;
-        const benchmarkMatchCoverage = observedBenchmarkProducts.length
-          ? matchedBenchmarkProducts.length / observedBenchmarkProducts.length
+          : verifiedAssortmentProducts(comparison.top_competitor_whitespace);
+        const benchmarkMatchCoverage = verifiedBenchmarkProducts.length
+          ? matchedBenchmarkProducts.length / verifiedBenchmarkProducts.length
           : 0;
-        const competitorMatchCoverage = observedCompetitorProducts.length
-          ? matchedCompetitorProducts.length / observedCompetitorProducts.length
+        const competitorMatchCoverage = verifiedCompetitorProducts.length
+          ? matchedCompetitorProducts.length / verifiedCompetitorProducts.length
           : 0;
+        const benchmarkBrands = verifiedAssortmentBrands(
+          benchmarkSummary?.brands ?? benchmarkSummary?.top_brands ?? [],
+        );
+        const benchmarkTopBrands = verifiedAssortmentBrands(
+          benchmarkSummary?.top_brands ?? [],
+        );
+        const benchmarkConcentratedBrands = verifiedAssortmentBrands(
+          benchmarkSummary?.geographically_concentrated_brands ?? [],
+        );
+        const competitorBrands = verifiedAssortmentBrands(
+          competitorSummary?.brands ?? competitorSummary?.top_brands ?? [],
+        );
+        const competitorTopBrands = verifiedAssortmentBrands(
+          competitorSummary?.top_brands ?? [],
+        );
+        const competitorConcentratedBrands = verifiedAssortmentBrands(
+          competitorSummary?.geographically_concentrated_brands ?? [],
+        );
         const openDetail = (
           title: string,
           note: string,
@@ -1753,16 +1790,16 @@ function AssortmentAnalysisPanel({
                 className="assortment-kpi-action"
                 onClick={() =>
                   openDetail(
-                    `${benchmark.name} observed products`,
-                    "Full governed Search assortment for the selected analysis.",
-                    benchmarkSummary?.products ?? [],
+                    `${benchmark.name} verified-available products`,
+                    "Full governed assortment with verified local availability for the selected analysis.",
+                    verifiedBenchmarkProducts,
                     benchmark.id,
                   )
                 }
               >
                 <small>{benchmark.name} products</small>
                 <strong>
-                  {benchmarkSummary?.distinct_products.toLocaleString() ?? "—"}
+                  {verifiedBenchmarkProducts.length.toLocaleString()}
                 </strong>
                 <span>Distinct in-scope IDs</span>
               </button>
@@ -1771,16 +1808,16 @@ function AssortmentAnalysisPanel({
                 className="assortment-kpi-action"
                 onClick={() =>
                   openDetail(
-                    `${competitor.name} observed products`,
-                    "Full governed Search assortment for the selected analysis.",
-                    competitorSummary?.products ?? [],
+                    `${competitor.name} verified-available products`,
+                    "Full governed assortment with verified local availability for the selected analysis.",
+                    verifiedCompetitorProducts,
                     competitor.id,
                   )
                 }
               >
                 <small>{competitor.name} products</small>
                 <strong>
-                  {competitorSummary?.distinct_products.toLocaleString() ?? "—"}
+                  {verifiedCompetitorProducts.length.toLocaleString()}
                 </strong>
                 <span>Distinct in-scope IDs</span>
               </button>
@@ -1810,7 +1847,7 @@ function AssortmentAnalysisPanel({
                 onClick={() =>
                   openDetail(
                     `${benchmark.name} products without an admitted match`,
-                    "All observed products currently outside a certified relationship in the selected comparison basis.",
+                    "All verified-available products currently outside a certified relationship in the selected comparison basis.",
                     unmatchedBenchmarkProducts,
                     benchmark.id,
                   )
@@ -1828,7 +1865,7 @@ function AssortmentAnalysisPanel({
                 onClick={() =>
                   openDetail(
                     `${competitor.name} whitespace`,
-                    `Observed products without an admitted ${benchmark.name} relationship.`,
+                    `Verified-available products without an admitted ${benchmark.name} relationship.`,
                     unmatchedCompetitorProducts,
                     competitor.id,
                   )
@@ -1864,7 +1901,7 @@ function AssortmentAnalysisPanel({
                   <b>
                     <i
                       style={{
-                        width: `${Math.max(1, (local?.location_coverage_rate ?? 0) * 100)}%`,
+                        width: `${Math.min(100, Math.max(0, (local?.location_coverage_rate ?? 0) * 100))}%`,
                       }}
                     />
                   </b>
@@ -1886,8 +1923,8 @@ function AssortmentAnalysisPanel({
               <section className="assortment-coverage-card">
                 <h4>Item-relationship coverage</h4>
                 <p>
-                  Share of each retailer&apos;s distinct observed products in an
-                  admitted pair.
+                  Share of each retailer&apos;s distinct verified-available
+                  products in an admitted pair.
                 </p>
                 {[
                   [benchmark.name, benchmarkMatchCoverage],
@@ -1901,7 +1938,11 @@ function AssortmentAnalysisPanel({
                     >
                       <span>{label}</span>
                       <b>
-                        <i style={{ width: `${Math.max(1, value * 100)}%` }} />
+                        <i
+                          style={{
+                            width: `${Math.min(100, Math.max(0, value * 100))}%`,
+                          }}
+                        />
                       </b>
                       <strong>
                         {new Intl.NumberFormat("en-US", {
@@ -1931,10 +1972,11 @@ function AssortmentAnalysisPanel({
                   <li>
                     {(localPrice?.relationships ?? 0).toLocaleString()}{" "}
                     certified pairings connect{" "}
-                    {matchedBenchmarkProducts.length.toLocaleString()} observed{" "}
-                    {benchmark.name} products to{" "}
-                    {matchedCompetitorProducts.length.toLocaleString()} observed{" "}
-                    {competitor.name} products in this comparison basis.
+                    {matchedBenchmarkProducts.length.toLocaleString()}{" "}
+                    verified-available {benchmark.name} products to{" "}
+                    {matchedCompetitorProducts.length.toLocaleString()}{" "}
+                    verified-available {competitor.name} products in this
+                    comparison basis.
                   </li>
                   <li>
                     {(local?.benchmark_scored_locations ?? 0).toLocaleString()}{" "}
@@ -1947,35 +1989,28 @@ function AssortmentAnalysisPanel({
                   </li>
                   <li>
                     {unmatchedBenchmarkProducts.length.toLocaleString()}{" "}
-                    observed {benchmark.name} products and{" "}
+                    verified-available {benchmark.name} products and{" "}
                     {unmatchedCompetitorProducts.length.toLocaleString()}{" "}
-                    observed {competitor.name} products have no certified
-                    counterpart in this basis.
+                    verified-available {competitor.name} products have no
+                    certified counterpart in this basis.
                   </li>
                 </ul>
               </section>
             </div>
-            {benchmarkSummary?.top_brands?.length ||
-            competitorSummary?.top_brands?.length ? (
+            {benchmarkTopBrands.length || competitorTopBrands.length ? (
               <div className="assortment-brand-grid">
                 <AssortmentBrandPanel
                   retailerName={benchmark.name}
-                  distinctBrands={benchmarkSummary?.distinct_brands ?? 0}
-                  allBrands={
-                    benchmarkSummary?.brands ??
-                    benchmarkSummary?.top_brands ??
-                    []
-                  }
-                  topBrands={benchmarkSummary?.top_brands ?? []}
-                  concentratedBrands={
-                    benchmarkSummary?.geographically_concentrated_brands ?? []
-                  }
+                  distinctBrands={benchmarkBrands.length}
+                  allBrands={benchmarkBrands}
+                  topBrands={benchmarkTopBrands}
+                  concentratedBrands={benchmarkConcentratedBrands}
                   onOpenBrand={(brand) =>
                     setDetail({
                       title: `${benchmark.name} · ${brand.brand}`,
-                      note: `${brand.distinct_products.toLocaleString()} observed products across ${brand.observed_locations.toLocaleString()} locations.`,
+                      note: `${(brand.verified_available_products ?? 0).toLocaleString()} verified-available products across ${(brand.verified_available_locations ?? 0).toLocaleString()} local locations.`,
                       products: productsForObservedBrand(
-                        benchmarkSummary?.products ?? [],
+                        verifiedBenchmarkProducts,
                         brand,
                       ),
                       retailerId: benchmark.id,
@@ -1986,32 +2021,23 @@ function AssortmentAnalysisPanel({
                     setBrandList({
                       retailerName: benchmark.name,
                       retailerId: benchmark.id,
-                      brands:
-                        benchmarkSummary?.brands ??
-                        benchmarkSummary?.top_brands ??
-                        [],
-                      products: benchmarkSummary?.products ?? [],
+                      brands: benchmarkBrands,
+                      products: verifiedBenchmarkProducts,
                     })
                   }
                 />
                 <AssortmentBrandPanel
                   retailerName={competitor.name}
-                  distinctBrands={competitorSummary?.distinct_brands ?? 0}
-                  allBrands={
-                    competitorSummary?.brands ??
-                    competitorSummary?.top_brands ??
-                    []
-                  }
-                  topBrands={competitorSummary?.top_brands ?? []}
-                  concentratedBrands={
-                    competitorSummary?.geographically_concentrated_brands ?? []
-                  }
+                  distinctBrands={competitorBrands.length}
+                  allBrands={competitorBrands}
+                  topBrands={competitorTopBrands}
+                  concentratedBrands={competitorConcentratedBrands}
                   onOpenBrand={(brand) =>
                     setDetail({
                       title: `${competitor.name} · ${brand.brand}`,
-                      note: `${brand.distinct_products.toLocaleString()} observed products across ${brand.observed_locations.toLocaleString()} locations.`,
+                      note: `${(brand.verified_available_products ?? 0).toLocaleString()} verified-available products across ${(brand.verified_available_locations ?? 0).toLocaleString()} local locations.`,
                       products: productsForObservedBrand(
-                        competitorSummary?.products ?? [],
+                        verifiedCompetitorProducts,
                         brand,
                       ),
                       retailerId: competitor.id,
@@ -2022,11 +2048,8 @@ function AssortmentAnalysisPanel({
                     setBrandList({
                       retailerName: competitor.name,
                       retailerId: competitor.id,
-                      brands:
-                        competitorSummary?.brands ??
-                        competitorSummary?.top_brands ??
-                        [],
-                      products: competitorSummary?.products ?? [],
+                      brands: competitorBrands,
+                      products: verifiedCompetitorProducts,
                     })
                   }
                 />
@@ -2035,13 +2058,17 @@ function AssortmentAnalysisPanel({
             <div className="assortment-product-columns">
               <AssortmentProductList
                 title={`${benchmark.name} products without an admitted match`}
-                note="Broadest observed products available for relationship review."
-                products={comparison.top_benchmark_only}
+                note="Verified-available products with the broadest verified local reach for relationship review."
+                products={verifiedAssortmentProducts(
+                  comparison.top_benchmark_only,
+                )}
               />
               <AssortmentProductList
                 title={`${competitor.name} whitespace`}
-                note={`Broadest observed products without an admitted ${benchmark.name} match.`}
-                products={comparison.top_competitor_whitespace}
+                note={`Verified-available products with the broadest verified local reach and no admitted ${benchmark.name} match.`}
+                products={verifiedAssortmentProducts(
+                  comparison.top_competitor_whitespace,
+                )}
               />
             </div>
           </section>
@@ -2049,8 +2076,10 @@ function AssortmentAnalysisPanel({
       })}
       <footer className="assortment-source-note">
         <strong>Definition.</strong> {data.source}. {data.grain}. Search remains
-        the authority for store presence and price; PDP supplies identity and
-        imagery where available.
+        the authority for listed price, explicit stock status, sponsorship, and
+        query context. This assortment view admits only explicit in-stock,
+        non-sponsored local evidence; PDP supplies identity and imagery where
+        available.
       </footer>
       {detail ? (
         <AssortmentDetailDrawer
@@ -2071,7 +2100,7 @@ function AssortmentAnalysisPanel({
             setBrandList(null);
             setDetail({
               title: `${brandList.retailerName} · ${brand.brand}`,
-              note: `${brand.distinct_products.toLocaleString()} governed Search ${brand.distinct_products === 1 ? "product" : "products"} across ${brand.observed_locations.toLocaleString()} ${brand.observed_locations === 1 ? "location" : "locations"}. The ${products.length.toLocaleString()} product ${products.length === 1 ? "record" : "records"} below ${products.length === 1 ? "uses" : "use"} the same observed-brand identity as this scorecard.`,
+              note: `${(brand.verified_available_products ?? 0).toLocaleString()} verified-available ${(brand.verified_available_products ?? 0) === 1 ? "product" : "products"} across ${(brand.verified_available_locations ?? 0).toLocaleString()} local ${(brand.verified_available_locations ?? 0) === 1 ? "location" : "locations"}. The ${products.length.toLocaleString()} product ${products.length === 1 ? "record" : "records"} below ${products.length === 1 ? "uses" : "use"} the same governed brand identity as this scorecard.`,
               products,
               retailerId: brandList.retailerId,
               showProductFootprintLink: false,
@@ -2110,7 +2139,7 @@ function AssortmentBrandDrawer({
       .includes(query.toLocaleLowerCase("en-US")),
   );
   const maxLocations = Math.max(
-    ...detail.brands.map((brand) => brand.observed_locations),
+    ...detail.brands.map((brand) => brand.verified_available_locations ?? 0),
     1,
   );
   return (
@@ -2128,13 +2157,14 @@ function AssortmentBrandDrawer({
       >
         <header>
           <div>
-            <p className="eyebrow">Observed brand breadth</p>
+            <p className="eyebrow">Verified-availability brand breadth</p>
             <h2 id="assortment-brand-drawer-title">
               {detail.retailerName} brand portfolio
             </h2>
             <p>
-              Every governed brand observed in Search evidence. Select a brand
-              to inspect every product contributing to its counts.
+              Every governed brand with verified local availability evidence.
+              Select a brand to inspect every product contributing to its
+              counts.
             </p>
           </div>
           <button type="button" onClick={onClose} aria-label="Close brand list">
@@ -2162,10 +2192,16 @@ function AssortmentBrandDrawer({
                 <span>
                   <strong>{brand.brand}</strong>
                   <small>
-                    {brand.distinct_products.toLocaleString()} product
-                    {brand.distinct_products === 1 ? "" : "s"} ·{" "}
-                    {brand.observed_locations.toLocaleString()} locations
-                    {products.length !== brand.distinct_products
+                    {(brand.verified_available_products ?? 0).toLocaleString()}{" "}
+                    product
+                    {(brand.verified_available_products ?? 0) === 1
+                      ? ""
+                      : "s"}{" "}
+                    ·{" "}
+                    {(brand.verified_available_locations ?? 0).toLocaleString()}{" "}
+                    verified local locations
+                    {products.length !==
+                    (brand.verified_available_products ?? 0)
                       ? ` · ${products.length.toLocaleString()} records linked`
                       : ""}
                   </small>
@@ -2173,7 +2209,7 @@ function AssortmentBrandDrawer({
                 <i aria-hidden="true">
                   <b
                     style={{
-                      width: `${Math.max(2, (brand.observed_locations / maxLocations) * 100)}%`,
+                      width: `${Math.max(2, ((brand.verified_available_locations ?? 0) / maxLocations) * 100)}%`,
                     }}
                   />
                 </i>
@@ -2225,7 +2261,7 @@ function AssortmentDetailDrawer({
         </header>
         <AssortmentProductList
           title={`${detail.products.length.toLocaleString()} ${detail.products.length === 1 ? "product" : "products"}`}
-          note="Observed-location counts come from governed Search evidence."
+          note="Location counts require explicit in-stock, non-sponsored Search evidence."
           products={detail.products}
           limit={detail.products.length}
           analysisId={analysisId}
@@ -2432,11 +2468,12 @@ function RadiusRetailerScorecardPanel({
       setSelected(scorecard);
       fetch(
         `/api/analyses/${encodeURIComponent(analysisId)}/competitive-portfolio-scorecards?${parameters.toString()}`,
-        { signal: controller.signal },
+        { cache: "no-store", signal: controller.signal },
       )
         .then(async (response) => {
           const body = (await response.json().catch(() => ({}))) as
             CompetitivePortfolioScorecards | { error?: string };
+          if (response.status === 409) window.location.reload();
           if (!response.ok || !("scorecards" in body)) {
             throw new Error(
               "error" in body && body.error
@@ -2481,11 +2518,12 @@ function RadiusRetailerScorecardPanel({
     });
     fetch(
       `/api/analyses/${encodeURIComponent(analysisId)}/competitive-product-coverage?${parameters.toString()}`,
-      { signal: controller.signal },
+      { cache: "no-store", signal: controller.signal },
     )
       .then(async (response) => {
         const body = (await response.json().catch(() => ({}))) as
           CompetitiveProductCoverage | { error?: string };
+        if (response.status === 409) window.location.reload();
         if (!response.ok || !("products" in body)) {
           throw new Error(
             "error" in body && body.error
@@ -2556,7 +2594,7 @@ function RadiusRetailerScorecardPanel({
           competitorId === "all" ? "Retailer scorecards" : "Retailer scorecard"
         }
         note={
-          "Every result starts with a certified product relationship and an observed " +
+          "Every result starts with a certified product relationship and a verified-local " +
           benchmark.name +
           " product-store. Physical competitors must be within " +
           radiusMiles +
@@ -2627,7 +2665,7 @@ function RadiusRetailerScorecardPanel({
                   <span>With at least one certified relationship</span>
                 </article>
                 <article className="portfolio-summary-position">
-                  <small>Retailers with store coverage</small>
+                  <small>Retailers with verified-local coverage</small>
                   <strong>{scoredScorecards.length.toLocaleString()}</strong>
                   <span>
                     At least one {benchmark.name} store has a valid local
@@ -2645,13 +2683,16 @@ function RadiusRetailerScorecardPanel({
               <footer>
                 <span>Physical competitors: within {radiusMiles} miles</span>
                 <span>Service-area retailers: same delivery ZIP</span>
-                <span>Search supplies price; PDP supplies identity</span>
+                <span>
+                  Search supplies listed price and query context; local scoring
+                  requires explicit in-stock, non-sponsored evidence
+                </span>
               </footer>
             </div>
             <div className="retailer-scorecard-table">
               <div className="retailer-scorecard-head" aria-hidden="true">
                 <span>Competitor and comparison context</span>
-                <span>Comparable store coverage</span>
+                <span>Comparable verified-location coverage</span>
                 <span>Lower-price share</span>
                 <span>Average local price position</span>
                 <span>Status</span>
@@ -2798,7 +2839,7 @@ function RadiusRetailerScorecardPanel({
                       className={`retailer-score-status ${scorecard.scored_product_locations ? "ready" : ""}`}
                     >
                       {scorecard.scored_product_locations
-                        ? "Store coverage available"
+                        ? "Verified-local comparison coverage"
                         : "No local overlap"}
                       <small>
                         {scorecard.scored_product_locations
@@ -2839,7 +2880,7 @@ function RadiusRetailerScorecardPanel({
                   Every certified relationship behind this scorecard is shown
                   with both retailer products. Local evidence identifies the
                   relationship selected as the lowest eligible comparison at
-                  each observed {benchmark.name} product-store.
+                  each verified-local {benchmark.name} product-store.
                 </p>
               </div>
               <button type="button" onClick={() => setSelected(null)}>
@@ -2884,7 +2925,7 @@ function RadiusRetailerScorecardPanel({
                 </strong>
               </span>
               <span>
-                <small>Comparable store coverage</small>
+                <small>Comparable verified-location coverage</small>
                 <strong>
                   {formatScorecardRate(selected.location_coverage_rate ?? null)}
                 </strong>
@@ -3074,7 +3115,7 @@ function RadiusRetailerScorecardPanel({
                       coverage.evidence_funnel.in_scope_catalog_products,
                     ],
                     [
-                      "Observed",
+                      "Verified locally available",
                       coverage.evidence_funnel.observed_catalog_products,
                     ],
                     [
@@ -3117,7 +3158,7 @@ function RadiusRetailerScorecardPanel({
                         No certified relationship
                       </option>
                       <option value="benchmark_not_observed">
-                        Benchmark not observed
+                        No verified benchmark availability
                       </option>
                       <option value="governed_out_of_scope">
                         Governed out of scope
@@ -3173,7 +3214,7 @@ function RadiusRetailerScorecardPanel({
                       </div>
                       <dl>
                         <div>
-                          <dt>Observed stores</dt>
+                          <dt>Verified-local stores</dt>
                           <dd>{product.observed_locations.toLocaleString()}</dd>
                         </div>
                         <div>
@@ -3262,8 +3303,9 @@ function RadiusCohortProductsDrawer({
             <p>
               Every certified {benchmark.name}–{cohort.competitor} relationship
               governed by this Product Pack cohort is shown once. Search
-              supplies price and location; PDP enrichment supplies identity and
-              imagery.
+              supplies listed price, query context, explicit stock status, and
+              sponsorship. Only explicit in-stock, non-sponsored rows enter this
+              local scorecard; PDP enrichment supplies identity and imagery.
             </p>
           </div>
           <button
@@ -3279,11 +3321,11 @@ function RadiusCohortProductsDrawer({
             <small>{benchmark.name} stores covered</small>
             <strong>
               {cohort.benchmarkScoredLocations.toLocaleString()} of{" "}
-              {cohort.benchmarkObservedLocations.toLocaleString()}
+              {cohort.benchmarkVerifiedLocations.toLocaleString()}
             </strong>
           </span>
           <span>
-            <small>Comparable store coverage</small>
+            <small>Comparable verified-location coverage</small>
             <strong>{formatScorecardRate(cohort.locationCoverageRate)}</strong>
           </span>
           <span>
@@ -3580,8 +3622,10 @@ function IncludedProductsDrawer({
                 ? "These relationships are admitted to the scorecard's governed comparison profile. Rows with persisted relationship-level outcomes show their own price evidence; aggregate-only rows show product identity without allocating or inferring a product-level price result."
                 : "These are the admitted product relationships represented by the scorecard's governed comparison profile."
               : "These are the analysis-source product pairs whose Product Pack attributes place them in this immutable cohort result. Their current relationship status is shown on each row; the cohort does not create one-to-many product matches."}{" "}
-            Search observations remain authoritative for price and location; PDP
-            enrichment supplies identity and imagery where available.
+            Search observations supply listed price and retailer location query
+            context. Only explicit in-stock, non-sponsored evidence enters local
+            comparisons; PDP enrichment supplies identity and imagery where
+            available.
           </p>
         </div>
         <div className="scorecard-products-toolbar">
@@ -4002,7 +4046,7 @@ function ProductDecisionBoard({
   return (
     <Section
       title={title}
-      note={`Each card states its comparison unit and separates directional share from the paired median gap. ${comparisonBasisDescription(comparisonBasis)}. Search controls price and location; PDP supplies identity, attributes, and imagery.`}
+      note={`Each card states its comparison unit and separates directional share from the paired median gap. ${comparisonBasisDescription(comparisonBasis)}. Search supplies listed price and retailer location query context; only explicit in-stock, non-sponsored evidence enters local comparisons. PDP supplies identity, attributes, and imagery.`}
     >
       <div className="product-decision-grid">
         {rows.map((row) => {
@@ -4092,11 +4136,11 @@ function ProductDecisionBoard({
                 <p className="product-decision-statistic">{gapPosition}</p>
                 <p>
                   {evidence?.benchmark_store_observations
-                    ? `${evidence.benchmark_store_observations.toLocaleString()} observed benchmark stores across ${evidence.matched_zip_markets?.toLocaleString() ?? row.geographies.toLocaleString()} legacy exact-ZIP markets.`
+                    ? `${evidence.benchmark_store_observations.toLocaleString()} Search-observed benchmark store contexts across ${evidence.matched_zip_markets?.toLocaleString() ?? row.geographies.toLocaleString()} legacy exact-ZIP markets; this legacy reach count is not verified availability.`
                     : `${row.geographies.toLocaleString()} legacy exact-ZIP markets in this publication comparison.`}
                 </p>
                 <span className="product-card-action">
-                  View stores and download evidence →
+                  View location evidence and download →
                 </span>
               </div>
             </button>
@@ -4205,11 +4249,13 @@ function ProductEvidenceDrawer({
     let cancelled = false;
     fetch(
       `/api/analyses/${encodeURIComponent(analysisId)}/product-decisions/${encodeURIComponent(decision.id)}/evidence`,
+      { cache: "no-store" },
     )
       .then(async (response) => {
         const body = (await response.json()) as ProductEvidenceResponse & {
           error?: string;
         };
+        if (response.status === 409) window.location.reload();
         if (!response.ok)
           throw new Error(body.error ?? "Evidence is unavailable.");
         if (!cancelled) setEvidence(body);

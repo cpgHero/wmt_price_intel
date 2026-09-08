@@ -1018,13 +1018,14 @@ class MatchReviewService:
         materialized = copy.deepcopy(scope)
         definition = dict(materialized.get("definition") or {})
         if str(scope.get("mode")) == "observed_benchmark_product_footprint":
-            observed = {
+            verified = {
                 str(value)
-                for value in benchmark_product.get("location_scope_keys", [])
+                for value in benchmark_product.get("verified_location_scope_keys", [])
                 if str(value)
             }
-            if observed:
-                definition["benchmark_location_scope_keys"] = sorted(observed)
+            # Never preserve a caller-supplied or legacy Search-only footprint
+            # when current verified-local scope evidence is absent.
+            definition["benchmark_location_scope_keys"] = sorted(verified)
             definition["source_analysis_id"] = analysis_id
             definition.setdefault("excluded_benchmark_location_scope_keys", [])
             definition.setdefault("future_location_policy", "follow_unique_product_footprint")
@@ -1164,7 +1165,17 @@ class MatchReviewService:
                         "attribute_conflict",
                         "observed_locations",
                         "observed_zipcodes",
+                        "verified_available_locations",
+                        "verified_available_zipcodes",
+                        "search_observed_locations",
+                        "search_observed_zipcodes",
+                        "availability_status",
+                        "explicitly_out_of_stock_locations",
+                        "unverified_locations",
+                        "unverified_sponsored_locations",
                         "location_scope_keys",
+                        "verified_location_scope_keys",
+                        "search_location_scope_keys",
                     ):
                         if row.get(key) not in (None, "", [], {}):
                             current[key] = copy.deepcopy(row[key])

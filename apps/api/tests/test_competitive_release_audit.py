@@ -120,7 +120,7 @@ def _document(profile: str, radius: int, scored: int) -> dict[str, Any]:
         "policy": {
             "physical_store_rule": "within selected radius",
             "service_area_rule": "same delivery ZIP",
-            "grain": "certified product relationship x observed Walmart product-store",
+            "grain": ("certified product relationship x verified-available Walmart product-store"),
         },
         "scorecards": [scorecard],
         "cohorts": [],

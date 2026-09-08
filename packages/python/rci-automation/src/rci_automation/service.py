@@ -25,6 +25,7 @@ from rci_automation.ports import AutomationRepository, EmailSender
 from rci_collections.service import CollectionService
 from rci_contracts import validate_instance
 from rci_results import ArtifactRenderer
+from rci_results.contracts import has_verified_local_availability_contract
 
 
 def _checksum(document: JsonObject) -> str:
@@ -151,14 +152,15 @@ class AutomationService:
     async def history(
         self, analysis_id: str, *, baseline_id: str | None = None
     ) -> HistoricalComparison:
-        current = await self._analysis(analysis_id)
+        current = await self._analysis(analysis_id, require_active=True)
         baseline = (
-            await self._analysis(baseline_id)
+            await self._analysis(baseline_id, require_active=False)
             if baseline_id is not None
             else await self.repository.previous_analysis(current)
         )
         if baseline is None:
             raise AutomationNotFoundError("no comparable baseline analysis was found")
+        self._require_certified(baseline)
         if (
             current.analysis.product_pack_id != baseline.analysis.product_pack_id
             or current.collection_definition_id != baseline.collection_definition_id
@@ -169,7 +171,7 @@ class AutomationService:
         return self._history.compare(current, baseline)
 
     async def evaluate_analysis(self, analysis_id: str) -> tuple[int, int]:
-        current = await self._analysis(analysis_id)
+        current = await self._analysis(analysis_id, require_active=True)
         baseline = await self.repository.previous_analysis(current)
         return await self._evaluate(current, baseline)
 
@@ -182,6 +184,7 @@ class AutomationService:
         ):
             error = None
             try:
+                self._require_certified(current)
                 baseline = await self.repository.previous_analysis(current)
                 event_count, _ = await self._evaluate(current, baseline)
                 triggered += event_count
@@ -195,6 +198,9 @@ class AutomationService:
     async def _evaluate(
         self, current: AnalysisContext, baseline: AnalysisContext | None
     ) -> tuple[int, int]:
+        self._require_certified(current)
+        if baseline is not None:
+            self._require_certified(baseline)
         triggered = deliveries = 0
         for definition in await self.repository.list_alerts():
             if not definition.active or not self._alerts.applies(definition, current):
@@ -257,6 +263,12 @@ class AutomationService:
         for delivery in deliveries:
             message_id = error = None
             try:
+                context = await self.repository.get_active_analysis(delivery.analysis_result_id)
+                if context is None:
+                    raise AutomationNotFoundError(
+                        f"analysis {delivery.analysis_id!r} is not active for email delivery"
+                    )
+                self._require_certified(context)
                 message_id = await self.email_sender.send(delivery)
                 sent += 1
             except Exception as exc:  # each delivery has its own retry budget
@@ -300,13 +312,28 @@ class AutomationService:
             ),
         )
 
-    async def _analysis(self, identifier: str | None) -> AnalysisContext:
+    async def _analysis(self, identifier: str | None, *, require_active: bool) -> AnalysisContext:
         if identifier is None:
             raise AutomationNotFoundError("analysis identifier is required")
-        context = await self.repository.get_analysis(identifier)
+        context = await (
+            self.repository.get_active_analysis(identifier)
+            if require_active
+            else self.repository.get_analysis(identifier)
+        )
         if context is None:
             raise AutomationNotFoundError(f"analysis {identifier!r} was not found")
+        self._require_certified(context)
         return context
+
+    @staticmethod
+    def _require_certified(context: AnalysisContext) -> None:
+        if (
+            context.analysis.reporting_status != "ready"
+            or not has_verified_local_availability_contract(context.analysis.result)
+        ):
+            raise AutomationNotFoundError(
+                f"analysis {context.analysis.analysis_id!r} is quarantined from automation"
+            )
 
     @staticmethod
     def _alert_body(definition: AlertDefinitionRecord, event: AlertEventRecord) -> str:
@@ -319,6 +346,7 @@ class AutomationService:
         )
 
     def _leadership_email(self, current: AnalysisContext) -> tuple[str, str]:
+        self._require_certified(current)
         payload = self._renderer.render(current.analysis.result, "leadership_email")
         message = BytesParser(policy=policy.default).parsebytes(payload.body)
         body = message.get_body(preferencelist=("plain",))

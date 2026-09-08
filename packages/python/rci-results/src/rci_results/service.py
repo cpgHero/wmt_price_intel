@@ -6,7 +6,11 @@ from typing import Any
 
 from rci_product_packs import ProductPackCatalog
 from rci_results.blueprints import ReportBlueprint
-from rci_results.contracts import AnalysisResultValidator, result_checksum
+from rci_results.contracts import (
+    AnalysisResultValidator,
+    has_verified_local_availability_contract,
+    result_checksum,
+)
 from rci_results.models import (
     AnalysisPublicationRecord,
     AnalysisRecord,
@@ -25,6 +29,10 @@ class AnalysisNotFoundError(LookupError):
 
 
 class ArtifactNotFoundError(LookupError):
+    pass
+
+
+class ArtifactNotCurrentError(LookupError):
     pass
 
 
@@ -102,6 +110,18 @@ class AnalysisResultService:
             raise AnalysisNotFoundError(f"analysis {identifier!r} was not found")
         return record
 
+    async def get_active(self, identifier: str) -> AnalysisRecord:
+        record = await self._repository.get_active(identifier)
+        if record is None:
+            raise AnalysisNotFoundError(f"active analysis {identifier!r} was not found")
+        return record
+
+    async def get_by_artifact(self, artifact_id: str) -> AnalysisRecord:
+        record = await self._repository.get_by_artifact(artifact_id)
+        if record is None:
+            raise ArtifactNotFoundError(f"artifact {artifact_id!r} was not found")
+        return record
+
     async def get_by_collection_run(self, run_id: str) -> AnalysisRecord:
         record = await self._repository.get_by_collection_run(run_id)
         if record is None:
@@ -127,11 +147,60 @@ class AnalysisResultService:
             or str(product_pack.get("version")) != analysis.product_pack_version
         ):
             raise ValueError("publication Product Pack does not match the immutable result")
-        for field in ("source", "metrics", "evidence_sets"):
+        for field in (
+            "schema_version",
+            "analysis_id",
+            "analysis_run_id",
+            "generated_at",
+            "source",
+            "benchmark_retailer",
+            "competitors",
+            "product_pack",
+            "retailer_packs",
+            "metrics",
+            "coverage",
+            "comparison_modes",
+            "segments",
+            "comparisons",
+            "geographic_sensitivity",
+            "assortment",
+            "data_quality",
+            "evidence_sets",
+            "artifacts",
+            "validation",
+        ):
             if result_checksum({"value": result.get(field)}) != result_checksum(
                 {"value": analysis.result.get(field)}
             ):
                 raise ValueError(f"publication changed authoritative {field}")
+        source_provenance = analysis.result.get("provenance")
+        publication_provenance = result.get("provenance")
+        assert isinstance(source_provenance, dict)
+        assert isinstance(publication_provenance, dict)
+        mutable_checksum_field = "final_result_checksum_sha256"
+        if result_checksum(
+            {
+                key: value
+                for key, value in source_provenance.items()
+                if key != mutable_checksum_field
+            }
+        ) != result_checksum(
+            {
+                key: value
+                for key, value in publication_provenance.items()
+                if key != mutable_checksum_field
+            }
+        ):
+            raise ValueError("publication changed authoritative provenance")
+        # Narrative text may change between governed publications, so its
+        # self-referential final checksum is the sole derived provenance field.
+        # Ignore caller input and bind it deterministically to the exact document.
+        publication_provenance[mutable_checksum_field] = "0" * 64
+        publication_provenance[mutable_checksum_field] = result_checksum(result)
+        if has_verified_local_availability_contract(
+            analysis.result
+        ) and not has_verified_local_availability_contract(result):
+            raise ValueError("publication removed the verified local-availability contract")
         context = dict(presentation_context or {})
         unknown_context = set(context) - {
             "product_highlights",
@@ -166,6 +235,13 @@ class AnalysisResultService:
     async def latest_publication(self, identifier: str) -> AnalysisPublicationRecord | None:
         analysis = await self.get(identifier)
         return await self._repository.latest_publication(analysis.analysis_id)
+
+    async def presentation_source(
+        self, identifier: str
+    ) -> tuple[AnalysisRecord, AnalysisPublicationRecord | None, JsonObject]:
+        """Return the exact immutable document used by report and artifact rendering."""
+
+        return await self._presentation_source(identifier)
 
     async def _presentation_source(
         self, identifier: str
@@ -268,6 +344,7 @@ class AnalysisResultService:
                 artifact
                 for artifact in await self._repository.list_artifacts(analysis.analysis_id)
                 if artifact.artifact_type == artifact_type
+                and artifact.status == "ready"
                 and artifact.renderer_version == self._renderer.version
                 and artifact.publication_id == (publication.id if publication is not None else None)
             ),
@@ -293,14 +370,54 @@ class AnalysisResultService:
 
     async def list_artifacts(self, identifier: str) -> list[ReportArtifactRecord]:
         analysis = await self.get(identifier)
-        return await self._repository.list_artifacts(analysis.analysis_id)
+        publication = await self._repository.latest_publication(analysis.analysis_id)
+        if publication is not None and (
+            publication.status != "ready_to_share"
+            or publication.analysis_result_id != analysis.id
+            or publication.source_result_checksum != analysis.checksum
+        ):
+            return []
+        publication_id = publication.id if publication is not None else None
+        return [
+            artifact
+            for artifact in await self._repository.list_artifacts(analysis.analysis_id)
+            if artifact.status == "ready" and artifact.publication_id == publication_id
+        ]
+
+    async def get_current_artifact(self, artifact_id: str) -> ReportArtifactRecord:
+        """Resolve only a ready artifact owned by the latest governed publication."""
+
+        artifact = await self._repository.get_artifact(artifact_id)
+        if artifact is None:
+            raise ArtifactNotFoundError(f"artifact {artifact_id!r} was not found")
+        analysis = await self._repository.get_by_artifact(artifact_id)
+        if analysis is None:
+            raise ArtifactNotFoundError(f"artifact {artifact_id!r} has no owning analysis")
+        active = await self._repository.get_active(analysis.analysis_id)
+        if active is None or active.id != analysis.id:
+            raise ArtifactNotCurrentError(
+                f"artifact {artifact_id!r} does not belong to an active analysis"
+            )
+        publication = await self._repository.latest_publication(analysis.analysis_id)
+        if publication is not None and (
+            publication.status != "ready_to_share"
+            or publication.analysis_result_id != analysis.id
+            or publication.source_result_checksum != analysis.checksum
+        ):
+            raise ArtifactNotCurrentError(
+                f"artifact {artifact_id!r} does not belong to a current publication"
+            )
+        expected_publication_id = publication.id if publication is not None else None
+        if artifact.status != "ready" or artifact.publication_id != expected_publication_id:
+            raise ArtifactNotCurrentError(
+                f"artifact {artifact_id!r} was superseded or is not ready"
+            )
+        return artifact
 
     async def download_link(
         self, artifact_id: str, *, expires_in_seconds: int = 300
     ) -> DownloadLink:
-        artifact = await self._repository.get_artifact(artifact_id)
-        if artifact is None:
-            raise ArtifactNotFoundError(f"artifact {artifact_id!r} was not found")
+        artifact = await self.get_current_artifact(artifact_id)
         url = await self._object_store.presign(
             artifact.storage_uri,
             expires_in_seconds=expires_in_seconds,

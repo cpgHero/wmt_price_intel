@@ -1,13 +1,76 @@
 /* Generated from the normative JSON Schema. Do not edit manually. */
 
+export type Retailer = {
+  [k: string]: unknown;
+} & {
+  [k: string]: unknown;
+} & {
+  id: string;
+  name: string;
+  status: "available" | "unavailable";
+  location_dimension: "store" | "service_area";
+  sku_count: number;
+  eligible_locations: number;
+  /**
+   * Legacy alias of verified_available_locations in this corrected matrix contract; never Search reach.
+   */
+  observed_locations: number;
+  /**
+   * Distinct locations with at least one filtered SKU carrying explicit verified-local availability.
+   */
+  verified_available_locations: number;
+  /**
+   * Distinct Search-observed locations in the same active geography, brand-type, and brand filter scope; not local-carriage proof.
+   */
+  search_observed_locations: number;
+  /**
+   * Distinct Search-observed SKUs in the same active geography, brand-type, and brand filter scope; may include products without verified local availability.
+   */
+  search_observed_skus: number;
+  verified_first_party_skus: number;
+  seller_unverified_skus: number;
+  seller_not_governed_skus: number;
+  population_checksum: string | null;
+  reason: string | null;
+} & {
+  id: string;
+  name: string;
+  status: "available" | "unavailable";
+  location_dimension: "store" | "service_area";
+  sku_count: number;
+  eligible_locations: number;
+  /**
+   * Legacy alias of verified_available_locations in this corrected matrix contract; never Search reach.
+   */
+  observed_locations: number;
+  /**
+   * Distinct locations with at least one filtered SKU carrying explicit verified-local availability.
+   */
+  verified_available_locations: number;
+  /**
+   * Distinct Search-observed locations in the same active geography, brand-type, and brand filter scope; not local-carriage proof.
+   */
+  search_observed_locations: number;
+  /**
+   * Distinct Search-observed SKUs in the same active geography, brand-type, and brand filter scope; may include products without verified local availability.
+   */
+  search_observed_skus: number;
+  verified_first_party_skus: number;
+  seller_unverified_skus: number;
+  seller_not_governed_skus: number;
+  population_checksum: string | null;
+  reason: string | null;
+};
+
 export interface RetailCompetitiveIntelligencePriceArchitectureMatrix {
-  schema_version: "1.1.0";
+  schema_version: "1.2.0";
   analysis_id: string;
   generated_at: string;
   product_pack: IdNameVersion;
   source: {
     authority: "Search";
-    price_grain: "retailer product x median positive shelf price across observed locations";
+    price_grain: "retailer product x median positive Search-listed package price across verified-available locations";
+    availability_rule: "explicit in-stock signal from an organic Search result";
     assignment_rule: "price only; no product-match relationship is used";
     anchor_rule: string;
   };
@@ -52,20 +115,6 @@ export interface BrandOption {
   retailer_ids: [string, ...string[]];
   product_count: number;
 }
-export interface Retailer {
-  id: string;
-  name: string;
-  status: "available" | "unavailable";
-  location_dimension: "store" | "service_area";
-  sku_count: number;
-  eligible_locations: number;
-  observed_locations: number;
-  verified_first_party_skus: number;
-  seller_unverified_skus: number;
-  seller_not_governed_skus: number;
-  population_checksum: string | null;
-  reason: string | null;
-}
 export interface Rung {
   id: string;
   rank: number;
@@ -93,6 +142,8 @@ export interface Product {
   minimum_price: number;
   maximum_price: number;
   observed_locations: number;
+  verified_available_locations: number;
+  search_observed_locations: number;
 }
 export interface Cell {
   retailer_id: string;

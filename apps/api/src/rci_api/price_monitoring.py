@@ -29,7 +29,7 @@ from rci_analytics import (
     classified_offer_from_record,
 )
 from rci_analytics.product_location import ProductLocationPopulation
-from rci_api.analyses import get_analysis_service
+from rci_api.analyses import PublicAnalysisDependency, get_analysis_service
 from rci_contracts import validate_instance
 from rci_product_packs import PostgresProductPackCatalog
 from rci_products import PRODUCT_DETAIL_NORMALIZER_VERSION
@@ -448,6 +448,8 @@ class PostgresPriceMonitoringRepository:
               AND materialization.state = :state
               AND materialization.city = :city
               AND materialization.zipcode = :zipcode
+              AND result.reporting_status = 'ready'
+              AND result.archived_at IS NULL
             """
         )
         async with self._engine.connect() as connection:
@@ -758,7 +760,7 @@ class PostgresPriceMonitoringRepository:
                         "authority": {
                             "identity": "pdp" if normalized else "search",
                             "price": "search",
-                            "availability": "search",
+                            "availability": "explicit_provider_stock_availability",
                         },
                     },
                 }
@@ -1411,6 +1413,9 @@ class PriceMonitoringService:
                         "sku_count": 0,
                         "eligible_locations": 0,
                         "observed_locations": 0,
+                        "verified_available_locations": 0,
+                        "search_observed_locations": 0,
+                        "search_observed_skus": 0,
                         "verified_first_party_skus": 0,
                         "seller_unverified_skus": 0,
                         "seller_not_governed_skus": 0,
@@ -1703,7 +1708,11 @@ class PriceMonitoringService:
                 "city",
                 "state",
                 "price",
+                "search_observed",
+                "in_stock",
                 "is_sponsored",
+                "availability_status",
+                "verified_local_availability",
                 "observed_at",
             ]
         )
@@ -1718,7 +1727,11 @@ class PriceMonitoringService:
                     row["city"],
                     row["state"],
                     row["price"],
+                    row.get("search_observed", True),
+                    row.get("in_stock"),
                     row["is_sponsored"],
+                    row.get("availability_status", "unverified"),
+                    row.get("verified_local_availability", False),
                     row["observed_at"],
                 ]
             )
@@ -1752,11 +1765,26 @@ class PriceMonitoringService:
         if not products:
             raise LookupError("no exact-product Search evidence matched the map filters")
 
-        reference_price = products[0]["price_stats"]["observation_median"]
+        reference_price = products[0].get("search_price_stats", products[0]["price_stats"])[
+            "observation_median"
+        ]
         point_limit = 1_200 if detail == "summary" else 6_000
 
         def map_point(row: dict[str, Any], status_value: str) -> dict[str, Any]:
-            price = row.get("median_price") if status_value == "observed" else None
+            search_observed = status_value == "observed"
+            price = (
+                row.get("search_median_price", row.get("median_price")) if search_observed else None
+            )
+            availability_status = (
+                str(row.get("availability_status") or "unverified")
+                if search_observed
+                else "unverified"
+            )
+            verified_local_availability = bool(
+                search_observed
+                and availability_status == "verified_in_stock"
+                and row.get("verified_local_availability") is True
+            )
             difference = (
                 round(float(price) - float(reference_price), 4)
                 if price is not None and reference_price is not None
@@ -1765,6 +1793,11 @@ class PriceMonitoringService:
             return {
                 "scope_key": str(row["scope_key"]),
                 "status": status_value,
+                "search_observed": search_observed,
+                "in_stock": row.get("in_stock") if search_observed else None,
+                "is_sponsored": row.get("is_sponsored") if search_observed else None,
+                "availability_status": availability_status,
+                "verified_local_availability": verified_local_availability,
                 "kind": row["kind"],
                 "store_number": row.get("store_number"),
                 "store_name": row.get("store_name"),
@@ -1793,7 +1826,7 @@ class PriceMonitoringService:
         price_positions = {"below": 0, "at": 0, "above": 0}
         if reference_price is not None:
             for row in observed_rows:
-                price = row.get("median_price")
+                price = row.get("search_median_price", row.get("median_price"))
                 if price is None:
                     continue
                 difference = float(price) - float(reference_price)
@@ -1817,7 +1850,7 @@ class PriceMonitoringService:
             map_point(row, "not_observed") for row in evenly_sample(not_observed_with_coordinates)
         ]
         result = {
-            "schema_version": "1.1.0",
+            "schema_version": "1.2.0",
             "analysis_id": analysis_id,
             "retailer": {
                 "id": view["retailer"]["id"],
@@ -1837,15 +1870,27 @@ class PriceMonitoringService:
                 "authority": "Search",
                 "location_authority": "Retailer location master",
                 "definition": (
-                    "Observed points have positive Search prices. Not observed points are "
-                    "planned collection locations where the exact product did not appear "
-                    "in the successful Search result; they are review signals, not proof "
-                    "of non-carriage."
+                    "Search-observed points have positive Search-listed prices. Verified "
+                    "local availability additionally requires explicit in-stock and "
+                    "non-sponsored evidence. Not-observed points are planned collection "
+                    "locations where the exact product did not appear in Search; neither "
+                    "state alone proves chainwide carriage or non-carriage."
                 ),
             },
             "reference_price": reference_price,
             "display": {
                 "observed_locations": int(view["location_display"]["total"]),
+                "search_observed_locations": int(view["location_display"]["total"]),
+                "verified_available_locations": sum(
+                    row.get("verified_local_availability") is True for row in observed_rows
+                ),
+                "explicitly_out_of_stock_locations": sum(
+                    row.get("availability_status") == "explicitly_out_of_stock"
+                    for row in observed_rows
+                ),
+                "unverified_locations": sum(
+                    row.get("verified_local_availability") is not True for row in observed_rows
+                ),
                 "observed_points": len(observed_points),
                 "observed_missing_coordinates": max(
                     0,
@@ -1916,6 +1961,7 @@ def _require_internal_materialization_token(provided: str | None) -> None:
 async def price_monitoring_view(
     analysis_id: str,
     service: ServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
     retailer: str = Query(min_length=1),
     brand_type: BrandFilter = "all",
     state_filter: str | None = Query(default=None, alias="state"),
@@ -1963,6 +2009,7 @@ async def price_monitoring_view(
 async def price_monitoring_catalog(
     analysis_id: str,
     service: ServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
     retailer: str = Query(min_length=1),
     query: str | None = Query(default=None, alias="q", max_length=200),
     brand_type: BrandFilter = "all",
@@ -2025,6 +2072,7 @@ async def materialize_price_monitoring_catalog(
 async def price_architecture_matrix(
     analysis_id: str,
     service: ServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
     mode: PriceArchitectureMode = "benchmark_anchored",
     fixed_increment: float = Query(default=0.5, alias="fixed_increment"),
     brand_type: BrandFilter = "all",
@@ -2096,6 +2144,7 @@ async def materialize_price_architecture_matrix(
 async def price_monitoring_map(
     analysis_id: str,
     service: ServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
     retailer: str = Query(min_length=1),
     brand_type: BrandFilter = "all",
     state_filter: str | None = Query(default=None, alias="state"),
@@ -2137,6 +2186,7 @@ async def price_monitoring_map(
 async def price_monitoring_evidence_csv(
     analysis_id: str,
     service: ServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
     retailer: str = Query(min_length=1),
     product_id: str = Query(min_length=1),
     brand_type: BrandFilter = "all",

@@ -206,7 +206,7 @@ export function ComparableCohortExplorer({
         pairCount: row.relationships,
         matches: row.scored_product_locations,
         matchedGeographies: row.benchmark_product_locations,
-        benchmarkObservedLocations: row.benchmark_observed_locations ?? 0,
+        benchmarkVerifiedLocations: row.benchmark_observed_locations ?? 0,
         benchmarkScoredLocations: row.benchmark_scored_locations ?? 0,
         benchmarkUnscoredLocations: row.benchmark_unscored_locations ?? 0,
         locationCoverageRate: row.location_coverage_rate ?? null,
@@ -291,11 +291,11 @@ export function ComparableCohortExplorer({
       "Competitor brand-type mix":
         evidence?.competitorBrandTypes ?? "unresolved",
       "Paired observations": cohort.matches,
-      [`${benchmarkName} stores carrying the cohort`]:
-        cohort.benchmarkObservedLocations,
+      [`${benchmarkName} stores with verified local availability for the cohort`]:
+        cohort.benchmarkVerifiedLocations,
       [`${benchmarkName} stores with a valid local comparison`]:
         cohort.benchmarkScoredLocations,
-      "Comparable store coverage": cohort.locationCoverageRate,
+      "Comparable verified-location coverage": cohort.locationCoverageRate,
       "Contributing competitor stores": cohort.competitorContributingStores,
       "Contributing competitor delivery ZIPs":
         cohort.competitorContributingServiceAreas,
@@ -326,7 +326,8 @@ export function ComparableCohortExplorer({
       scorecard.benchmark_observed_locations ?? 0,
     [`${benchmarkName} stores with a valid local comparison`]:
       scorecard.benchmark_scored_locations ?? 0,
-    "Comparable store coverage": scorecard.location_coverage_rate ?? null,
+    "Comparable verified-location coverage":
+      scorecard.location_coverage_rate ?? null,
     "Contributing competitor stores":
       scorecard.competitor_contributing_stores ?? 0,
     "Contributing competitor delivery ZIPs":
@@ -422,11 +423,11 @@ export function ComparableCohortExplorer({
             <p className="eyebrow">Overall retailer position</p>
             <h2>Price Position Table</h2>
             <p>
-              Store coverage counts each observed {benchmarkName} store once,
-              regardless of how many comparable products were found there.
-              Lower-price share and average position use the underlying paired
-              local product-price comparisons. Physical competitors must have
-              eligible evidence within {radiusMiles} mile
+              Coverage counts each {benchmarkName} store with verified local
+              evidence once, regardless of how many comparable products were
+              found there. Lower-price share and average position use the
+              underlying paired local product-price comparisons. Physical
+              competitors must have eligible evidence within {radiusMiles} mile
               {radiusMiles === 1 ? "" : "s"}; service-area retailers use the
               same delivery ZIP.
             </p>
@@ -464,7 +465,7 @@ export function ComparableCohortExplorer({
           <div className="radius-price-position-head" aria-hidden="true">
             <span>Competitor</span>
             <span>Included products</span>
-            <span>Comparable store coverage</span>
+            <span>Comparable verified-location coverage</span>
             <span>Lower-price share</span>
             <span>Average position</span>
           </div>
@@ -676,7 +677,7 @@ export function ComparableCohortExplorer({
                     {formatRate(cohort.locationCoverageRate ?? 0)} store
                     coverage ·{" "}
                     {cohort.benchmarkScoredLocations.toLocaleString()} of{" "}
-                    {cohort.benchmarkObservedLocations.toLocaleString()}{" "}
+                    {cohort.benchmarkVerifiedLocations.toLocaleString()}{" "}
                     {benchmarkName} stores ·{" "}
                     {contributingLocationLabel(
                       cohort.competitorContributingStores,
@@ -829,9 +830,10 @@ export function ComparableCohortExplorer({
           </button>
         ) : null}
         <footer>
-          Search supplies store-specific price and location. The API projects
-          certified relationships into product-location outcomes before this
-          page receives rates or medians; the browser does not recalculate them.
+          Search supplies listed price and the retailer location query context.
+          Only explicit in-stock, non-sponsored evidence enters these certified
+          product-location outcomes; the browser does not recalculate rates or
+          medians.
         </footer>
       </section>
     </div>

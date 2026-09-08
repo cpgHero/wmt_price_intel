@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "analysis_id": "fresh_ground_beef-example",
   "retailer": { "id": "walmart_us", "name": "Walmart (US)" },
   "product": { "id": "959024059", "name": "80% Lean Ground Beef" },
@@ -12,11 +12,15 @@
   "source": {
     "authority": "Search",
     "location_authority": "Retailer location master",
-    "definition": "Observed points have positive Search prices. Not observed points are planned collection locations where the exact product did not appear in the successful Search result; they are review signals, not proof of non-carriage."
+    "definition": "Search-observed points have positive Search prices. Verified local availability additionally requires explicit in_stock=true and is_sponsored=false; sponsored, out-of-stock, and unknown rows are retained as Search evidence but not counted as local carriage. Not observed points are planned collection locations where the exact product did not appear in the successful Search result; they are review signals, not proof of non-carriage."
   },
   "reference_price": 15.73,
   "display": {
     "observed_locations": 2,
+    "search_observed_locations": 2,
+    "verified_available_locations": 1,
+    "explicitly_out_of_stock_locations": 1,
+    "unverified_locations": 1,
     "observed_points": 2,
     "observed_missing_coordinates": 0,
     "observed_sampled": false,
@@ -32,6 +36,11 @@
     {
       "scope_key": "store:1",
       "status": "observed",
+      "search_observed": true,
+      "in_stock": true,
+      "is_sponsored": false,
+      "availability_status": "verified_in_stock",
+      "verified_local_availability": true,
       "kind": "store",
       "store_number": "1",
       "store_name": "Bentonville Supercenter",
@@ -47,6 +56,11 @@
     {
       "scope_key": "store:2",
       "status": "observed",
+      "search_observed": true,
+      "in_stock": false,
+      "is_sponsored": false,
+      "availability_status": "explicitly_out_of_stock",
+      "verified_local_availability": false,
       "kind": "store",
       "store_number": "2",
       "store_name": "Rogers Supercenter",
@@ -62,6 +76,11 @@
     {
       "scope_key": "store:3",
       "status": "not_observed",
+      "search_observed": false,
+      "in_stock": null,
+      "is_sponsored": null,
+      "availability_status": "unverified",
+      "verified_local_availability": false,
       "kind": "store",
       "store_number": "3",
       "store_name": "Springdale Supercenter",

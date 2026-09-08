@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.1.0",
+  "schema_version": "1.2.0",
   "observation_id": "walmart_us:15136790:1753:2026-08-07T05:16:43Z",
   "analysis_id": "fresh_ground_beef-example",
   "product_pack_id": "fresh_ground_beef",
@@ -31,8 +31,11 @@
   "regular_price": 5.84,
   "discounted_price": null,
   "currency": "USD",
+  "search_observed": true,
   "in_stock": true,
   "is_sponsored": false,
+  "availability_status": "verified_in_stock",
+  "verified_local_availability": true,
   "price_metrics": {
     "package_price": 5.84,
     "price_per_lb": 5.84

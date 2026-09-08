@@ -15,6 +15,7 @@ from rci_analytics.models import ClassifiedOffer, JsonObject, NormalizedOffer
 from rci_analytics.product_location import (
     PRODUCT_LOCATION_OBSERVATION_SCHEMA_VERSION,
     BrandType,
+    PriceEvidenceScope,
     PriceLocation,
     ProductLocationPopulation,
     ProductLocationProjector,
@@ -261,8 +262,14 @@ class PriceMonitoringProjector:
         comparison_metric: str,
         location_index: dict[tuple[str, str], JsonObject] | None = None,
         product_context: dict[str, JsonObject] | None = None,
+        evidence_scope: PriceEvidenceScope = "verified_local",
     ) -> dict[str, tuple[ProductPriceObservation, ...]]:
-        """Return comparison-ready rows derived from the canonical population."""
+        """Return comparison-ready rows derived from the canonical population.
+
+        Local competitive comparisons default to verified availability.  Callers
+        that are explicitly presenting Search-listed prices may opt into
+        ``search_presence`` without representing those prices as store carriage.
+        """
 
         return self.canonical_population(
             offers,
@@ -272,6 +279,7 @@ class PriceMonitoringProjector:
         ).comparison_observations(
             product_ids=product_ids,
             comparison_metric=comparison_metric,
+            evidence_scope=evidence_scope,
         )
 
     def build(
@@ -306,6 +314,7 @@ class PriceMonitoringProjector:
         admitted = [row.to_price_monitoring_row() for row in population.observations]
         excluded = Counter(dict(population.exclusion_counts))
         conflicting_keys = set(population.conflicting_keys)
+        conflicting_availability_keys = set(population.conflicting_availability_keys)
         duplicate_rows = population.duplicate_rows
         classified_rows = population.classified_rows
         eligible_input_rows = population.eligible_input_rows
@@ -352,6 +361,7 @@ class PriceMonitoringProjector:
             and (filters.zipcode is None or row["location"].zipcode == filters.zipcode)
             and (filters.product_id is None or row["product_id"] == filters.product_id)
         ]
+        verified_visible = [row for row in visible if row["verified_local_availability"]]
         scoped_eligible_locations = [
             source_locations[key]
             for key in eligible_scope_keys
@@ -388,12 +398,20 @@ class PriceMonitoringProjector:
             else 0
         )
 
-        product_medians = [
-            median(float(row["price"]) for row in values) for values in product_groups.values()
+        verified_product_medians = [
+            median(float(row["price"]) for row in values if row["verified_local_availability"])
+            for values in product_groups.values()
+            if any(row["verified_local_availability"] for row in values)
         ]
         distribution = _price_stats(
+            (float(row["price"]) for row in verified_visible),
+            product_medians=verified_product_medians,
+        )
+        search_distribution = _price_stats(
             (float(row["price"]) for row in visible),
-            product_medians=product_medians,
+            product_medians=(
+                median(float(row["price"]) for row in values) for values in product_groups.values()
+            ),
         )
         product_options: list[JsonObject] = []
         option_groups: dict[str, list[JsonObject]] = defaultdict(list)
@@ -401,11 +419,13 @@ class PriceMonitoringProjector:
             option_groups[str(row["product_id"])].append(row)
         for product_id, rows in option_groups.items():
             identity = rows[0]
+            verified_rows = [row for row in rows if row["verified_local_availability"]]
             product_options.append(
                 {
                     "value": product_id,
                     "label": str(identity["name"]),
                     "count": len({row["location"].scope_key for row in rows}),
+                    "verified_count": len({row["location"].scope_key for row in verified_rows}),
                     "brand": identity["brand"],
                     "brand_type": identity["brand_type"],
                     "image_url": identity["image_url"],
@@ -415,8 +435,11 @@ class PriceMonitoringProjector:
         product_summaries: list[JsonObject] = []
         consistent_observations = 0
         for product_id, rows in product_groups.items():
-            prices = [float(row["price"]) for row in rows]
+            search_prices = [float(row["price"]) for row in rows]
+            verified_rows = [row for row in rows if row["verified_local_availability"]]
+            prices = [float(row["price"]) for row in verified_rows]
             stats = _price_stats(prices)
+            search_stats = _price_stats(search_prices)
             reference = stats["modal_price"]
             consistent = (
                 sum(
@@ -444,7 +467,50 @@ class PriceMonitoringProjector:
             )[:sample_limit]
             identity = rows[0]
             product_identity = context.get(f"{filters.retailer_id}:{product_id}", {})
+            pdp = dict(
+                product_identity.get(
+                    "pdp",
+                    {
+                        "enriched": False,
+                        "authority": {
+                            "identity": "search",
+                            "price": "search",
+                        },
+                    },
+                )
+            )
+            pdp_authority = dict(pdp.get("authority") or {})
+            pdp_authority["price"] = "search"
+            pdp_authority["availability"] = "explicit_provider_stock_availability"
+            pdp["authority"] = pdp_authority
             observed_product_locations = len({row["location"].scope_key for row in rows})
+            verified_product_locations = len({row["location"].scope_key for row in verified_rows})
+            verified_product_states = len(
+                {row["location"].state for row in verified_rows if row["location"].state}
+            )
+            verified_product_cities = len(
+                {
+                    (row["location"].state, row["location"].city)
+                    for row in verified_rows
+                    if row["location"].city
+                }
+            )
+            verified_product_zipcodes = len(
+                {row["location"].zipcode for row in verified_rows if row["location"].zipcode}
+            )
+            search_product_states = len(
+                {row["location"].state for row in rows if row["location"].state}
+            )
+            search_product_cities = len(
+                {
+                    (row["location"].state, row["location"].city)
+                    for row in rows
+                    if row["location"].city
+                }
+            )
+            search_product_zipcodes = len(
+                {row["location"].zipcode for row in rows if row["location"].zipcode}
+            )
             eligible_product_locations = max(
                 effective_expected_location_count,
                 observed_product_locations,
@@ -459,36 +525,35 @@ class PriceMonitoringProjector:
                     "name": identity["name"],
                     "brand": identity["brand"],
                     "seller": product_identity.get("seller"),
-                    "pdp": product_identity.get(
-                        "pdp",
-                        {
-                            "enriched": False,
-                            "authority": {
-                                "identity": "search",
-                                "price": "search",
-                                "availability": "search",
-                            },
-                        },
-                    ),
+                    "pdp": pdp,
                     "brand_type": identity["brand_type"],
                     "brand_origin": identity["brand_origin"],
                     "brand_status": identity["brand_status"],
                     "image_url": identity["image_url"],
                     "url": identity["url"],
-                    "locations": observed_product_locations,
-                    "states": len({row["location"].state for row in rows if row["location"].state}),
-                    "cities": len(
-                        {
-                            (row["location"].state, row["location"].city)
-                            for row in rows
-                            if row["location"].city
-                        }
-                    ),
+                    # Backward-compatible generic footprint fields now represent
+                    # verified local availability, never Search presence.
+                    "locations": verified_product_locations,
+                    "states": verified_product_states,
+                    "cities": verified_product_cities,
+                    "verified_available_locations": verified_product_locations,
+                    "verified_available_states": verified_product_states,
+                    "verified_available_cities": verified_product_cities,
+                    "verified_available_zipcodes": verified_product_zipcodes,
+                    "search_observed_locations": observed_product_locations,
+                    "search_observed_states": search_product_states,
+                    "search_observed_cities": search_product_cities,
+                    "search_observed_zipcodes": search_product_zipcodes,
                     "price_stats": stats,
-                    "unit_price": self._unit_price_summary(rows),
-                    "consistency_rate": _round(consistent / len(rows)) if rows else None,
+                    "search_price_stats": search_stats,
+                    "unit_price": self._unit_price_summary(verified_rows),
+                    "search_unit_price": self._unit_price_summary(rows),
+                    "consistency_rate": (
+                        _round(consistent / len(verified_rows)) if verified_rows else None
+                    ),
                     "availability": self._availability_summary(rows),
-                    "promotion": self._promotion_summary(rows),
+                    "promotion": self._promotion_summary(verified_rows),
+                    "search_promotion": self._promotion_summary(rows),
                     "sponsorship": self._sponsorship_summary(rows),
                     "presence": {
                         "observed_locations": observed_product_locations,
@@ -512,6 +577,7 @@ class PriceMonitoringProjector:
                         ),
                     },
                     "price_histogram": _price_histogram(prices),
+                    "search_price_histogram": _price_histogram(search_prices),
                     "sample_locations": [
                         {
                             "scope_key": row["location"].scope_key,
@@ -521,7 +587,11 @@ class PriceMonitoringProjector:
                             "city": row["location"].city,
                             "state": row["location"].state,
                             "price": _round(float(row["price"])),
+                            "search_observed": row["search_observed"],
+                            "in_stock": row["in_stock"],
                             "is_sponsored": row["is_sponsored"],
+                            "availability_status": row["availability_status"],
+                            "verified_local_availability": row["verified_local_availability"],
                             "observed_at": row["observed_at"],
                         }
                         for row in sample
@@ -532,6 +602,7 @@ class PriceMonitoringProjector:
         product_summaries.sort(
             key=lambda row: (
                 -int(row["locations"]),
+                -int(row["search_observed_locations"]),
                 str(row["name"]).casefold(),
                 str(row["product_id"]),
             )
@@ -580,6 +651,12 @@ class PriceMonitoringProjector:
 
         total_considered = classified_rows
         unresolved = sum(row["brand_type"] == "unclassified" for row in admitted)
+        unverified_availability = sum(
+            not bool(row["verified_local_availability"]) for row in admitted
+        )
+        explicit_out_of_stock = sum(
+            row["availability_status"] == "explicitly_out_of_stock" for row in admitted
+        )
         missing_geography = sum(
             not row["location"].state or not row["location"].city for row in admitted
         )
@@ -621,6 +698,16 @@ class PriceMonitoringProjector:
                 "observation controls the current view.",
             ),
             self._quality_check(
+                "conflicting-product-location-availability",
+                "Conflicting availability at one product-location timestamp",
+                len(conflicting_availability_keys),
+                max(1, len(admitted)),
+                "blocker",
+                "Organic Search rows reported both in-stock and out-of-stock for the "
+                "same product, location, and timestamp. The projection fails closed "
+                "and selects out-of-stock pending source review.",
+            ),
+            self._quality_check(
                 "unclassified-brand",
                 "Unclassified brand",
                 unresolved,
@@ -647,15 +734,58 @@ class PriceMonitoringProjector:
                 "outside the mastered eligible-location set. Coverage uses the union "
                 "of mastered and observed store IDs when a mastered denominator exists.",
             ),
+            self._quality_check(
+                "unverified-local-availability",
+                "Search observations without verified local availability",
+                unverified_availability,
+                max(1, len(admitted)),
+                "warning",
+                "These rows remain valid Search-listed price evidence, but sponsored, "
+                "unknown-sponsorship, or non-in-stock rows are excluded from store "
+                "carriage and local competitive comparisons.",
+            ),
+            self._quality_check(
+                "zero-verified-local-availability",
+                "Visible scope has no verified local availability",
+                int(bool(visible) and not bool(verified_visible)),
+                1,
+                "blocker",
+                "Publishing availability, store carriage, or local price-comparison claims "
+                "is blocked when a visible Search scope has no organic, explicitly "
+                "in-stock observation.",
+            ),
+            self._quality_check(
+                "explicitly-out-of-stock-search-observation",
+                "Search observations explicitly reported out of stock",
+                explicit_out_of_stock,
+                max(1, len(admitted)),
+                "warning",
+                "A positive Search price does not override an explicit out-of-stock "
+                "signal; these rows are excluded from verified availability.",
+            ),
         ]
         quality_status = (
-            "warning"
-            if any(
-                row["count"] and row["severity"] in {"warning", "blocker"} for row in quality_checks
-            )
+            "blocked"
+            if any(row["count"] and row["severity"] == "blocker" for row in quality_checks)
+            else "warning"
+            if any(row["count"] and row["severity"] == "warning" for row in quality_checks)
             else "ready"
         )
         observed_locations = len(observed_location_keys)
+        verified_available_location_keys = {
+            row["location"].scope_key for row in visible if row["verified_local_availability"]
+        }
+        explicitly_out_of_stock_location_keys = {
+            row["location"].scope_key
+            for row in visible
+            if row["availability_status"] == "explicitly_out_of_stock"
+        } - verified_available_location_keys
+        unverified_location_keys = (
+            observed_location_keys
+            - verified_available_location_keys
+            - explicitly_out_of_stock_location_keys
+        )
+        verified_available_locations = len(verified_available_location_keys)
         source_values = [str(row.get("observed_at")) for row in admitted if row.get("observed_at")]
         presence_rate = (
             _round(observed_locations / effective_expected_location_count)
@@ -717,10 +847,10 @@ class PriceMonitoringProjector:
             "missing_location_details": max(0, not_observed_count - len(gap_locations)),
         }
         gap_locations = gap_locations[:gap_location_limit]
-        exceptions = self._price_exceptions(visible) if filters.product_id else []
+        exceptions = self._price_exceptions(verified_visible) if filters.product_id else []
         all_retailer_options = sorted(all_retailers or {filters.retailer_id})
         return {
-            "schema_version": "1.3.0",
+            "schema_version": "1.4.0",
             "analysis_id": analysis_id,
             "generated_at": generated_at,
             "product_pack": {
@@ -789,17 +919,25 @@ class PriceMonitoringProjector:
             },
             "summary": {
                 "observed_locations": observed_locations,
+                "verified_available_locations": verified_available_locations,
                 "expected_locations": max(0, effective_expected_location_count),
                 "coverage_rate": _round(observed_locations / effective_expected_location_count)
                 if effective_expected_location_count
                 else None,
                 "observed_products": len(product_groups),
-                "eligible_observations": len(visible),
+                "verified_available_products": len(
+                    {row["product_id"] for row in visible if row["verified_local_availability"]}
+                ),
+                "eligible_observations": len(verified_visible),
+                "search_price_observations": len(visible),
+                "verified_availability_observations": sum(
+                    bool(row["verified_local_availability"]) for row in visible
+                ),
                 "usable_price_rate": _round(eligible_input_rows / total_considered)
                 if total_considered
                 else 0.0,
-                "price_consistency_rate": _round(consistent_observations / len(visible))
-                if visible
+                "price_consistency_rate": _round(consistent_observations / len(verified_visible))
+                if verified_visible
                 else None,
             },
             "presence": {
@@ -815,6 +953,25 @@ class PriceMonitoringProjector:
                     "does not carry the product."
                 ),
             },
+            "availability": {
+                "status": "verified" if verified_available_locations else "unverified",
+                "verified_available_locations": verified_available_locations,
+                "eligible_locations": max(0, effective_expected_location_count),
+                "verified_availability_rate": (
+                    _round(verified_available_locations / effective_expected_location_count)
+                    if effective_expected_location_count
+                    else None
+                ),
+                "explicitly_out_of_stock_locations": len(explicitly_out_of_stock_location_keys),
+                "unverified_locations": len(unverified_location_keys),
+                "definition": (
+                    "Verified local availability requires an explicit in-stock signal "
+                    "from an organic Search result. Sponsored placements, unknown "
+                    "sponsorship, and missing stock signals remain Search presence only. "
+                    "A location is counted when at least one product visible in the "
+                    "current scope has verified evidence."
+                ),
+            },
             "distribution_gaps": {
                 "status": "search_non_observation",
                 "definition": (
@@ -827,14 +984,42 @@ class PriceMonitoringProjector:
                 "locations": gap_locations,
             },
             "price_distribution": distribution,
-            "price_histogram": _price_histogram(float(row["price"]) for row in visible),
+            "search_price_distribution": search_distribution,
+            "price_histogram": _price_histogram(float(row["price"]) for row in verified_visible),
+            "search_price_histogram": _price_histogram(float(row["price"]) for row in visible),
             "brand_portfolio": [
                 {
                     "brand_type": value,
-                    "products": len({row["product_id"] for row in rows}),
-                    "locations": len({row["location"].scope_key for row in rows}),
+                    "products": len(
+                        {row["product_id"] for row in rows if row["verified_local_availability"]}
+                    ),
+                    "search_observed_products": len({row["product_id"] for row in rows}),
+                    "locations": len(
+                        {
+                            row["location"].scope_key
+                            for row in rows
+                            if row["verified_local_availability"]
+                        }
+                    ),
+                    "search_observed_locations": len({row["location"].scope_key for row in rows}),
+                    "verified_available_locations": len(
+                        {
+                            row["location"].scope_key
+                            for row in rows
+                            if row["verified_local_availability"]
+                        }
+                    ),
                     "observations": len(rows),
-                    "median_price": _round(median(float(row["price"]) for row in rows))
+                    "median_price": _round(
+                        median(
+                            float(row["price"])
+                            for row in rows
+                            if row["verified_local_availability"]
+                        )
+                    )
+                    if any(row["verified_local_availability"] for row in rows)
+                    else None,
+                    "search_median_price": _round(median(float(row["price"]) for row in rows))
                     if rows
                     else None,
                 }
@@ -901,16 +1086,37 @@ class PriceMonitoringProjector:
 
     @staticmethod
     def _availability_summary(rows: list[JsonObject]) -> JsonObject:
-        # A positive Search price is the governed in-stock signal for this module.
-        # Rows reach this projection only after the positive-price admission rule.
+        verified = [row for row in rows if row["verified_local_availability"]]
+        explicitly_out = [
+            row for row in rows if row["availability_status"] == "explicitly_out_of_stock"
+        ]
+        unverified = [
+            row
+            for row in rows
+            if row["availability_status"] in {"unverified_sponsored", "unverified"}
+        ]
+        known = len(verified) + len(explicitly_out)
         return {
-            "status": "observed" if rows else "unavailable",
-            "known_observations": len(rows),
-            "in_stock_observations": len(rows),
-            "rate": 1.0 if rows else None,
+            "status": "verified" if verified else "unverified" if rows else "unavailable",
+            "search_observations": len(rows),
+            "known_observations": known,
+            # Retained for consumers of the earlier contract; it is now the strict,
+            # verified count rather than a positive-price count.
+            "in_stock_observations": len(verified),
+            "verified_in_stock_observations": len(verified),
+            "explicitly_out_of_stock_observations": len(explicitly_out),
+            "unverified_observations": len(unverified),
+            "search_observed_locations": len({row["location"].scope_key for row in rows}),
+            "verified_available_locations": len({row["location"].scope_key for row in verified}),
+            "explicitly_out_of_stock_locations": len(
+                {row["location"].scope_key for row in explicitly_out}
+            ),
+            "unverified_locations": len({row["location"].scope_key for row in unverified}),
+            "rate": _round(len(verified) / known) if known else None,
             "definition": (
-                "A product observed in Search with a price greater than zero is treated "
-                "as available/in stock at that location."
+                "Verified local availability requires an explicit in-stock signal from "
+                "an organic Search result. Sponsored placements, unknown sponsorship, "
+                "and missing stock signals are retained as Search presence only."
             ),
         }
 
@@ -1027,7 +1233,21 @@ class PriceMonitoringProjector:
     @staticmethod
     def _location_summary(rows: list[JsonObject]) -> JsonObject:
         location: PriceLocation = rows[0]["location"]
-        prices = [float(row["price"]) for row in rows]
+        verified = [row for row in rows if row["verified_local_availability"]]
+        prices = [float(row["price"]) for row in verified]
+        search_prices = [float(row["price"]) for row in rows]
+        explicitly_out = [
+            row for row in rows if row["availability_status"] == "explicitly_out_of_stock"
+        ]
+        availability_status = (
+            "verified_in_stock"
+            if verified
+            else "explicitly_out_of_stock"
+            if explicitly_out
+            else "unverified_sponsored"
+            if any(row["availability_status"] == "unverified_sponsored" for row in rows)
+            else "unverified"
+        )
         sponsorship = [
             bool(row["is_sponsored"]) for row in rows if row.get("is_sponsored") is not None
         ]
@@ -1040,6 +1260,10 @@ class PriceMonitoringProjector:
             if not any(sponsorship)
             else "mixed"
         )
+        sponsorship_values = {row.get("is_sponsored") for row in rows}
+        aggregate_is_sponsored = (
+            next(iter(sponsorship_values)) if len(sponsorship_values) == 1 else None
+        )
         return {
             "scope_key": location.scope_key,
             "kind": location.kind,
@@ -1051,12 +1275,22 @@ class PriceMonitoringProjector:
             "country": location.country,
             "latitude": location.latitude,
             "longitude": location.longitude,
-            "products": len({row["product_id"] for row in rows}),
+            "products": len({row["product_id"] for row in verified}),
+            "search_observed_products": len({row["product_id"] for row in rows}),
             "observations": len(rows),
-            "minimum_price": _round(min(prices)),
-            "median_price": _round(median(prices)),
-            "maximum_price": _round(max(prices)),
+            "verified_availability_observations": len(verified),
+            "minimum_price": _round(min(prices)) if prices else None,
+            "median_price": _round(median(prices)) if prices else None,
+            "maximum_price": _round(max(prices)) if prices else None,
+            "search_minimum_price": _round(min(search_prices)),
+            "search_median_price": _round(median(search_prices)),
+            "search_maximum_price": _round(max(search_prices)),
             "sponsorship_status": sponsorship_status,
+            "is_sponsored": aggregate_is_sponsored,
+            "search_observed": True,
+            "in_stock": rows[0]["in_stock"] if len(rows) == 1 else None,
+            "availability_status": availability_status,
+            "verified_local_availability": bool(verified),
         }
 
     @staticmethod
@@ -1067,7 +1301,17 @@ class PriceMonitoringProjector:
         *,
         state: str | None,
     ) -> JsonObject:
-        prices = [float(row["price"]) for row in rows]
+        verified = [row for row in rows if row["verified_local_availability"]]
+        prices = [float(row["price"]) for row in verified]
+        search_prices = [float(row["price"]) for row in rows]
+        explicitly_out = [
+            row for row in rows if row["availability_status"] == "explicitly_out_of_stock"
+        ]
+        search_location_keys = {row["location"].scope_key for row in rows}
+        verified_location_keys = {row["location"].scope_key for row in verified}
+        explicitly_out_location_keys = {
+            row["location"].scope_key for row in explicitly_out
+        } - verified_location_keys
         latitudes = [
             row["location"].latitude for row in rows if row["location"].latitude is not None
         ]
@@ -1081,12 +1325,22 @@ class PriceMonitoringProjector:
             "state": key if level == "state" else state,
             "city": key if level == "city" else None,
             "zipcode": key if level == "zipcode" else None,
-            "locations": len({row["location"].scope_key for row in rows}),
-            "products": len({row["product_id"] for row in rows}),
+            "locations": len(verified_location_keys),
+            "products": len({row["product_id"] for row in verified}),
             "observations": len(rows),
+            "search_observed_locations": len(search_location_keys),
+            "verified_available_locations": len(verified_location_keys),
+            "explicitly_out_of_stock_locations": len(explicitly_out_location_keys),
+            "unverified_locations": len(
+                search_location_keys - verified_location_keys - explicitly_out_location_keys
+            ),
+            "search_observed_products": len({row["product_id"] for row in rows}),
+            "verified_available_products": len({row["product_id"] for row in verified}),
+            "verified_availability_observations": len(verified),
             "latitude": _round(median(latitudes), 6) if latitudes else None,
             "longitude": _round(median(longitudes), 6) if longitudes else None,
             "price_stats": _price_stats(prices),
+            "search_price_stats": _price_stats(search_prices),
         }
 
     @staticmethod

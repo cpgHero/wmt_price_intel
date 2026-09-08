@@ -257,13 +257,27 @@ class AnalysisResultV2Builder:
         scoreable_competitors = [
             competitor for competitor in competitors if competitor not in unavailable_competitors
         ]
+        required_availability_retailers = {benchmark_retailer, *scoreable_competitors}
+        coverage_by_retailer = {str(fact.get("retailer_id")): fact for fact in coverage_facts}
+        verified_availability_contract_present = all(
+            "verified_available_offers" in coverage_by_retailer.get(retailer, {})
+            for retailer in required_availability_retailers
+        )
+        verified_availability_ready = verified_availability_contract_present and all(
+            int(coverage_by_retailer[retailer].get("verified_available_offers") or 0) > 0
+            for retailer in required_availability_retailers
+        )
         matching_v2_certification_ready = matching_v2_certification_is_complete(
             source,
             scoreable_competitors,
             unavailable_competitors,
         )
-        ready_to_share = bool(comparisons) and (
-            matched_competitors == set(scoreable_competitors) or matching_v2_certification_ready
+        ready_to_share = (
+            bool(comparisons)
+            and verified_availability_ready
+            and (
+                matched_competitors == set(scoreable_competitors) or matching_v2_certification_ready
+            )
         )
         result: JsonObject = {
             "schema_version": "2.0.0",
@@ -292,7 +306,9 @@ class AnalysisResultV2Builder:
             },
             "data_quality": {
                 "status": (
-                    "warning"
+                    "blocked"
+                    if not verified_availability_ready
+                    else "warning"
                     if any(int(value) > 0 for value in data_quality_facts.values())
                     else "ready"
                 ),
@@ -316,6 +332,13 @@ class AnalysisResultV2Builder:
                         "status": "passed" if comparisons else "warning",
                         "evidence_refs": sorted(
                             {fact.evidence_ref for fact in comparison_facts} or {source_evidence}
+                        ),
+                    },
+                    {
+                        "id": "verified-local-availability",
+                        "status": "passed" if verified_availability_ready else "failed",
+                        "evidence_refs": sorted(
+                            {ref for row in coverage for ref in row["evidence_refs"]}
                         ),
                     },
                     *(
@@ -377,9 +400,23 @@ class AnalysisResultV2Builder:
             metric_refs = []
             for field, label, unit in (
                 ("offers", "Observed offers", "offers"),
-                ("in_scope_offers", "Qualifying offers", "offers"),
-                ("in_scope_zips", "Qualifying ZIPs", "zipcodes"),
-                ("in_scope_stores", "Qualifying stores", "stores"),
+                ("in_scope_offers", "Search-qualified offers", "offers"),
+                ("in_scope_zips", "Search-qualified ZIP contexts", "zipcodes"),
+                ("in_scope_stores", "Search-qualified store contexts", "stores"),
+                ("verified_available_offers", "Verified locally available offers", "offers"),
+                ("verified_available_zips", "Verified-available ZIPs", "zipcodes"),
+                ("verified_available_stores", "Verified-available stores", "stores"),
+                (
+                    "explicitly_out_of_stock_search_offers",
+                    "Explicitly out-of-stock Search offers",
+                    "offers",
+                ),
+                ("sponsored_search_offers", "Sponsored Search offers", "offers"),
+                (
+                    "unverified_availability_search_offers",
+                    "Search offers with unverified local availability",
+                    "offers",
+                ),
                 (
                     "seller_verified_first_party_offers",
                     "First-party seller verified offers",
@@ -401,7 +438,11 @@ class AnalysisResultV2Builder:
                         [evidence_ref],
                     )
                 )
-                if field == "in_scope_offers":
+                if field == (
+                    "verified_available_offers"
+                    if "verified_available_offers" in fact
+                    else "in_scope_offers"
+                ):
                     assortment_refs.append(metric_id)
             rows.append(
                 {
@@ -747,7 +788,16 @@ class AnalysisResultV2Builder:
         coverage_parts = [source_sentence]
         for row in coverage:
             retailer = _display_id(row["retailer_id"])
-            selected = [
+            verified_selected = [
+                metric_index[str(ref)]
+                for ref in row["metric_refs"]
+                if str(ref) in metric_index
+                and (
+                    str(ref).endswith("verified_available_zips")
+                    or str(ref).endswith("verified_available_stores")
+                )
+            ]
+            selected = verified_selected or [
                 metric_index[str(ref)]
                 for ref in row["metric_refs"]
                 if str(ref) in metric_index
@@ -759,7 +809,12 @@ class AnalysisResultV2Builder:
                     for metric in selected
                 )
                 coverage_parts.append(
-                    f"{retailer} contributes {details} to the qualifying footprint."
+                    f"{retailer} contributes {details} to the "
+                    + (
+                        "verified-available footprint."
+                        if verified_selected
+                        else "legacy Search-qualified footprint."
+                    )
                 )
         coverage_refs, coverage_evidence = refs_for(coverage)
 

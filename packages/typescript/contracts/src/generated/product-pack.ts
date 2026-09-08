@@ -15,6 +15,9 @@ export interface RetailCompetitiveIntelligenceProductPack {
      */
     target_terms?: [string, ...string[]];
     target_attribute?: string;
+    /**
+     * Category-discovery admission policy. It does not establish local carriage; reporting requires explicit in-stock, non-sponsored local Search evidence.
+     */
     availability_policy?: "search_presence" | "in_stock_only" | "retailer_specific";
     require_positive_price?: boolean;
     [k: string]: unknown;
@@ -106,6 +109,9 @@ export interface RetailCompetitiveIntelligenceProductPack {
       low_metric: string;
       high_metric: string;
     };
+    /**
+     * Legacy comparison-policy selector retained for compatibility. Location-scoped comparisons always require explicit in-stock, non-sponsored local Search evidence.
+     */
     availability_policy?: "search_presence" | "in_stock_only" | "retailer_specific";
     relationship_scope_policy?: {
       default_scope_mode: "global" | "observed_benchmark_product_footprint" | "explicit_benchmark_locations";

@@ -21,7 +21,10 @@ export async function GET(
   if (!result.data) {
     return NextResponse.json(
       { error: result.error ?? "Product evidence is unavailable." },
-      { status: result.status },
+      {
+        status: result.status,
+        headers: { "Cache-Control": "private, no-store" },
+      },
     );
   }
   if (new URL(request.url).searchParams.get("format") === "csv") {
@@ -33,5 +36,7 @@ export async function GET(
       },
     });
   }
-  return NextResponse.json(result.data);
+  return NextResponse.json(result.data, {
+    headers: { "Cache-Control": "private, no-store" },
+  });
 }

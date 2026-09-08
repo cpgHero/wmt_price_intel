@@ -6,17 +6,18 @@
   "additionalProperties": false,
   "required": ["schema_version", "analysis_id", "generated_at", "product_pack", "source", "filters", "summary", "brand_options", "retailers", "rungs"],
   "properties": {
-    "schema_version": { "const": "1.1.0" },
+    "schema_version": { "const": "1.2.0" },
     "analysis_id": { "type": "string", "minLength": 1 },
     "generated_at": { "type": "string", "format": "date-time" },
     "product_pack": { "$ref": "#/$defs/idNameVersion" },
     "source": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["authority", "price_grain", "assignment_rule", "anchor_rule"],
+      "required": ["authority", "price_grain", "availability_rule", "assignment_rule", "anchor_rule"],
       "properties": {
         "authority": { "const": "Search" },
-        "price_grain": { "const": "retailer product x median positive shelf price across observed locations" },
+        "price_grain": { "const": "retailer product x median positive Search-listed package price across verified-available locations" },
+        "availability_rule": { "const": "explicit in-stock signal from an organic Search result" },
         "assignment_rule": { "const": "price only; no product-match relationship is used" },
         "anchor_rule": { "type": "string", "minLength": 1 }
       }
@@ -70,7 +71,35 @@
     "retailer": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "name", "status", "location_dimension", "sku_count", "eligible_locations", "observed_locations", "verified_first_party_skus", "seller_unverified_skus", "seller_not_governed_skus", "population_checksum", "reason"],
+      "required": ["id", "name", "status", "location_dimension", "sku_count", "eligible_locations", "observed_locations", "verified_available_locations", "search_observed_locations", "search_observed_skus", "verified_first_party_skus", "seller_unverified_skus", "seller_not_governed_skus", "population_checksum", "reason"],
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "available" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "sku_count": { "minimum": 1 },
+              "observed_locations": { "minimum": 1 },
+              "verified_available_locations": { "minimum": 1 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "unavailable" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "sku_count": { "maximum": 0 },
+              "observed_locations": { "maximum": 0 },
+              "verified_available_locations": { "maximum": 0 }
+            }
+          }
+        }
+      ],
       "properties": {
         "id": { "type": "string", "minLength": 1 },
         "name": { "type": "string", "minLength": 1 },
@@ -78,7 +107,26 @@
         "location_dimension": { "enum": ["store", "service_area"] },
         "sku_count": { "type": "integer", "minimum": 0 },
         "eligible_locations": { "type": "integer", "minimum": 0 },
-        "observed_locations": { "type": "integer", "minimum": 0 },
+        "observed_locations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Legacy alias of verified_available_locations in this corrected matrix contract; never Search reach."
+        },
+        "verified_available_locations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Distinct locations with at least one filtered SKU carrying explicit verified-local availability."
+        },
+        "search_observed_locations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Distinct Search-observed locations in the same active geography, brand-type, and brand filter scope; not local-carriage proof."
+        },
+        "search_observed_skus": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Distinct Search-observed SKUs in the same active geography, brand-type, and brand filter scope; may include products without verified local availability."
+        },
         "verified_first_party_skus": { "type": "integer", "minimum": 0 },
         "seller_unverified_skus": { "type": "integer", "minimum": 0 },
         "seller_not_governed_skus": { "type": "integer", "minimum": 0 },
@@ -89,7 +137,7 @@
     "product": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["product_id", "name", "brand", "brand_type", "seller", "seller_status", "image_url", "url", "median_price", "minimum_price", "maximum_price", "observed_locations"],
+      "required": ["product_id", "name", "brand", "brand_type", "seller", "seller_status", "image_url", "url", "median_price", "minimum_price", "maximum_price", "observed_locations", "verified_available_locations", "search_observed_locations"],
       "properties": {
         "product_id": { "type": "string", "minLength": 1 },
         "name": { "type": "string", "minLength": 1 },
@@ -102,7 +150,9 @@
         "median_price": { "type": "number", "exclusiveMinimum": 0 },
         "minimum_price": { "type": "number", "exclusiveMinimum": 0 },
         "maximum_price": { "type": "number", "exclusiveMinimum": 0 },
-        "observed_locations": { "type": "integer", "minimum": 1 }
+        "observed_locations": { "type": "integer", "minimum": 1 },
+        "verified_available_locations": { "type": "integer", "minimum": 1 },
+        "search_observed_locations": { "type": "integer", "minimum": 1 }
       }
     },
     "brandOption": {
@@ -129,7 +179,7 @@
         "sku_count": { "type": "integer", "minimum": 0 },
         "assortment_share": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
         "store_coverage": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
-        "average_price": { "type": ["number", "null"], "minimum": 0 },
+        "average_price": { "type": ["number", "null"], "exclusiveMinimum": 0 },
         "price_density": { "type": ["number", "null"], "minimum": 0 },
         "products": { "type": "array", "items": { "$ref": "#/$defs/product" } }
       }

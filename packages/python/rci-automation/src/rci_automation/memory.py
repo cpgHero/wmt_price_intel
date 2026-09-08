@@ -18,6 +18,7 @@ from rci_automation.models import (
     ScheduleRecord,
     ScheduleSource,
 )
+from rci_results.contracts import has_verified_local_availability_contract
 
 
 class InMemoryAutomationRepository:
@@ -174,11 +175,32 @@ class InMemoryAutomationRepository:
     async def list_alerts(self) -> list[AlertDefinitionRecord]:
         return sorted((rows[-1] for rows in self._alerts.values()), key=lambda row: row.stable_key)
 
+    def _certified_result(self, analysis_result_id: str) -> bool:
+        context = self._analysis_by_result.get(analysis_result_id)
+        return bool(
+            context is not None
+            and context.analysis.reporting_status == "ready"
+            and has_verified_local_availability_contract(context.analysis.result)
+        )
+
+    def _certified_event(self, event: AlertEventRecord) -> bool:
+        return self._certified_result(event.analysis_result_id) and (
+            event.baseline_analysis_result_id is None
+            or self._certified_result(event.baseline_analysis_result_id)
+        )
+
     async def list_alert_events(self, limit: int = 100) -> list[AlertEventRecord]:
-        return sorted(self._events.values(), key=lambda row: row.created_at, reverse=True)[:limit]
+        eligible = [event for event in self._events.values() if self._certified_event(event)]
+        return sorted(eligible, key=lambda row: row.created_at, reverse=True)[:limit]
 
     async def get_analysis(self, identifier: str) -> AnalysisContext | None:
         context = self._analyses.get(identifier) or self._analysis_by_result.get(identifier)
+        return copy.deepcopy(context)
+
+    async def get_active_analysis(self, identifier: str) -> AnalysisContext | None:
+        context = self._analyses.get(identifier) or self._analysis_by_result.get(identifier)
+        if context is None or context.analysis.reporting_status != "ready":
+            return None
         return copy.deepcopy(context)
 
     async def previous_analysis(self, current: AnalysisContext) -> AnalysisContext | None:
@@ -188,6 +210,7 @@ class InMemoryAutomationRepository:
             if context.analysis.created_at < current.analysis.created_at
             and context.analysis.product_pack_id == current.analysis.product_pack_id
             and context.collection_definition_id == current.collection_definition_id
+            and context.analysis.reporting_status == "ready"
         ]
         return max(candidates, key=lambda row: row.analysis.created_at, default=None)
 
@@ -198,6 +221,8 @@ class InMemoryAutomationRepository:
         async with self._lock:
             claimed = []
             for context in sorted(self._analyses.values(), key=lambda row: row.analysis.created_at):
+                if context.analysis.reporting_status != "ready":
+                    continue
                 state = self._analysis_states.get(context.analysis_result_id)
                 if state and (state[0] == "processed" or (state[2] and state[2] > now)):
                     continue
@@ -324,7 +349,10 @@ class InMemoryAutomationRepository:
             eligible = [
                 delivery
                 for delivery in self._emails.values()
-                if delivery.attempt_count < delivery.max_attempts
+                if (context := self._analysis_by_result.get(delivery.analysis_result_id))
+                is not None
+                and context.analysis.reporting_status == "ready"
+                and delivery.attempt_count < delivery.max_attempts
                 and (
                     (delivery.status == "pending" and delivery.available_at <= now)
                     or (
@@ -373,7 +401,21 @@ class InMemoryAutomationRepository:
             )
 
     async def list_email_deliveries(self, limit: int = 100) -> list[EmailDeliveryRecord]:
-        return sorted(self._emails.values(), key=lambda row: row.created_at, reverse=True)[:limit]
+        events_by_id = {event.id: event for event in self._events.values()}
+        eligible = [
+            delivery
+            for delivery in self._emails.values()
+            if self._certified_result(delivery.analysis_result_id)
+            and (
+                delivery.alert_event_id is None
+                or (
+                    (event := events_by_id.get(delivery.alert_event_id)) is not None
+                    and event.analysis_result_id == delivery.analysis_result_id
+                    and self._certified_event(event)
+                )
+            )
+        ]
+        return sorted(eligible, key=lambda row: row.created_at, reverse=True)[:limit]
 
 
 class RecordingEmailSender:

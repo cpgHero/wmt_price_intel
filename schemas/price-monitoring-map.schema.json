@@ -16,7 +16,7 @@
     "points"
   ],
   "properties": {
-    "schema_version": { "const": "1.1.0" },
+    "schema_version": { "const": "1.2.0" },
     "analysis_id": { "type": "string", "minLength": 1 },
     "retailer": { "$ref": "#/$defs/idName" },
     "product": { "$ref": "#/$defs/idName" },
@@ -41,12 +41,16 @@
         "definition": { "type": "string", "minLength": 1 }
       }
     },
-    "reference_price": { "type": ["number", "null"], "minimum": 0 },
+    "reference_price": { "type": ["number", "null"], "exclusiveMinimum": 0 },
     "display": {
       "type": "object",
       "additionalProperties": false,
       "required": [
         "observed_locations",
+        "search_observed_locations",
+        "verified_available_locations",
+        "explicitly_out_of_stock_locations",
+        "unverified_locations",
         "observed_points",
         "observed_missing_coordinates",
         "observed_sampled",
@@ -59,7 +63,19 @@
         "not_observed_sampled"
       ],
       "properties": {
-        "observed_locations": { "type": "integer", "minimum": 0 },
+        "observed_locations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Legacy alias of search_observed_locations; never proof of carriage."
+        },
+        "search_observed_locations": { "type": "integer", "minimum": 0 },
+        "verified_available_locations": { "type": "integer", "minimum": 0 },
+        "explicitly_out_of_stock_locations": { "type": "integer", "minimum": 0 },
+        "unverified_locations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "All Search-observed locations not verified in stock, including the explicitly_out_of_stock_locations subset."
+        },
         "observed_points": { "type": "integer", "minimum": 0 },
         "observed_missing_coordinates": { "type": "integer", "minimum": 0 },
         "observed_sampled": { "type": "boolean" },
@@ -90,9 +106,46 @@
     "mapPoint": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        { "$ref": "#/$defs/availabilityInvariant" },
+        {
+          "if": {
+            "properties": { "status": { "const": "observed" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "search_observed": { "const": true },
+              "price": { "type": "number", "exclusiveMinimum": 0 }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": { "status": { "const": "not_observed" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "search_observed": { "const": false },
+              "in_stock": { "const": null },
+              "is_sponsored": { "const": null },
+              "availability_status": { "const": "unverified" },
+              "verified_local_availability": { "const": false },
+              "price": { "const": null },
+              "difference_from_reference": { "const": null }
+            }
+          }
+        }
+      ],
       "required": [
         "scope_key",
         "status",
+        "search_observed",
+        "in_stock",
+        "is_sponsored",
+        "availability_status",
+        "verified_local_availability",
         "kind",
         "store_number",
         "store_name",
@@ -108,6 +161,18 @@
       "properties": {
         "scope_key": { "type": "string", "minLength": 1 },
         "status": { "enum": ["observed", "not_observed"] },
+        "search_observed": { "type": "boolean" },
+        "in_stock": { "type": ["boolean", "null"] },
+        "is_sponsored": { "type": ["boolean", "null"] },
+        "availability_status": {
+          "enum": [
+            "verified_in_stock",
+            "explicitly_out_of_stock",
+            "unverified_sponsored",
+            "unverified"
+          ]
+        },
+        "verified_local_availability": { "type": "boolean" },
         "kind": { "enum": ["store", "service_area"] },
         "store_number": { "type": ["string", "null"] },
         "store_name": { "type": ["string", "null"] },
@@ -117,9 +182,79 @@
         "country": { "type": "string" },
         "latitude": { "type": "number", "minimum": -90, "maximum": 90 },
         "longitude": { "type": "number", "minimum": -180, "maximum": 180 },
-        "price": { "type": ["number", "null"], "minimum": 0 },
+        "price": { "type": ["number", "null"], "exclusiveMinimum": 0 },
         "difference_from_reference": { "type": ["number", "null"] }
       }
+    },
+    "availabilityInvariant": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "availability_status": { "const": "verified_in_stock" },
+            "in_stock": { "const": true },
+            "is_sponsored": { "const": false },
+            "verified_local_availability": { "const": true }
+          },
+          "required": [
+            "availability_status",
+            "in_stock",
+            "is_sponsored",
+            "verified_local_availability"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "availability_status": { "const": "explicitly_out_of_stock" },
+            "in_stock": { "const": false },
+            "verified_local_availability": { "const": false }
+          },
+          "required": [
+            "availability_status",
+            "in_stock",
+            "verified_local_availability"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "availability_status": { "const": "unverified_sponsored" },
+            "in_stock": { "enum": [true, null] },
+            "is_sponsored": { "const": true },
+            "verified_local_availability": { "const": false }
+          },
+          "required": [
+            "availability_status",
+            "in_stock",
+            "is_sponsored",
+            "verified_local_availability"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "availability_status": { "const": "unverified" },
+            "in_stock": { "enum": [true, null] },
+            "is_sponsored": { "enum": [false, null] },
+            "verified_local_availability": { "const": false }
+          },
+          "required": [
+            "availability_status",
+            "in_stock",
+            "is_sponsored",
+            "verified_local_availability"
+          ],
+          "not": {
+            "type": "object",
+            "properties": {
+              "in_stock": { "const": true },
+              "is_sponsored": { "const": false }
+            },
+            "required": ["in_stock", "is_sponsored"]
+          }
+        }
+      ]
     }
   }
 }

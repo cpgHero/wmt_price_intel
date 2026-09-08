@@ -1,4 +1,4 @@
-"""Canonical Search-authoritative product/location observations.
+"""Canonical Search-observed price-placement/product-location evidence.
 
 This module is the shared upstream boundary for retailer Price Intelligence and
 cross-retailer Competitive Intelligence.  It owns admission, location-master
@@ -14,20 +14,49 @@ import json
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from typing import Literal, cast
 
 from rci_analytics.classification import OfferClassifier
+from rci_analytics.latest_product_location import (
+    SELLER_POLICY_EXCLUSION_REASON,
+    LatestProductLocationSelector,
+    is_product_location_state,
+    normalized_observed_at,
+    product_location_key,
+)
 from rci_analytics.models import ClassifiedOffer, JsonObject
 from rci_analytics.pdp_attributes import complete_attributes_from_pdp
 from rci_analytics.product_pack import ProductPack
 from rci_retailer_packs import GovernedBrandResolver, GovernedSellerResolver
 
-PRODUCT_LOCATION_OBSERVATION_SCHEMA_VERSION = "1.1.0"
+PRODUCT_LOCATION_OBSERVATION_SCHEMA_VERSION = "1.2.0"
 
 BrandType = Literal["private_label", "regional", "national", "unclassified"]
 BrandOrigin = Literal["user", "retailer_pack", "search", "pdp", "unresolved"]
 SellerStatus = Literal["verified_first_party", "seller_unverified", "not_governed"]
+AvailabilityStatus = Literal[
+    "verified_in_stock",
+    "explicitly_out_of_stock",
+    "unverified_sponsored",
+    "unverified",
+]
+PriceEvidenceScope = Literal["verified_local", "search_presence"]
+
+
+def classify_local_availability(
+    *,
+    in_stock: bool | None,
+    is_sponsored: bool | None,
+) -> AvailabilityStatus:
+    """Return the canonical trust classification for store-level availability."""
+
+    if in_stock is False:
+        return "explicitly_out_of_stock"
+    if is_sponsored is True:
+        return "unverified_sponsored"
+    if in_stock is True and is_sponsored is False:
+        return "verified_in_stock"
+    return "unverified"
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +122,10 @@ class ProductPriceObservation:
     regular_price: float | None = None
     discounted_price: float | None = None
     is_sponsored: bool | None = None
-    in_stock: bool = True
+    in_stock: bool | None = None
+    search_observed: bool = True
+    availability_status: AvailabilityStatus = "unverified"
+    verified_local_availability: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -118,8 +150,29 @@ class ProductLocationObservation:
     observed_at: str | None
     offer_id: str
     metric_values: tuple[tuple[str, float], ...]
+    in_stock: bool | None = None
     seller: str | None = None
     seller_status: SellerStatus = "not_governed"
+
+    @property
+    def availability_status(self) -> AvailabilityStatus:
+        """Classify local availability without promoting Search presence to carriage.
+
+        Search can establish that an item and price were listed for a store-scoped
+        query.  Verified local availability is intentionally stricter: the provider
+        must explicitly report in-stock *and* the result must be organic.  Sponsored
+        placements and legacy rows with missing sponsorship evidence remain useful
+        Search/price signals, but they cannot establish store carriage.
+        """
+
+        return classify_local_availability(
+            in_stock=self.in_stock,
+            is_sponsored=self.is_sponsored,
+        )
+
+    @property
+    def verified_local_availability(self) -> bool:
+        return self.availability_status == "verified_in_stock"
 
     def comparison_value(self, metric: str) -> float | None:
         if metric == "package_price":
@@ -142,9 +195,11 @@ class ProductLocationObservation:
             "price_metrics": dict(self.metric_values),
             "regular_price": self.regular_price,
             "discounted_price": self.discounted_price,
-            # Positive Search price is the governed availability signal.
-            "in_stock": True,
+            "search_observed": True,
+            "in_stock": self.in_stock,
             "is_sponsored": self.is_sponsored,
+            "availability_status": self.availability_status,
+            "verified_local_availability": self.verified_local_availability,
             "observed_at": self.observed_at,
             "offer_id": self.offer_id,
         }
@@ -178,8 +233,11 @@ class ProductLocationObservation:
             "regular_price": self.regular_price,
             "discounted_price": self.discounted_price,
             "currency": "USD",
-            "in_stock": True,
+            "search_observed": True,
+            "in_stock": self.in_stock,
             "is_sponsored": self.is_sponsored,
+            "availability_status": self.availability_status,
+            "verified_local_availability": self.verified_local_availability,
             "price_metrics": dict(self.metric_values),
             "observed_at": self.observed_at,
             "source_authority": "search_location_observation",
@@ -188,7 +246,14 @@ class ProductLocationObservation:
             "exclusion_reasons": [],
         }
 
-    def for_comparison(self, metric: str) -> ProductPriceObservation | None:
+    def for_comparison(
+        self,
+        metric: str,
+        *,
+        evidence_scope: PriceEvidenceScope = "verified_local",
+    ) -> ProductPriceObservation | None:
+        if evidence_scope == "verified_local" and not self.verified_local_availability:
+            return None
         value = self.comparison_value(metric)
         if value is None or value <= 0:
             return None
@@ -220,6 +285,10 @@ class ProductLocationObservation:
             regular_price=self.regular_price,
             discounted_price=self.discounted_price,
             is_sponsored=self.is_sponsored,
+            in_stock=self.in_stock,
+            search_observed=True,
+            availability_status=self.availability_status,
+            verified_local_availability=self.verified_local_availability,
         )
 
 
@@ -236,12 +305,15 @@ class ProductLocationPopulation:
     exclusion_counts: tuple[tuple[str, int], ...]
     duplicate_rows: int
     conflicting_keys: frozenset[tuple[str, str]]
+    conflicting_availability_keys: frozenset[tuple[str, str]]
     checksum: str
 
     def comparison_observations(
         self,
         product_ids: set[str],
         comparison_metric: str,
+        *,
+        evidence_scope: PriceEvidenceScope = "verified_local",
     ) -> dict[str, tuple[ProductPriceObservation, ...]]:
         grouped: dict[str, list[ProductPriceObservation]] = {
             product_id: [] for product_id in product_ids
@@ -249,7 +321,10 @@ class ProductLocationPopulation:
         for observation in self.observations:
             if observation.product_id not in product_ids:
                 continue
-            projected = observation.for_comparison(comparison_metric)
+            projected = observation.for_comparison(
+                comparison_metric,
+                evidence_scope=evidence_scope,
+            )
             if projected is not None:
                 grouped[observation.product_id].append(projected)
         return {
@@ -265,32 +340,6 @@ class ProductLocationPopulation:
             )
             for product_id, observations in grouped.items()
         }
-
-
-def _observed_at(value: str | None) -> datetime:
-    normalized = _normalized_observed_at(value)
-    if normalized is None:
-        return datetime.min.replace(tzinfo=UTC)
-    return datetime.fromisoformat(normalized.replace("Z", "+00:00"))
-
-
-def _normalized_observed_at(value: str | None) -> str | None:
-    """Return a Search timestamp as an explicit RFC 3339 UTC instant.
-
-    Historical database rows may contain timezone-naive ISO values even though
-    collection timestamps are UTC. Normalize once at the canonical
-    product-location boundary so every downstream contract receives the same
-    unambiguous value.
-    """
-
-    if not value:
-        return None
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        return None
-    parsed = parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
-    return parsed.isoformat().replace("+00:00", "Z")
 
 
 def _location_from_offer(
@@ -348,7 +397,10 @@ def _population_checksum(observations: Iterable[ProductLocationObservation]) -> 
             "price": row.package_price,
             "regular_price": row.regular_price,
             "discounted_price": row.discounted_price,
+            "in_stock": row.in_stock,
             "is_sponsored": row.is_sponsored,
+            "availability_status": row.availability_status,
+            "verified_local_availability": row.verified_local_availability,
             "observed_at": row.observed_at,
             "metrics": row.metric_values,
         }
@@ -366,7 +418,7 @@ def _population_checksum(observations: Iterable[ProductLocationObservation]) -> 
 
 
 class ProductLocationProjector:
-    """Build the canonical latest positive Search population for one retailer."""
+    """Build canonical latest Search-listed price evidence for one retailer."""
 
     def __init__(
         self,
@@ -396,9 +448,10 @@ class ProductLocationProjector:
         eligible_location_lookup = eligible_location_index or location_lookup
         context = product_context or {}
         excluded = Counter[str]()
-        selected: dict[tuple[str, str], ProductLocationObservation] = {}
+        selector: LatestProductLocationSelector[ProductLocationObservation | None] = (
+            LatestProductLocationSelector()
+        )
         conflicting_keys: set[tuple[str, str]] = set()
-        duplicate_rows = 0
         classified_rows = 0
         eligible_input_rows = 0
         excluded_rows = 0
@@ -459,12 +512,14 @@ class ProductLocationProjector:
                 else None
             )
             seller_status: SellerStatus = "not_governed"
+            if classified.scope_reason == SELLER_POLICY_EXCLUSION_REASON:
+                reasons.append("known_third_party_seller")
             if self._sellers is not None:
                 seller_resolution = self._sellers.resolve(
                     offer.retailer_id,
                     observed_seller,
                 )
-                if not seller_resolution.eligible:
+                if not seller_resolution.eligible and "known_third_party_seller" not in reasons:
                     reasons.append("known_third_party_seller")
                 elif seller_resolution.status in {
                     "verified_first_party",
@@ -472,7 +527,7 @@ class ProductLocationProjector:
                     "not_governed",
                 }:
                     seller_status = seller_resolution.status
-            if not classified.in_scope:
+            if not is_product_location_state(classified):
                 reasons.append("out_of_scope")
             if offer.price is None or offer.price <= 0:
                 reasons.append("missing_or_zero_price")
@@ -483,6 +538,23 @@ class ProductLocationProjector:
             if reasons:
                 excluded_rows += 1
                 excluded.update(reasons)
+                state_blockers = {
+                    "out_of_scope",
+                    "missing_location_identity",
+                }
+                if any(reason in state_blockers for reason in reasons):
+                    continue
+                selector.add(
+                    None,
+                    retailer_id=offer.retailer_id,
+                    product_id=offer.retailer_product_id,
+                    store_number=location.store_number,
+                    zipcode=location.zipcode,
+                    observed_at=normalized_observed_at(offer.collected_at),
+                    in_stock=offer.in_stock,
+                    is_sponsored=offer.is_sponsored,
+                    tie_breaker=offer.offer_id,
+                )
                 continue
             eligible_input_rows += 1
             assert offer.price is not None
@@ -559,7 +631,7 @@ class ProductLocationProjector:
                     float(offer.discounted_price) if offer.discounted_price is not None else None
                 ),
                 is_sponsored=offer.is_sponsored,
-                observed_at=_normalized_observed_at(offer.collected_at),
+                observed_at=normalized_observed_at(offer.collected_at),
                 offer_id=offer.offer_id,
                 metric_values=tuple(
                     sorted(
@@ -573,25 +645,35 @@ class ProductLocationProjector:
                         }.items()
                     )
                 ),
+                in_stock=offer.in_stock,
                 seller=observed_seller,
                 seller_status=seller_status,
             )
-            key = (observation.product_id, observation.location.scope_key)
-            existing = selected.get(key)
-            if existing is None:
-                selected[key] = observation
-                continue
-            duplicate_rows += 1
-            if existing.package_price != observation.package_price:
-                conflicting_keys.add(key)
-            current_rank = (_observed_at(existing.observed_at), existing.offer_id)
-            next_rank = (_observed_at(observation.observed_at), observation.offer_id)
-            if next_rank > current_rank:
-                selected[key] = observation
+            selection_key = product_location_key(
+                retailer_id=observation.retailer_id,
+                product_id=observation.product_id,
+                store_number=observation.location.store_number,
+                zipcode=observation.location.zipcode,
+            )
+            assert selection_key is not None
+            existing = selector.get(selection_key)
+            if existing is not None and existing.package_price != observation.package_price:
+                conflicting_keys.add((observation.product_id, observation.location.scope_key))
+            selector.add(
+                observation,
+                retailer_id=observation.retailer_id,
+                product_id=observation.product_id,
+                store_number=observation.location.store_number,
+                zipcode=observation.location.zipcode,
+                observed_at=observation.observed_at,
+                in_stock=observation.in_stock,
+                is_sponsored=observation.is_sponsored,
+                tie_breaker=observation.offer_id,
+            )
 
         observations = tuple(
             sorted(
-                selected.values(),
+                (row for row in selector.values() if row is not None),
                 key=lambda row: (
                     row.product_id,
                     row.location.state or "",
@@ -610,7 +692,13 @@ class ProductLocationProjector:
             eligible_input_rows=eligible_input_rows,
             excluded_rows=excluded_rows,
             exclusion_counts=tuple(sorted(excluded.items())),
-            duplicate_rows=duplicate_rows,
+            duplicate_rows=selector.duplicate_rows,
             conflicting_keys=frozenset(conflicting_keys),
+            conflicting_availability_keys=frozenset(
+                (product_id, f"{location_retailer_id}|{kind}|{location_value}")
+                for location_retailer_id, product_id, kind, location_value in (
+                    selector.conflicting_availability_keys
+                )
+            ),
             checksum=_population_checksum(observations),
         )

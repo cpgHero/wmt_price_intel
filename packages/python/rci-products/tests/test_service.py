@@ -173,6 +173,71 @@ async def test_one_cached_pdp_enriches_all_linked_serp_observations_without_over
     assert highlights[0]["role"] == "PDP-enriched reference"
 
 
+async def test_latest_pdp_missing_seller_does_not_reuse_older_first_party_identity() -> None:
+    repository = InMemoryProductDetailRepository(REPOSITORY_ROOT)
+    product = await _product(repository)
+    endpoint = ProductDetailCatalog.from_path(REPOSITORY_ROOT).get("walmart_us")
+    adapter = MetricsCartProductDetailAdapter(endpoint)
+    observations = (
+        (
+            ProductDetailRequestContext(
+                product_id="677669806",
+                zipcode="90020",
+                store="2464",
+                fulfillment_type="pickup",
+            ),
+            datetime(2026, 8, 8, 12, tzinfo=UTC),
+            {
+                "name": "Fresh whole milk",
+                "retailer_product_id": "677669806",
+                "seller": "Walmart.com",
+            },
+        ),
+        (
+            ProductDetailRequestContext(
+                product_id="677669806",
+                zipcode="10001",
+                store="1234",
+                fulfillment_type="pickup",
+            ),
+            datetime(2026, 8, 8, 13, tzinfo=UTC),
+            {
+                "name": "Fresh whole milk",
+                "retailer_product_id": "677669806",
+            },
+        ),
+    )
+    for index, (context, observed_at, payload) in enumerate(observations):
+        run = await repository.create_run(max_credits=2)
+        await repository.enqueue(run.id, product, endpoint, context)
+        job = (await repository.claim(f"worker-{index}", limit=1, lease_seconds=60))[0]
+        await repository.record_fetch(
+            job,
+            f"worker-{index}",
+            ProductDetailFetchResult(
+                observed_at=observed_at,
+                http_status=200,
+                billable=True,
+                credits=2,
+                raw_artifact=ProductDetailRawArtifact(
+                    artifact_id=f"raw-seller-{index}",
+                    storage_uri=f"s3://test/pdp/seller-{index}.json.gz",
+                    checksum=str(index + 1) * 64,
+                    byte_size=1,
+                    metadata={},
+                ),
+                normalized=adapter.normalize(payload, context),
+            ),
+            cache_ttl_seconds=3600,
+        )
+
+    # The canonical identity intentionally preserves durable non-null enrichment,
+    # so this assertion proves that the latest-state projection cannot fall back to it.
+    assert (await repository.product_document(product.id))["identity"]["seller"] == "Walmart.com"
+    highlights = await repository.publication_highlights(["raw-walmart-test"])
+    assert highlights[0]["seller"] is None
+
+
 class SelectiveBlockingFetcher(FixtureFetcher):
     def __init__(self, payload: dict[str, object], slow_product_id: str) -> None:
         super().__init__(payload)

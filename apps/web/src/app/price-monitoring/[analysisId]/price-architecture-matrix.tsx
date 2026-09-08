@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, type CSSProperties } from "react";
 
+import { hasVerifiedArchitectureRetailerEvidence } from "@/lib/availability-presentation";
 import type { PriceArchitectureMatrix } from "@/lib/api";
 
 type MatrixRung = PriceArchitectureMatrix["rungs"][number];
@@ -17,12 +18,12 @@ type CellMetric =
 type RungMethod = "benchmark" | "fixed-050" | "fixed-100";
 
 const metricLabels: Record<CellMetric, string> = {
-  products: "Products + prices",
-  sku_count: "SKU count",
-  assortment_share: "% of assortment",
-  store_coverage: "Store coverage",
-  average_price: "Average price",
-  price_density: "Price density",
+  products: "Verified products + prices",
+  sku_count: "Verified-available SKU count",
+  assortment_share: "% of verified assortment",
+  store_coverage: "Verified availability coverage",
+  average_price: "Verified local average price",
+  price_density: "Verified price density",
 };
 
 const brandLabels: Record<string, string> = {
@@ -80,9 +81,9 @@ function footprintLabel(
   const locationLabel =
     retailer.location_dimension === "service_area" ? "service areas" : "stores";
   const coverage = retailer.eligible_locations
-    ? ` · ${percent(product.observed_locations / retailer.eligible_locations)}`
+    ? ` · ${percent(product.verified_available_locations / retailer.eligible_locations)}`
     : "";
-  return `${count(product.observed_locations)} observed ${locationLabel}${coverage}`;
+  return `${count(product.verified_available_locations)} verified in-stock ${locationLabel}${coverage} · ${count(product.search_observed_locations)} Search-observed`;
 }
 
 function methodQuery(method: RungMethod) {
@@ -132,9 +133,9 @@ function ProductDrawer({
             <p className="section-kicker">Price-rung evidence</p>
             <h2>{retailer.name}</h2>
             <p>
-              {rung.label} · {count(cell.sku_count)} observed SKUs ·{" "}
-              {percent(cell.store_coverage)} of eligible locations reached by at
-              least one SKU in this rung
+              {rung.label} · {count(cell.sku_count)} SKUs with verified local
+              availability · {percent(cell.store_coverage)} of eligible
+              locations verify at least one SKU in this rung
             </p>
           </div>
           <button
@@ -146,9 +147,10 @@ function ProductDrawer({
           </button>
         </header>
         <div className="pi-matrix-drawer-note">
-          Products appear here because their median positive Search shelf price
-          falls in this band. This does not assert that any two products are
-          substitutes or matches.
+          Products appear here only when at least one non-sponsored Search row
+          explicitly reports in stock; their median verified local Search price
+          falls in this band. This view does not assert that any two products
+          are substitutes or matches.
         </div>
         <div className="pi-matrix-product-list">
           {cell.products.map((product) => (
@@ -175,18 +177,18 @@ function ProductDrawer({
                 </span>
                 <dl>
                   <div>
-                    <dt>Median price</dt>
+                    <dt>Median verified local price</dt>
                     <dd>{currency(product.median_price)}</dd>
                   </div>
                   <div>
-                    <dt>Observed range</dt>
+                    <dt>Verified local price range</dt>
                     <dd>
                       {currency(product.minimum_price)}–
                       {currency(product.maximum_price)}
                     </dd>
                   </div>
                   <div>
-                    <dt>Observed locations</dt>
+                    <dt>Availability and Search reach</dt>
                     <dd>{footprintLabel(product, retailer)}</dd>
                   </div>
                   <div>
@@ -253,9 +255,13 @@ export function PriceArchitectureMatrixWorkspace({
     const controller = new AbortController();
     fetch(
       `/api/price-monitoring/${encodeURIComponent(analysisId)}/architecture-matrix?${requestKey}`,
-      { signal: controller.signal },
+      { cache: "no-store", signal: controller.signal },
     )
       .then(async (response) => {
+        if (response.status === 409) {
+          window.location.reload();
+          throw new DOMException("Report quarantined", "AbortError");
+        }
         if (!response.ok) {
           const body = (await response.json().catch(() => ({}))) as {
             error?: string;
@@ -284,7 +290,7 @@ export function PriceArchitectureMatrixWorkspace({
   }, [analysisId, requestKey]);
 
   const availableRetailers = matrix?.retailers.filter(
-    (retailer) => retailer.status === "available",
+    hasVerifiedArchitectureRetailerEvidence,
   );
   const maxima = useMemo(() => {
     const values = new Map<string, number>();
@@ -330,6 +336,19 @@ export function PriceArchitectureMatrixWorkspace({
   const anchor = matrix.retailers.find(
     (retailer) => retailer.id === matrix.filters.anchor_retailer_id,
   );
+  if (!anchor) {
+    return (
+      <section className="pi-matrix-error" role="alert">
+        <strong>Price architecture is unavailable</strong>
+        <p>The governed anchor-retailer record is missing from this matrix.</p>
+      </section>
+    );
+  }
+  const unavailableRetailers = matrix.retailers.filter(
+    (retailer) => !hasVerifiedArchitectureRetailerEvidence(retailer),
+  );
+  const anchorEvidenceAvailable =
+    hasVerifiedArchitectureRetailerEvidence(anchor);
   const crowded = matrix.rungs.find(
     (rung) => rung.id === matrix.summary.most_crowded_rung_id,
   );
@@ -343,9 +362,9 @@ export function PriceArchitectureMatrixWorkspace({
           </p>
           <h2>Price Architecture Matrix</h2>
           <p>
-            {anchor?.name ?? "Walmart"} defines the price rungs. Every retailer
-            SKU is placed only by its median positive Search shelf price—never
-            by a product match.
+            {anchor.name} defines the price rungs. Every retailer SKU is placed
+            only by its median verified local Search price—never by a product
+            match. Sponsored-only or unknown-stock products are excluded.
           </p>
         </div>
         {loading ? (
@@ -414,17 +433,19 @@ export function PriceArchitectureMatrixWorkspace({
         <article>
           <span>
             {matrix.filters.mode === "benchmark_anchored"
-              ? "Walmart price rungs"
+              ? `${anchor.name} verified-local price rungs`
               : "Fixed price bands"}
           </span>
           <strong>{count(matrix.summary.rung_count)}</strong>
           <small>
-            {count(matrix.summary.anchor_skus)} Walmart SKUs ·{" "}
+            {anchorEvidenceAvailable
+              ? `${count(matrix.summary.anchor_skus)} verified-available ${anchor.name} SKUs · `
+              : `No ${anchor.name} SKU with verified availability under the current product filters · `}
             {count(matrix.summary.anchor_price_points)} distinct price points
           </small>
         </article>
         <article>
-          <span>Competitor SKUs</span>
+          <span>Verified-available competitor SKUs</span>
           <strong>{count(matrix.summary.competitor_skus)}</strong>
           <small>
             {count(Math.max(0, availableRetailers.length - 1))} retailers
@@ -434,25 +455,29 @@ export function PriceArchitectureMatrixWorkspace({
           <span>Most crowded rung</span>
           <strong>{crowded?.label ?? "—"}</strong>
           <small>
-            {count(crowded?.competitor_sku_count ?? 0)} competitor SKUs
+            {count(crowded?.competitor_sku_count ?? 0)} verified-available
+            competitor SKUs
           </small>
         </article>
         <article>
           <span>Competitor white-space rungs</span>
           <strong>{count(matrix.summary.whitespace_rung_count)}</strong>
-          <small>No observed competitor SKU in the band</small>
+          <small>
+            No competitor SKU with verified availability in the band
+          </small>
         </article>
       </div>
 
       <div className="pi-matrix-method-note">
         <strong>How to read it</strong>
         <span>
-          One SKU contributes once, using its location-footprint median package
-          price. Store coverage is the distinct union of locations reached by
-          products in the cell. Known third-party marketplace sellers are
-          excluded; products without seller evidence remain visibly unverified.
-          Empty cells mean no eligible SKU was observed in the band—not
-          necessarily that the retailer has no such product.
+          One SKU contributes once, using its verified-local-availability median
+          package price. Coverage is the distinct union of verified in-stock
+          locations for products in the cell. Search reach is retained
+          separately on each product. Known third-party marketplace sellers are
+          excluded; products without seller evidence remain labeled seller
+          unknown. Empty cells mean no eligible SKU has verified availability in
+          the band—not necessarily that the retailer has no such product.
         </span>
       </div>
 
@@ -461,13 +486,13 @@ export function PriceArchitectureMatrixWorkspace({
           <thead>
             <tr>
               <th>
-                <strong>{anchor?.name ?? "Walmart"} anchor / price rung</strong>
-                {anchor ? (
-                  <>
-                    <span>{count(anchor.sku_count)} eligible SKUs</span>
-                    <span>{sellerCoverage(anchor)}</span>
-                  </>
-                ) : null}
+                <strong>{anchor.name} anchor / price rung</strong>
+                <span>
+                  {anchorEvidenceAvailable
+                    ? `${count(anchor.sku_count)} verified-available SKUs across ${count(anchor.verified_available_locations)} verified local locations`
+                    : "No filtered anchor SKU has verified local availability"}
+                </span>
+                <span>{sellerCoverage(anchor)}</span>
               </th>
               {availableRetailers
                 .filter(
@@ -477,7 +502,11 @@ export function PriceArchitectureMatrixWorkspace({
                 .map((retailer) => (
                   <th key={retailer.id}>
                     <strong>{retailer.name}</strong>
-                    <span>{count(retailer.sku_count)} eligible SKUs</span>
+                    <span>
+                      {count(retailer.sku_count)} verified-available SKUs across{" "}
+                      {count(retailer.verified_available_locations)} verified
+                      local locations
+                    </span>
                     <span>{sellerCoverage(retailer)}</span>
                   </th>
                 ))}
@@ -516,7 +545,7 @@ export function PriceArchitectureMatrixWorkspace({
                           <small>
                             {anchor
                               ? footprintLabel(product, anchor)
-                              : `${count(product.observed_locations)} observed locations`}
+                              : `${count(product.verified_available_locations)} verified in-stock locations · ${count(product.search_observed_locations)} Search-observed`}
                           </small>
                           <small>
                             {product.seller
@@ -543,7 +572,9 @@ export function PriceArchitectureMatrixWorkspace({
                         return (
                           <td className="pi-matrix-empty" key={retailer.id}>
                             <span>—</span>
-                            <small>No observed SKU in band</small>
+                            <small>
+                              No SKU with verified availability in band
+                            </small>
                           </td>
                         );
                       }
@@ -606,19 +637,19 @@ export function PriceArchitectureMatrixWorkspace({
           </tbody>
         </table>
       </div>
-      {matrix.retailers.some(
-        (retailer) => retailer.status === "unavailable",
-      ) ? (
+      {unavailableRetailers.length ? (
         <details className="pi-matrix-unavailable">
-          <summary>Retailers without usable evidence in this snapshot</summary>
+          <summary>
+            Retailers without verified local evidence in this snapshot
+          </summary>
           <ul>
-            {matrix.retailers
-              .filter((retailer) => retailer.status === "unavailable")
-              .map((retailer) => (
-                <li key={retailer.id}>
-                  <strong>{retailer.name}</strong> — {retailer.reason}
-                </li>
-              ))}
+            {unavailableRetailers.map((retailer) => (
+              <li key={retailer.id}>
+                <strong>{retailer.name}</strong> —{" "}
+                {retailer.reason ??
+                  "No explicit verified-local assortment and price evidence is available."}
+              </li>
+            ))}
           </ul>
         </details>
       ) : null}

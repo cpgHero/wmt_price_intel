@@ -31,17 +31,19 @@ export default async function PriceMonitoringPage() {
           <h1>Price Intelligence</h1>
         </div>
         <p>
-          Track the package prices each retailer presents at each observed store
-          or service area. Select a study, then drill from country to state,
-          city, product, and location.
+          Track Search-listed package prices and Search reach by store or
+          service-area query context, with verified local availability shown
+          separately. Select a study, then drill from country to state, city,
+          product, and location.
         </p>
       </header>
       <section className="source-authority-banner">
         <span>Source authority</span>
-        <strong>Search determines price and location</strong>
+        <strong>Search supplies listed price and query context</strong>
         <p>
-          PDP data adds product identity, imagery, and brand detail. It never
-          replaces the store-specific Search price.
+          Location means the store or service-area context used for Search; it
+          is not by itself proof of carriage. PDP data adds product identity,
+          imagery, and brand detail, never price or availability proof.
         </p>
       </section>
       {analyses.length === 0 ? (
@@ -50,7 +52,7 @@ export default async function PriceMonitoringPage() {
           title="No price-monitoring studies are available"
           message={
             response.error ??
-            "Complete and analyze a collection to create a store-level price view."
+            "Complete and analyze a collection to create a location-context Search-price view."
           }
         />
       ) : (

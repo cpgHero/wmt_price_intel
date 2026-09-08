@@ -67,6 +67,14 @@ async def test_postgres_schedule_and_email_claims_are_exclusive_and_idempotent()
         InMemoryReportObjectStore(),
     )
     analysis = await result_service.publish(document)
+    async with database.engine.begin() as connection:
+        await connection.execute(
+            text(
+                "UPDATE analysis_result SET reporting_status = 'ready' "
+                "WHERE id::text = :analysis_result_id"
+            ),
+            {"analysis_result_id": analysis.id},
+        )
     try:
         source = ScheduleSource(definition.id, stable_key, True, config)
         await automation.upsert_schedule(

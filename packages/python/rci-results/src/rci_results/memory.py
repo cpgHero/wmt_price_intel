@@ -94,6 +94,29 @@ class InMemoryResultsRepository:
             analysis_id = self._analysis_ids_by_record.get(identifier, identifier)
             return copy.deepcopy(self._analyses.get(analysis_id))
 
+    async def get_active(self, identifier: str) -> AnalysisRecord | None:
+        async with self._lock:
+            analysis_id = self._analysis_ids_by_record.get(identifier, identifier)
+            record = self._analyses.get(analysis_id)
+            if record is None or record.reporting_status != "ready":
+                return None
+            return copy.deepcopy(record)
+
+    async def get_by_artifact(self, artifact_id: str) -> AnalysisRecord | None:
+        async with self._lock:
+            artifact = self._artifacts.get(artifact_id)
+            if artifact is None:
+                return None
+            record = next(
+                (
+                    candidate
+                    for candidate in self._analyses.values()
+                    if candidate.analysis_run_id == artifact.analysis_run_id
+                ),
+                None,
+            )
+            return copy.deepcopy(record)
+
     async def get_by_collection_run(self, run_id: str) -> AnalysisRecord | None:
         async with self._lock:
             matching = [

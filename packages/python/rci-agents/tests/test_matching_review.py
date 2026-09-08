@@ -132,7 +132,7 @@ def test_matching_review_prompt_obeys_non_decisive_brand_roles() -> None:
     prompt = load_matching_review_prompt(REPOSITORY_ROOT)
     instructions = prompt.instructions.casefold()
 
-    assert prompt.version == "1.4.0"
+    assert prompt.version == "1.5.0"
     assert "Product Pack attribute roles" in prompt.instructions
     assert "different or unknown brands do not independently prevent" in instructions
     assert "brand agreement never overrides" in instructions
@@ -147,6 +147,10 @@ def test_matching_review_prompt_obeys_non_decisive_brand_roles() -> None:
     assert "do not emit a structured attribute proposal" in instructions
     assert "identify an exact-label contradiction" in instructions
     assert "governed brand decision" in instructions
+    assert "in_stock=true" in instructions
+    assert "is_sponsored=false" in instructions
+    assert "sponsored, out-of-stock, or unknown rows" in instructions
+    assert "must never be treated as store carriage" in instructions
 
 
 async def test_matching_review_is_ephemeral_structured_and_human_gated() -> None:

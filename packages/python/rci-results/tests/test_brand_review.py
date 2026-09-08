@@ -52,6 +52,9 @@ class FakeResults:
                                     "distinct_products": 4,
                                     "observed_locations": 80,
                                     "observed_zipcodes": 75,
+                                    "verified_available_products": 4,
+                                    "verified_available_locations": 80,
+                                    "verified_available_zipcodes": 75,
                                     "location_share": 0.8,
                                 },
                                 {
@@ -59,6 +62,9 @@ class FakeResults:
                                     "distinct_products": 3,
                                     "observed_locations": 14,
                                     "observed_zipcodes": 12,
+                                    "verified_available_products": 3,
+                                    "verified_available_locations": 14,
+                                    "verified_available_zipcodes": 12,
                                     "location_share": 0.14,
                                 },
                                 {
@@ -66,6 +72,9 @@ class FakeResults:
                                     "distinct_products": 2,
                                     "observed_locations": 10,
                                     "observed_zipcodes": 9,
+                                    "verified_available_products": 2,
+                                    "verified_available_locations": 10,
+                                    "verified_available_zipcodes": 9,
                                     "location_share": 0.1,
                                 },
                             ],
@@ -78,6 +87,9 @@ class FakeResults:
                                     "distinct_products": 3,
                                     "observed_locations": 40,
                                     "observed_zipcodes": 38,
+                                    "verified_available_products": 3,
+                                    "verified_available_locations": 40,
+                                    "verified_available_zipcodes": 38,
                                     "location_share": 0.8,
                                 }
                             ],
@@ -179,6 +191,7 @@ async def test_brand_workbench_stages_human_roles_without_immediate_reanalysis()
     assert hiland["role"] == "regional"
     assert hiland["status"] == "suggested"
     assert hiland["distribution_tier"] == "concentrated"
+    assert hiland["distribution_evidence"] == "verified_local_search_availability"
     mayfield = next(row for row in initial["brands"] if row["display_brand"] == "Mayfield")
     assert mayfield["role"] == "unclassified"
     assert mayfield["candidate_status"] == "candidate"
@@ -298,6 +311,41 @@ async def test_brand_workbench_rejects_unoffered_or_role_mismatched_mappings() -
             ),
             actor="reviewer",
         )
+
+
+@pytest.mark.asyncio
+async def test_brand_workbench_does_not_promote_explicit_zero_verified_counts() -> None:
+    results = FakeResults()
+    retailer = results.analysis.result["assortment_analysis"]["retailers"][0]  # type: ignore[index]
+    brand = retailer["brands"][1]
+    brand["verified_available_products"] = 0
+    brand["verified_available_locations"] = 0
+    brand["verified_available_zipcodes"] = 0
+    brand["distinct_products"] = 37
+    brand["observed_locations"] = 4_510
+    brand["observed_zipcodes"] = 2_700
+    brand["location_share"] = 0.99
+
+    service = BrandReviewService(  # type: ignore[arg-type]
+        results,
+        InMemoryBrandReviewRepository(),
+        FakePackLoader(),
+        retailer_names={"walmart_us": "Walmart", "aldi_us": "ALDI"},
+        brand_resolver=GovernedBrandResolver.from_repository(REPOSITORY_ROOT),
+    )
+
+    view = await service.view("fresh-milk-example")
+    validate_instance(
+        REPOSITORY_ROOT, "brand-workbench.schema.json", view, label="zero verified brand workbench"
+    )
+    hiland = next(row for row in view["brands"] if row["display_brand"] == "Hiland Dairy")
+
+    assert hiland["observed_products"] == 0
+    assert hiland["observed_locations"] == 0
+    assert hiland["observed_zipcodes"] == 0
+    assert hiland["location_share"] == 0
+    assert hiland["distribution_evidence"] == "search_brand_field"
+    assert hiland["distribution_tier"] == "unknown"
 
 
 @pytest.mark.asyncio

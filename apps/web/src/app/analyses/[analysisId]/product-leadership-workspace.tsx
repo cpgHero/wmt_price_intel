@@ -538,8 +538,8 @@ function StatusDistribution({ summary }: Readonly<{ summary: Summary }>) {
         <div>
           <h3>Store leadership status</h3>
           <p>
-            Every observed benchmark store appears in one mutually exclusive
-            status.
+            Every benchmark store with verified local evidence appears in one
+            mutually exclusive status.
           </p>
         </div>
       </header>
@@ -592,7 +592,7 @@ function Overview({
         <KpiCard
           label="Mapped Walmart stores"
           value={count(mapped)}
-          note={`${rate(mapped / Math.max(view.summary.benchmark_observed_stores, 1))} of observed stores have mapped comparison evidence`}
+          note={`${rate(mapped / Math.max(view.summary.benchmark_observed_stores, 1))} of verified-local stores have mapped comparison evidence`}
         />
         <KpiCard
           label="Comparable stores"
@@ -647,8 +647,8 @@ function Overview({
           <ul>
             <li>
               {count(view.summary.scored_stores)} of{" "}
-              {count(view.summary.benchmark_observed_stores)} observed stores
-              have comparable nearby evidence.
+              {count(view.summary.benchmark_observed_stores)} stores with
+              verified local evidence have comparable nearby evidence.
             </li>
             {leadingCompetitor ? (
               <li>
@@ -724,7 +724,7 @@ function GeographyTable({
 }>) {
   const exportRows = rows.map((row) => ({
     Geography: row.label,
-    "Observed Walmart stores": row.benchmark_observed_stores,
+    "Verified-local Walmart stores": row.benchmark_observed_stores,
     "Scored Walmart stores": row.scored_stores,
     "Coverage rate": row.coverage_rate,
     "Leader stores": row.leader_stores,
@@ -745,7 +745,7 @@ function GeographyTable({
           <thead>
             <tr>
               <th>Market</th>
-              <th>Scored / observed</th>
+              <th>Scored / verified local</th>
               <th>Coverage</th>
               <th>Leader</th>
               <th>At risk</th>
@@ -835,9 +835,9 @@ function MatchGroupAnalysis({
           note="Participating in this product group"
         />
         <KpiCard
-          label="Relationships observed"
+          label="Relationships with verified evidence"
           value={count(summary.relationshipsWithEvidence)}
-          note={`${count(summary.relationships - summary.relationshipsWithEvidence)} configured relationships had no winning nearby observation`}
+          note={`${count(summary.relationships - summary.relationshipsWithEvidence)} configured relationships had no verified nearby comparison`}
           tone={
             summary.relationshipsWithEvidence === summary.relationships
               ? "good"
@@ -891,8 +891,10 @@ function MatchGroupAnalysis({
               benchmark stores.
             </li>
             <li>
-              Search supplies price and availability; PDP and retailer packs
-              supply governed identity and brand context.
+              Search supplies listed price, query reach, explicit stock status,
+              and sponsorship. Only an explicit in-stock, non-sponsored result
+              verifies local availability; PDP and retailer packs supply
+              governed identity and brand context.
             </li>
           </ul>
         </section>
@@ -978,7 +980,7 @@ function CompetitiveHistory({
             <dd>{displayDate(view.generated_at)}</dd>
           </div>
           <div>
-            <dt>Baseline stores</dt>
+            <dt>Baseline verified-local stores</dt>
             <dd>{count(view.summary.benchmark_observed_stores)}</dd>
           </div>
           <div>
@@ -1029,9 +1031,6 @@ function StoreComparisons({
         0,
       ) / losingRows.length
     : null;
-  const sponsoredLowest = view.outcomes.filter(
-    (row) => row.competitor?.is_sponsored === true,
-  ).length;
   const discountedLowest = view.outcomes.filter(
     (row) =>
       row.competitor?.discounted_price !== null &&
@@ -1046,7 +1045,7 @@ function StoreComparisons({
         <KpiCard
           label="Scored benchmark stores"
           value={count(view.summary.scored_stores)}
-          note="One outcome per observed benchmark store"
+          note="One outcome per benchmark store with verified local evidence"
         />
         <KpiCard
           label="Stores to inspect"
@@ -1074,9 +1073,10 @@ function StoreComparisons({
           note="Search evidence shows a lower promo price"
         />
         <KpiCard
-          label="Sponsored lowest offers"
-          value={count(sponsoredLowest)}
-          note="Search result marked sponsored"
+          label="Availability evidence gate"
+          value="Passed"
+          note="All scored offers are explicit in-stock and non-sponsored"
+          tone="good"
         />
       </div>
       <section className={styles.card}>
@@ -1084,9 +1084,9 @@ function StoreComparisons({
           <div>
             <h3>Detailed store comparisons</h3>
             <p>
-              One row per observed benchmark store; prices and locations come
-              from Search evidence. Physical stores use the selected radius;
-              service areas use the governed same-ZIP rule.
+              One row per benchmark store with verified local evidence. Prices
+              and locations come from Search; physical stores use the selected
+              radius and service areas use the governed same-ZIP rule.
             </p>
           </div>
           <ExportButtons
@@ -1270,8 +1270,8 @@ function MatchedPriceMatrix({
           <h3>Matched-product price matrix</h3>
           <p>
             Certified matched items positioned across the Walmart product&apos;s
-            observed footprint. This is a product-match view—not the unmatched
-            category price-band matrix in Price Intelligence.
+            verified-local footprint. This is a product-match view—not the
+            unmatched category price-band matrix in Price Intelligence.
           </p>
         </div>
         <ExportButtons rows={exportRows} filename="matched-price-matrix" />
@@ -1284,7 +1284,7 @@ function MatchedPriceMatrix({
               <th>Comparable Walmart stores</th>
               <th>Footprint coverage</th>
               <th>Median price</th>
-              <th>Observed range</th>
+              <th>Verified local range</th>
               <th>Median vs. Walmart</th>
               <th>Store-level position</th>
             </tr>
@@ -1326,7 +1326,7 @@ function MatchedPriceMatrix({
                 </td>
                 <td>
                   {row.is_benchmark
-                    ? "Walmart observed footprint"
+                    ? "Walmart verified-local footprint"
                     : `${count(row.below_benchmark_locations)} below · ${count(row.tied_benchmark_locations)} tied · ${count(row.above_benchmark_locations)} above`}
                 </td>
               </tr>
@@ -1365,7 +1365,7 @@ function PriceLadders({
         <KpiCard
           label="Comparable Walmart stores"
           value={count(ladder.comparable_benchmark_locations)}
-          note={`${count(ladder.benchmark_observed_locations)} Walmart stores observed`}
+          note={`${count(ladder.benchmark_observed_locations)} Walmart stores with verified local evidence`}
         />
         <KpiCard
           label="Median Walmart rank"
@@ -1410,7 +1410,7 @@ function PriceLadders({
                 <th>Product</th>
                 <th>Comparable footprint</th>
                 <th>Median price</th>
-                <th>Observed range</th>
+                <th>Verified local range</th>
                 <th>Median vs. Walmart</th>
                 <th>Store positions</th>
               </tr>

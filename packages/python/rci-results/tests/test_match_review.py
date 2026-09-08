@@ -85,6 +85,7 @@ def _publication(analysis: AnalysisRecord) -> AnalysisPublicationRecord:
                     "role": "PDP-enriched reference",
                     "price": 5.47,
                     "location_scope_keys": ["walmart_us|72712|store-1"],
+                    "verified_location_scope_keys": ["walmart_us|72712|store-1"],
                 },
                 {
                     "canonical_product_id": "walmart_us:w2",
@@ -92,6 +93,7 @@ def _publication(analysis: AnalysisRecord) -> AnalysisPublicationRecord:
                     "name": "Walmart 80/20 Ground Beef",
                     "price": 4.97,
                     "location_scope_keys": ["walmart_us|72713|store-2"],
+                    "verified_location_scope_keys": ["walmart_us|72713|store-2"],
                 },
                 {
                     "canonical_product_id": "aldi_us:a1",
@@ -414,7 +416,7 @@ async def test_reanalysis_only_updates_future_policy_after_explicit_confirmation
     }
 
 
-async def test_observed_scope_is_materialized_from_search_footprint() -> None:
+async def test_observed_scope_is_materialized_from_verified_local_footprint() -> None:
     repository = InMemoryMatchReviewRepository()
     service = MatchReviewService(FakeResults(), repository)  # type: ignore[arg-type]
 
@@ -429,6 +431,22 @@ async def test_observed_scope_is_materialized_from_search_footprint() -> None:
     ]
     assert rules[0].scope_definition["source_analysis_id"] == "analysis"
     assert rules[0].scope_checksum != "0" * 64
+
+
+async def test_observed_scope_fails_closed_for_legacy_search_only_footprint() -> None:
+    results = FakeResults()
+    benchmark = results.publication.presentation_context["product_highlights"][0]
+    benchmark.pop("verified_location_scope_keys")
+    benchmark["location_scope_keys"] = ["walmart_us|72712|legacy-search-only"]
+    repository = InMemoryMatchReviewRepository()
+    service = MatchReviewService(results, repository)  # type: ignore[arg-type]
+
+    saved = await service.decide(
+        "analysis", _command(revision=0, scope=_scoped()), actor="reviewer"
+    )
+    rules = await repository.rules(saved["revision_id"])
+
+    assert rules[0].scope_definition["benchmark_location_scope_keys"] == []
 
 
 async def test_same_competitor_product_can_be_reused_only_in_disjoint_scopes() -> None:

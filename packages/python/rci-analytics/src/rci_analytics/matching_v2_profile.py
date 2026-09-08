@@ -25,7 +25,11 @@ from rci_analytics.matching_v2_shadow import (
     MatchingShadowResultV2,
 )
 from rci_analytics.models import ClassifiedOffer, JsonObject, NormalizedOffer
-from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
+from rci_analytics.normalization import (
+    BooleanAliasValidationError,
+    CanonicalOfferNormalizer,
+    RetailerIdentityMap,
+)
 from rci_analytics.pdp_attributes import complete_attributes_from_pdp
 from rci_analytics.product_pack import ProductPack, ProductPackLoader
 from rci_retailer_packs import GovernedBrandResolver, GovernedSellerResolver
@@ -492,6 +496,8 @@ def build_matching_v2_evidence_profile(
                     source_rows += 1
                     try:
                         offer = normalizer.normalize(dict(row))
+                    except BooleanAliasValidationError:
+                        raise
                     except ValueError as exc:
                         normalization_failures[str(exc)] += 1
                         continue

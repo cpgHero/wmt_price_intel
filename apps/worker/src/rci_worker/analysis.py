@@ -31,6 +31,7 @@ from rci_analytics import (
     ComparisonEngine,
     ComparisonFact,
     ComparisonInputReducer,
+    LatestProductLocationSelector,
     ListingEvidenceAccumulatorV2,
     MatchingShadowEvaluatorV2,
     OfferClassifier,
@@ -38,20 +39,23 @@ from rci_analytics import (
     ProductMatchRule,
     ProductPackLoader,
     RelationshipInputReducer,
+    add_classified_offer,
     benchmark_product_decisions,
     benchmark_product_map_points,
     benchmark_product_match_candidates,
     build_listing_evidence_v2,
+    classify_local_availability,
     complete_attributes_from_pdp,
     evidence_set,
+    is_product_location_state,
     location_scope_key,
     merge_assortment_product_context,
     product_context_index,
     resolve_one_to_one_relationships,
 )
 from rci_analytics.historical_repository import PostgresAnalysisInputRepository
-from rci_analytics.models import MatchRecord
-from rci_analytics.normalization import RetailerIdentityMap
+from rci_analytics.models import ClassifiedOffer, MatchRecord
+from rci_analytics.normalization import BooleanAliasValidationError, RetailerIdentityMap
 from rci_analytics.product_pack import ProductPack
 from rci_collections.models import QueueTask
 from rci_collections.planner import canonical_checksum
@@ -1484,6 +1488,9 @@ class AnalysisProcessor:
         reducer = ComparisonInputReducer(pack, profile_ids=requested_profile_ids)
         relationship_reducer = RelationshipInputReducer(pack, profile_ids=requested_profile_ids)
         assortment_accumulator = AssortmentAccumulator()
+        latest_availability: LatestProductLocationSelector[ClassifiedOffer] = (
+            LatestProductLocationSelector()
+        )
         matching_v2_accumulator = (
             ListingEvidenceAccumulatorV2(pack)
             if self._matching_v2_shadow_enabled and pack.matching_v2 is not None
@@ -1501,6 +1508,12 @@ class AnalysisProcessor:
         in_scope_counts: dict[str, int] = defaultdict(int)
         in_scope_zips: dict[str, set[str]] = defaultdict(set)
         in_scope_stores: dict[str, set[str]] = defaultdict(set)
+        verified_available_counts: dict[str, int] = defaultdict(int)
+        verified_available_zips: dict[str, set[str]] = defaultdict(set)
+        verified_available_stores: dict[str, set[str]] = defaultdict(set)
+        explicitly_out_of_stock_counts: dict[str, int] = defaultdict(int)
+        sponsored_search_counts: dict[str, int] = defaultdict(int)
+        unverified_availability_counts: dict[str, int] = defaultdict(int)
         seller_status_counts: dict[str, Counter[str]] = defaultdict(Counter)
         classified_evidence_artifacts: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
         observed_values: list[str] = []
@@ -1552,6 +1565,12 @@ class AnalysisProcessor:
             provider_rows_count += 1
             try:
                 normalized_offer = normalizer.normalize(row)
+            except BooleanAliasValidationError:
+                # Conflicting or malformed stock/sponsorship aliases are not an
+                # ordinary row-level normalization exclusion. Silently dropping a
+                # newer state could resurrect older verified availability for the
+                # same product-location, so fail the entire analysis/replay closed.
+                raise
             except ValueError:
                 return
             if normalized_offer.offer_id in seen_offer_ids:
@@ -1584,6 +1603,8 @@ class AnalysisProcessor:
                     in_scope_zips[retailer_id].add(normalized_offer.zipcode)
                 if normalized_offer.store_number is not None:
                     in_scope_stores[retailer_id].add(normalized_offer.store_number)
+            if is_product_location_state(classified_offer):
+                add_classified_offer(latest_availability, classified_offer)
             reducer.add(classified_offer)
             relationship_reducer.add(classified_offer)
             assortment_accumulator.add(classified_offer)
@@ -1669,6 +1690,26 @@ class AnalysisProcessor:
 
         for retailer_id in sorted(normalized_batches):
             await flush(retailer_id)
+
+        for classified_offer in latest_availability.values():
+            normalized_offer = classified_offer.offer
+            retailer_id = normalized_offer.retailer_id
+            availability_status = classify_local_availability(
+                in_stock=normalized_offer.in_stock,
+                is_sponsored=normalized_offer.is_sponsored,
+            )
+            if classified_offer.in_scope and availability_status == "verified_in_stock":
+                verified_available_counts[retailer_id] += 1
+                if normalized_offer.zipcode is not None:
+                    verified_available_zips[retailer_id].add(normalized_offer.zipcode)
+                if normalized_offer.store_number is not None:
+                    verified_available_stores[retailer_id].add(normalized_offer.store_number)
+            elif availability_status == "explicitly_out_of_stock":
+                explicitly_out_of_stock_counts[retailer_id] += 1
+            else:
+                unverified_availability_counts[retailer_id] += 1
+            if normalized_offer.is_sponsored is True:
+                sponsored_search_counts[retailer_id] += 1
 
         comparison_offers = reducer.offers()
         relationship_offers = relationship_reducer.offers()
@@ -1921,6 +1962,16 @@ class AnalysisProcessor:
                 "in_scope_offers": in_scope_counts[retailer_id],
                 "in_scope_zips": len(in_scope_zips[retailer_id]),
                 "in_scope_stores": len(in_scope_stores[retailer_id]),
+                "verified_available_offers": verified_available_counts[retailer_id],
+                "verified_available_zips": len(verified_available_zips[retailer_id]),
+                "verified_available_stores": len(verified_available_stores[retailer_id]),
+                "explicitly_out_of_stock_search_offers": explicitly_out_of_stock_counts[
+                    retailer_id
+                ],
+                "sponsored_search_offers": sponsored_search_counts[retailer_id],
+                "unverified_availability_search_offers": unverified_availability_counts[
+                    retailer_id
+                ],
                 "seller_verified_first_party_offers": seller_status_counts[retailer_id][
                     "verified_first_party"
                 ],
@@ -2019,6 +2070,13 @@ class AnalysisProcessor:
                 "normalization_rejections": provider_rows_count - normalized_count,
                 "review_offers": review_offer_count,
                 "zero_or_missing_price_offers": zero_or_missing_price_count,
+                "explicitly_out_of_stock_search_offers": sum(
+                    explicitly_out_of_stock_counts.values()
+                ),
+                "sponsored_search_offers": sum(sponsored_search_counts.values()),
+                "unverified_availability_search_offers": sum(
+                    unverified_availability_counts.values()
+                ),
                 **(
                     {
                         "matching_v2_unresolved_excluded": int(

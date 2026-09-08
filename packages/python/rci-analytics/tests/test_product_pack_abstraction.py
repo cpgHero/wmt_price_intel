@@ -71,6 +71,7 @@ def _row(
         "price": price,
         "zipcode": zipcode,
         "stock_availability": True,
+        "is_sponsored": False,
     }
 
 

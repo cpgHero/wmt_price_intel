@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -47,9 +48,11 @@ from rci_results import (
     PostgresResultsRepository,
     S3ReportObjectStore,
 )
+from rci_results.contracts import has_verified_local_availability_contract
 from rci_results.models import AnalysisRecord, DownloadLink, ReportArtifactRecord
 from rci_results.service import (
     AnalysisNotFoundError,
+    ArtifactNotCurrentError,
     ArtifactNotFoundError,
     ProductEvidenceNotFoundError,
 )
@@ -244,6 +247,114 @@ def _analysis_not_found(exc: AnalysisNotFoundError) -> HTTPException:
     return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
 
+def _legacy_availability_quarantine(analysis_id: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "legacy_availability_contract_quarantined",
+            "message": (
+                "This report is quarantined because it does not contain validated "
+                "local-availability evidence for every scoreable retailer."
+            ),
+            "analysis_id": analysis_id,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+def _inactive_report_quarantine(analysis_id: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "report_not_active",
+            "message": "This report is not an active, ready-to-share publication.",
+            "analysis_id": analysis_id,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+def _artifact_not_current_quarantine(artifact_id: str) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail={
+            "code": "artifact_not_current",
+            "message": "This artifact was superseded or is not ready for download.",
+            "artifact_id": artifact_id,
+        },
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+async def _public_presentation_document(
+    analysis: AnalysisRecord,
+    service: AnalysisServiceDependency,
+) -> dict[str, Any] | None:
+    """Resolve and verify the exact document selected by the report renderer."""
+
+    # Several canonical public endpoints return immutable result sections rather
+    # than the presentation overlay. Both sources must therefore be certified.
+    if not has_verified_local_availability_contract(analysis.result):
+        return None
+    source_analysis, publication, document = await service.presentation_source(analysis.analysis_id)
+    if source_analysis.id != analysis.id:
+        return None
+    if publication is not None and (
+        publication.status != "ready_to_share"
+        or publication.analysis_result_id != analysis.id
+        or publication.source_result_checksum != analysis.checksum
+    ):
+        return None
+    return document if has_verified_local_availability_contract(document) else None
+
+
+async def require_public_analysis(
+    analysis_id: str,
+    service: AnalysisServiceDependency,
+) -> AnalysisRecord:
+    """Gate public analysis reads while leaving operator and replay reads intact."""
+
+    try:
+        analysis = await service.get_active(analysis_id)
+    except AnalysisNotFoundError as inactive_exc:
+        try:
+            analysis = await service.get(analysis_id)
+        except AnalysisNotFoundError as missing_exc:
+            raise _analysis_not_found(missing_exc) from missing_exc
+        if await _public_presentation_document(analysis, service) is None:
+            raise _legacy_availability_quarantine(analysis.analysis_id) from inactive_exc
+        raise _inactive_report_quarantine(analysis.analysis_id) from inactive_exc
+    if await _public_presentation_document(analysis, service) is None:
+        raise _legacy_availability_quarantine(analysis.analysis_id)
+    return analysis
+
+
+async def require_public_artifact(
+    artifact_id: str,
+    service: AnalysisServiceDependency,
+) -> AnalysisRecord:
+    """Apply the owning analysis quarantine before issuing a fresh signed URL."""
+
+    try:
+        await service.get_current_artifact(artifact_id)
+        analysis = await service.get_by_artifact(artifact_id)
+    except ArtifactNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ArtifactNotCurrentError as exc:
+        raise _artifact_not_current_quarantine(artifact_id) from exc
+    try:
+        active = await service.get_active(analysis.analysis_id)
+    except AnalysisNotFoundError as exc:
+        raise _inactive_report_quarantine(analysis.analysis_id) from exc
+    if await _public_presentation_document(active, service) is None:
+        raise _legacy_availability_quarantine(active.analysis_id)
+    return active
+
+
+PublicAnalysisDependency = Annotated[AnalysisRecord, Depends(require_public_analysis)]
+PublicArtifactDependency = Annotated[AnalysisRecord, Depends(require_public_artifact)]
+
+
 def _require_evidence_export_access(request: Request, provided_token: str | None) -> None:
     expected = os.getenv("PRODUCT_PACK_ADMIN_TOKEN")
     if request.app.state.settings.is_production and (
@@ -291,6 +402,13 @@ async def get_collection_run_analysis(
     run_id: str,
     service: AnalysisServiceDependency,
 ) -> AnalysisRecord:
+    """Return replay evidence to the collection-run operator workspace.
+
+    This lineage lookup intentionally bypasses public report visibility: operators
+    need the immutable result to diagnose and replay quarantined runs. It is not a
+    report, Price Monitoring, competitive-leadership, or artifact-delivery path.
+    """
+
     try:
         return await service.get_by_collection_run(run_id)
     except AnalysisNotFoundError as exc:
@@ -302,13 +420,23 @@ async def list_analyses(
     service: AnalysisServiceDependency,
     limit: int = Query(default=50, ge=1, le=200),
 ) -> list[AnalysisRecord]:
-    return await service.list_analyses(limit)
+    candidates = await service.list_analyses(200)
+    documents = await asyncio.gather(
+        *(_public_presentation_document(analysis, service) for analysis in candidates)
+    )
+    visible = [
+        analysis
+        for analysis, document in zip(candidates, documents, strict=True)
+        if document is not None
+    ]
+    return visible[:limit]
 
 
 @router.get("/analyses/{analysis_id}", response_model=AnalysisResponse, tags=["analyses"])
 async def get_analysis(
     analysis_id: str,
     service: AnalysisServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
 ) -> AnalysisRecord:
     try:
         return await service.get(analysis_id)
@@ -320,6 +448,7 @@ async def get_analysis(
 async def get_matches(
     analysis_id: str,
     service: AnalysisServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
 ) -> dict[str, Any]:
     try:
         return await service.matches(analysis_id)
@@ -464,6 +593,7 @@ async def recompute_brand_workbench(
 async def get_quality(
     analysis_id: str,
     service: AnalysisServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
 ) -> dict[str, Any]:
     try:
         return await service.quality(analysis_id)
@@ -475,6 +605,7 @@ async def get_quality(
 async def get_report_view(
     analysis_id: str,
     service: AnalysisServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
 ) -> dict[str, Any]:
     try:
         return await service.report_view(analysis_id)
@@ -492,6 +623,7 @@ async def get_product_decision_evidence(
     analysis_id: str,
     decision_id: str,
     service: AnalysisServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
 ) -> dict[str, Any]:
     try:
         return await service.product_evidence(analysis_id, decision_id)
@@ -509,6 +641,7 @@ async def get_product_decision_evidence(
 async def list_artifacts(
     analysis_id: str,
     service: AnalysisServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
 ) -> list[ReportArtifactRecord]:
     try:
         return await service.list_artifacts(analysis_id)
@@ -526,6 +659,7 @@ async def generate_artifact(
     analysis_id: str,
     artifact_type: Literal["html", "xlsx", "leadership_email", "audit_zip"],
     service: AnalysisServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
 ) -> ReportArtifactRecord:
     try:
         return await service.generate_artifact(analysis_id, artifact_type)
@@ -545,11 +679,14 @@ async def generate_artifact(
 async def download_artifact(
     artifact_id: str,
     service: AnalysisServiceDependency,
+    _public_artifact: PublicArtifactDependency,
 ) -> DownloadLink:
     try:
         return await service.download_link(artifact_id)
     except ArtifactNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ArtifactNotCurrentError as exc:
+        raise _artifact_not_current_quarantine(artifact_id) from exc
     except RuntimeError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)

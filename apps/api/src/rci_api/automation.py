@@ -11,6 +11,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
 
+from rci_api.analyses import PublicAnalysisDependency
 from rci_api.collections import get_collection_service
 from rci_automation import (
     AutomationService,
@@ -208,6 +209,7 @@ async def sync_schedules(service: AutomationServiceDependency) -> CountResponse:
 async def analysis_history(
     analysis_id: str,
     service: AutomationServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
     baseline_id: str | None = Query(default=None),
 ) -> HistoricalComparison:
     try:
@@ -224,7 +226,9 @@ async def analysis_history(
     tags=["automation"],
 )
 async def evaluate_alerts(
-    analysis_id: str, service: AutomationServiceDependency
+    analysis_id: str,
+    service: AutomationServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
 ) -> EvaluationResponse:
     try:
         triggered, deliveries = await service.evaluate_analysis(analysis_id)

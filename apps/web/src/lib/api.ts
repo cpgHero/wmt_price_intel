@@ -207,6 +207,20 @@ export interface AssortmentProduct {
   seller?: string | null;
   observed_locations: number;
   observed_zipcodes: number;
+  /** Explicit in-stock, non-sponsored local evidence. Missing legacy values are unverified. */
+  verified_available_locations?: number;
+  verified_available_zipcodes?: number;
+  /** Search discovery reach, which is not proof of local carriage. */
+  search_observed_locations?: number;
+  search_observed_zipcodes?: number;
+  availability_status?:
+    | "verified_in_stock"
+    | "explicitly_out_of_stock"
+    | "unverified_sponsored"
+    | "unverified";
+  explicitly_out_of_stock_locations?: number;
+  unverified_locations?: number;
+  unverified_sponsored_locations?: number;
 }
 
 export interface AssortmentComparison {
@@ -247,8 +261,14 @@ export interface AssortmentAnalysis {
   retailers: Array<{
     retailer: string;
     distinct_products: number;
+    verified_available_products?: number;
+    search_distinct_products?: number;
     observed_locations: number;
     observed_zipcodes: number;
+    verified_available_locations?: number;
+    verified_available_zipcodes?: number;
+    search_observed_locations?: number;
+    search_observed_zipcodes?: number;
     median_products_per_location: number;
     distinct_brands?: number;
     unbranded_products?: number;
@@ -265,6 +285,9 @@ export interface AssortmentBrand {
   distinct_products: number;
   observed_locations: number;
   observed_zipcodes: number;
+  verified_available_products?: number;
+  verified_available_locations?: number;
+  verified_available_zipcodes?: number;
   location_share: number;
 }
 
@@ -768,6 +791,31 @@ export interface ApiResult<T> {
   error: string | null;
 }
 
+export function apiErrorMessage(status: number, responseBody: unknown): string {
+  const fallback = `API returned ${status}`;
+  if (
+    typeof responseBody !== "object" ||
+    responseBody === null ||
+    !("detail" in responseBody)
+  ) {
+    return fallback;
+  }
+  const detail = (responseBody as { detail?: unknown }).detail;
+  if (typeof detail === "string") return detail;
+  if (typeof detail === "object" && detail !== null && "message" in detail) {
+    const message = (detail as { message?: unknown }).message;
+    if (typeof message === "string") return message;
+  }
+  if (detail !== undefined && detail !== null) {
+    try {
+      return JSON.stringify(detail);
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
 // Production analytical reads can legitimately take longer than five seconds
 // while a cold materialized payload is loaded. Keep the request bounded, but do
 // not turn a slow, healthy API response into a false outage in the UI.
@@ -784,10 +832,16 @@ export async function getApi<T>(
       signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
+      let error = `API returned ${response.status}`;
+      try {
+        error = apiErrorMessage(response.status, await response.json());
+      } catch {
+        // Preserve the status-only message for non-JSON upstream errors.
+      }
       return {
         data: null,
         status: response.status,
-        error: `API returned ${response.status}`,
+        error,
       };
     }
     return {
@@ -824,12 +878,7 @@ export async function postApiJson<T>(
     if (!response.ok) {
       let detail = `API returned ${response.status}`;
       try {
-        const responseBody = (await response.json()) as { detail?: unknown };
-        if (typeof responseBody.detail === "string") {
-          detail = responseBody.detail;
-        } else if (responseBody.detail) {
-          detail = JSON.stringify(responseBody.detail);
-        }
+        detail = apiErrorMessage(response.status, await response.json());
       } catch {
         // Preserve the status-only message for non-JSON upstream errors.
       }

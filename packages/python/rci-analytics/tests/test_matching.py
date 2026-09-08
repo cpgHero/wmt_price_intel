@@ -52,6 +52,8 @@ def _row(
     store: str = "store-1",
     latitude: float = 40.7500,
     longitude: float = -73.9900,
+    in_stock: bool | None = True,
+    is_sponsored: bool | None = False,
 ) -> dict[str, object]:
     governed_title = (
         f"{title} Standard" if "organic" in title.casefold() else f"{title} Conventional Standard"
@@ -63,7 +65,8 @@ def _row(
         "price": price,
         "zipcode": zipcode,
         "store_number": store,
-        "stock_availability": True,
+        "stock_availability": in_stock,
+        "is_sponsored": is_sponsored,
         "latitude": latitude,
         "longitude": longitude,
     }
@@ -147,6 +150,8 @@ def test_exact_package_profile_separates_variable_weight_from_fixed_package() ->
             "price": "24.94",
             "zipcode": "71111",
             "store_number": "1",
+            "stock_availability": True,
+            "is_sponsored": False,
         },
         {
             "retailer_id": "aldi_us",
@@ -156,6 +161,8 @@ def test_exact_package_profile_separates_variable_weight_from_fixed_package() ->
             "price": "14.39",
             "zipcode": "71111",
             "store_number": "475-107",
+            "stock_availability": True,
+            "is_sponsored": False,
         },
         {
             "retailer_id": "aldi_us",
@@ -165,6 +172,8 @@ def test_exact_package_profile_separates_variable_weight_from_fixed_package() ->
             "price": "25.95",
             "zipcode": "71111",
             "store_number": "475-107",
+            "stock_availability": True,
+            "is_sponsored": False,
         },
     ]
     offers = classifier.classify_many(normalizer.normalize_many(rows))
@@ -550,7 +559,7 @@ def test_certified_product_footprints_allow_many_to_one_relationship_evidence() 
     assert all(row["status"] == "confirmed" for row in resolution.relationships)
 
 
-def test_product_footprint_uses_positive_search_observations_at_store_grain() -> None:
+def test_product_footprint_uses_verified_local_observations_at_store_grain() -> None:
     offers, _engine = _classified()
 
     footprint = product_footprint(
@@ -573,6 +582,442 @@ def test_product_footprint_uses_positive_search_observations_at_store_grain() ->
             "lowest_positive_price": 2.38,
         }
     ]
+
+
+def test_product_footprint_excludes_unverified_search_placements() -> None:
+    normalizer, classifier, _engine = _pipeline()
+    offers = classifier.classify_many(
+        normalizer.normalize_many(
+            [
+                _row("walmart_us", "w-1", "Fresh Strawberries, 1 lb", "2.38"),
+                _row(
+                    "walmart_us",
+                    "w-1",
+                    "Fresh Strawberries, 1 lb",
+                    "2.38",
+                    zipcode="20002",
+                    store="out-of-stock",
+                    in_stock=False,
+                ),
+                _row(
+                    "walmart_us",
+                    "w-1",
+                    "Fresh Strawberries, 1 lb",
+                    "2.38",
+                    zipcode="30303",
+                    store="sponsored",
+                    is_sponsored=True,
+                ),
+                _row(
+                    "walmart_us",
+                    "w-1",
+                    "Fresh Strawberries, 1 lb",
+                    "2.38",
+                    zipcode="60601",
+                    store="unknown-stock",
+                    in_stock=None,
+                ),
+                _row(
+                    "walmart_us",
+                    "w-1",
+                    "Fresh Strawberries, 1 lb",
+                    "2.38",
+                    zipcode="94105",
+                    store="unknown-sponsorship",
+                    is_sponsored=None,
+                ),
+            ]
+        )
+    )
+
+    footprint = product_footprint(
+        offers,
+        analysis_id="analysis-strawberries",
+        retailer_id="walmart_us",
+        product_id="w-1",
+    )
+
+    assert [row["scope_key"] for row in footprint["locations"]] == ["walmart_us|10001|store-1"]
+
+
+@pytest.mark.parametrize(
+    ("in_stock", "is_sponsored"),
+    [
+        (False, False),
+        (True, True),
+        (None, False),
+        (True, None),
+    ],
+)
+def test_positive_search_price_without_verified_availability_cannot_match(
+    in_stock: bool | None,
+    is_sponsored: bool | None,
+) -> None:
+    normalizer, classifier, engine = _pipeline()
+    offers = classifier.classify_many(
+        normalizer.normalize_many(
+            [
+                _row("walmart_us", "w-1", "Fresh Strawberries, 1 lb", "2.38"),
+                _row(
+                    "aldi_us",
+                    "a-1",
+                    "Fresh Strawberries, 1 lb",
+                    "2.55",
+                    in_stock=in_stock,
+                    is_sponsored=is_sponsored,
+                ),
+            ]
+        )
+    )
+
+    assert (
+        engine.compare(
+            offers,
+            benchmark_id="walmart_us",
+            competitor_id="aldi_us",
+            profile_id="strict",
+        )
+        == []
+    )
+    assert geographic_overlap(offers, "walmart_us", "aldi_us") == set()
+
+    reducer = RelationshipInputReducer(engine.pack, profile_ids={"strict"})
+    reducer.extend(offers)
+    assert {row.offer.retailer_product_id for row in reducer.offers()} == {"w-1"}
+
+
+def test_explicit_in_stock_non_sponsored_observation_can_match_locally() -> None:
+    normalizer, classifier, engine = _pipeline()
+    offers = classifier.classify_many(
+        normalizer.normalize_many(
+            [
+                _row("walmart_us", "w-1", "Fresh Strawberries, 1 lb", "2.38"),
+                _row("aldi_us", "a-1", "Fresh Strawberries, 1 lb", "2.55"),
+            ]
+        )
+    )
+
+    matches = engine.compare(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+    )
+
+    assert len(matches) == 1
+    assert geographic_overlap(offers, "walmart_us", "aldi_us") == {"10001"}
+
+
+@pytest.mark.parametrize(
+    ("in_stock", "is_sponsored"),
+    [
+        (False, False),
+        (True, True),
+        (None, False),
+        (True, None),
+    ],
+)
+def test_later_nonverified_state_retracts_matching_and_footprint_evidence(
+    in_stock: bool | None,
+    is_sponsored: bool | None,
+) -> None:
+    offers, engine = _classified()
+    benchmark = next(
+        item
+        for item in offers
+        if item.offer.retailer_id == "walmart_us" and item.offer.retailer_product_id == "w-1"
+    )
+    competitor = next(
+        item
+        for item in offers
+        if item.offer.retailer_id == "aldi_us" and item.offer.retailer_product_id == "a-1"
+    )
+    older_verified = replace(
+        benchmark,
+        offer=replace(
+            benchmark.offer,
+            offer_id="benchmark-older-verified",
+            collected_at="2026-08-07T06:00:00Z",
+        ),
+    )
+    later_state = replace(
+        benchmark,
+        offer=replace(
+            benchmark.offer,
+            offer_id="benchmark-later-state",
+            collected_at="2026-08-07T07:00:00Z",
+            price=None,
+            in_stock=in_stock,
+            is_sponsored=is_sponsored,
+        ),
+    )
+    current_competitor = replace(
+        competitor,
+        offer=replace(
+            competitor.offer,
+            offer_id="competitor-current",
+            collected_at="2026-08-07T07:00:00Z",
+        ),
+    )
+    chronological = [older_verified, current_competitor, later_state]
+
+    assert (
+        engine.compare(
+            chronological,
+            benchmark_id="walmart_us",
+            competitor_id="aldi_us",
+            profile_id="strict",
+        )
+        == []
+    )
+    assert geographic_overlap(chronological, "walmart_us", "aldi_us") == set()
+    assert (
+        product_footprint(
+            chronological,
+            analysis_id="analysis-strawberries",
+            retailer_id="walmart_us",
+            product_id="w-1",
+        )["locations"]
+        == []
+    )
+
+    reducer = RelationshipInputReducer(engine.pack, profile_ids={"strict"})
+    reducer.extend(chronological)
+    assert {item.offer.retailer_product_id for item in reducer.offers()} == {"a-1"}
+
+
+def test_later_seller_policy_exclusion_retracts_matching_and_footprint_evidence() -> None:
+    offers, engine = _classified()
+    benchmark = next(
+        item
+        for item in offers
+        if item.offer.retailer_id == "walmart_us" and item.offer.retailer_product_id == "w-1"
+    )
+    competitor = next(
+        item
+        for item in offers
+        if item.offer.retailer_id == "aldi_us" and item.offer.retailer_product_id == "a-1"
+    )
+    older_verified = replace(
+        benchmark,
+        offer=replace(
+            benchmark.offer,
+            offer_id="benchmark-older-first-party",
+            collected_at="2026-08-07T06:00:00Z",
+        ),
+    )
+    later_third_party = replace(
+        benchmark,
+        offer=replace(
+            benchmark.offer,
+            offer_id="benchmark-later-third-party",
+            collected_at="2026-08-07T07:00:00Z",
+        ),
+        in_scope=False,
+        scope_reason=("known third-party marketplace seller excluded by Retailer Pack policy"),
+        metrics={},
+    )
+    current_competitor = replace(
+        competitor,
+        offer=replace(
+            competitor.offer,
+            offer_id="competitor-current",
+            collected_at="2026-08-07T07:00:00Z",
+        ),
+    )
+    chronological = [older_verified, current_competitor, later_third_party]
+
+    assert (
+        engine.compare(
+            chronological,
+            benchmark_id="walmart_us",
+            competitor_id="aldi_us",
+            profile_id="strict",
+        )
+        == []
+    )
+    assert geographic_overlap(chronological, "walmart_us", "aldi_us") == set()
+    assert (
+        product_footprint(
+            chronological,
+            analysis_id="analysis-strawberries",
+            retailer_id="walmart_us",
+            product_id="w-1",
+        )["locations"]
+        == []
+    )
+
+    reducer = RelationshipInputReducer(engine.pack, profile_ids={"strict"})
+    reducer.extend(chronological)
+    assert {item.offer.retailer_product_id for item in reducer.offers()} == {"a-1"}
+
+
+def test_classifier_out_of_stock_tombstone_retracts_older_verified_match() -> None:
+    normalizer, classifier, engine = _pipeline()
+    offers = classifier.classify_many(
+        normalizer.normalize_many(
+            [
+                {
+                    **_row("walmart_us", "w-1", "Fresh Strawberries, 1 lb", "2.38"),
+                    "collected_at": "2026-08-07T06:00:00Z",
+                },
+                {
+                    **_row(
+                        "walmart_us",
+                        "w-1",
+                        "Fresh Strawberries, 1 lb",
+                        "2.38",
+                        in_stock=False,
+                    ),
+                    "price": None,
+                    "collected_at": "2026-08-07T07:00:00Z",
+                },
+                {
+                    **_row("aldi_us", "a-1", "Fresh Strawberries, 1 lb", "2.55"),
+                    "collected_at": "2026-08-07T07:00:00Z",
+                },
+            ]
+        )
+    )
+    tombstone = next(
+        item
+        for item in offers
+        if item.offer.retailer_id == "walmart_us" and item.offer.in_stock is False
+    )
+    assert tombstone.in_scope is False
+    assert tombstone.scope_reason == "explicitly out of stock"
+
+    assert (
+        engine.compare(
+            offers,
+            benchmark_id="walmart_us",
+            competitor_id="aldi_us",
+            profile_id="strict",
+        )
+        == []
+    )
+    reducer = ComparisonInputReducer(engine.pack, profile_ids={"strict"})
+    reducer.extend(offers)
+    assert {item.offer.retailer_product_id for item in reducer.offers()} == {"a-1"}
+
+
+@pytest.mark.parametrize("reverse_order", [False, True])
+def test_same_timestamp_organic_stock_conflict_fails_closed_for_matching(
+    reverse_order: bool,
+) -> None:
+    offers, engine = _classified()
+    benchmark = next(
+        item
+        for item in offers
+        if item.offer.retailer_id == "walmart_us" and item.offer.retailer_product_id == "w-1"
+    )
+    competitor = next(
+        item
+        for item in offers
+        if item.offer.retailer_id == "aldi_us" and item.offer.retailer_product_id == "a-1"
+    )
+    observed_at = "2026-08-07T07:00:00Z"
+    verified = replace(
+        benchmark,
+        offer=replace(
+            benchmark.offer,
+            offer_id="benchmark-same-time-verified",
+            collected_at=observed_at,
+        ),
+    )
+    out_of_stock = replace(
+        benchmark,
+        offer=replace(
+            benchmark.offer,
+            offer_id="benchmark-same-time-oos",
+            collected_at=observed_at,
+            in_stock=False,
+        ),
+    )
+    benchmark_states = [verified, out_of_stock]
+    if reverse_order:
+        benchmark_states.reverse()
+    current_competitor = replace(
+        competitor,
+        offer=replace(competitor.offer, collected_at=observed_at),
+    )
+
+    assert (
+        engine.compare(
+            [*benchmark_states, current_competitor],
+            benchmark_id="walmart_us",
+            competitor_id="aldi_us",
+            profile_id="strict",
+        )
+        == []
+    )
+
+
+def test_relationship_resolution_rejects_stale_unverified_match_evidence() -> None:
+    offers, engine = _classified()
+    match = engine.compare(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+    )[0]
+    benchmark = next(row for row in offers if row.offer.offer_id == match.benchmark_offer_id)
+    unverified = replace(
+        benchmark,
+        offer=replace(benchmark.offer, is_sponsored=True),
+    )
+    updated_offers = [unverified if row is benchmark else row for row in offers]
+
+    resolution = resolve_one_to_one_relationships(
+        updated_offers,
+        (match,),
+        benchmark_retailer="walmart_us",
+        profile_priority=("strict",),
+    )
+
+    assert resolution.matches == ()
+    assert resolution.relationships == ()
+
+
+def test_relationship_resolution_cannot_reuse_superseded_verified_match() -> None:
+    offers, engine = _classified()
+    original_match = engine.compare(
+        offers,
+        benchmark_id="walmart_us",
+        competitor_id="aldi_us",
+        profile_id="strict",
+    )[0]
+    benchmark = next(
+        row for row in offers if row.offer.offer_id == original_match.benchmark_offer_id
+    )
+    older_verified = replace(
+        benchmark,
+        offer=replace(benchmark.offer, collected_at="2026-08-07T06:00:00Z"),
+    )
+    later_sponsored = replace(
+        benchmark,
+        offer=replace(
+            benchmark.offer,
+            offer_id="later-sponsored-no-price",
+            collected_at="2026-08-07T07:00:00Z",
+            price=None,
+            is_sponsored=True,
+        ),
+    )
+    chronological = [
+        *(older_verified if row is benchmark else row for row in offers),
+        later_sponsored,
+    ]
+
+    resolution = resolve_one_to_one_relationships(
+        chronological,
+        (original_match,),
+        benchmark_retailer="walmart_us",
+        profile_priority=("strict",),
+    )
+
+    assert resolution.matches == ()
+    assert resolution.relationships == ()
 
 
 def test_automatic_relationships_are_one_to_one_across_lenses() -> None:

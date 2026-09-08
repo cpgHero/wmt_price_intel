@@ -20,7 +20,7 @@ from rci_results.blueprints import ReportBlueprint, ReportBlueprintLoader, Repor
 from rci_results.contracts import ReportViewValidator, canonical_result_bytes
 from rci_results.models import ArtifactPayload, ArtifactType, JsonObject
 
-RENDERER_VERSION = "2.15.1"
+RENDERER_VERSION = "2.15.2"
 
 _SECTION_EYEBROWS = {
     "executive_summary": "Leadership answer",
@@ -190,6 +190,14 @@ def _compact_interactive_view(view: JsonObject) -> None:
         "seller",
         "observed_locations",
         "observed_zipcodes",
+        "verified_available_locations",
+        "verified_available_zipcodes",
+        "search_observed_locations",
+        "search_observed_zipcodes",
+        "availability_status",
+        "explicitly_out_of_stock_locations",
+        "unverified_locations",
+        "unverified_sponsored_locations",
         "observed_brand",
     }
     for retailer in retailers:
@@ -271,6 +279,21 @@ def _integer(value: object) -> int:
         return int(float(str(value or 0).replace(",", "")))
     except ValueError:
         return 0
+
+
+def _finite_number(value: object) -> float | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        parsed = float(str(value).replace(",", ""))
+    except ValueError:
+        return None
+    return parsed if parsed == parsed and abs(parsed) != float("inf") else None
+
+
+def _positive_price(value: object) -> float | None:
+    parsed = _finite_number(value)
+    return parsed if parsed is not None and parsed > 0 else None
 
 
 def _topology_state_paths(topology: JsonObject) -> str:
@@ -899,19 +922,11 @@ def _product_decisions(
     for row in decisions:
         priority = str(row.get("priority", "parity"))
         competitor = _retailer_label(row.get("competitor"))
+        gap = _finite_number(row.get("median_gap"))
         try:
-            gap = float(row.get("median_gap", 0))
             geographies = int(row.get("geographies", 0))
         except (TypeError, ValueError):
-            gap = 0
             geographies = 0
-        position = (
-            f"{competitor} is ${abs(gap):,.2f} lower at the median match"
-            if gap < 0
-            else f"{benchmark_label} is ${abs(gap):,.2f} lower at the median match"
-            if gap > 0
-            else "Median matched prices are tied"
-        )
         status = {
             "attention": "Needs attention",
             "protect": "Position to protect",
@@ -930,11 +945,24 @@ def _product_decisions(
             images.append(
                 f"<div class=product-pair-image><span>{escape(label)}</span>{image}</div>"
             )
-        try:
-            benchmark_price = float(row.get("median_benchmark_price", 0))
-            competitor_price = float(row.get("median_competitor_price", 0))
-        except (TypeError, ValueError):
-            benchmark_price = competitor_price = 0
+        benchmark_price = _positive_price(row.get("median_benchmark_price"))
+        competitor_price = _positive_price(row.get("median_competitor_price"))
+        prices_available = benchmark_price is not None and competitor_price is not None
+        position = (
+            f"{competitor} is ${abs(gap):,.2f} lower at the median match"
+            if prices_available and gap is not None and gap < 0
+            else f"{benchmark_label} is ${abs(gap):,.2f} lower at the median match"
+            if prices_available and gap is not None and gap > 0
+            else "Median matched prices are tied"
+            if prices_available and gap == 0
+            else "Median matched-price evidence is unavailable"
+        )
+        benchmark_price_label = (
+            f"${benchmark_price:,.2f}" if benchmark_price is not None else "Unavailable"
+        )
+        competitor_price_label = (
+            f"${competitor_price:,.2f}" if competitor_price is not None else "Unavailable"
+        )
         summary = row.get("evidence_summary", {})
         store_count = (
             int(summary.get("benchmark_store_observations", 0)) if isinstance(summary, dict) else 0
@@ -945,7 +973,8 @@ def _product_decisions(
             else geographies
         ) or geographies
         scope = (
-            f"{store_count:,} observed benchmark stores across {zip_count:,} matched ZIP markets."
+            f"{store_count:,} benchmark store comparison rows across "
+            f"{zip_count:,} matched ZIP markets."
             if store_count
             else f"{zip_count:,} matched ZIP markets in the analytical comparison."
         )
@@ -975,14 +1004,16 @@ def _product_decisions(
             f"<span>{escape(status)}</span>"
             f"<h3 class=benchmark-name>{escape(_display(row.get('benchmark_product_name')))}</h3>"
             f"<h3>{escape(_display(row.get('competitor_product_name')))}</h3>"
-            f"<div class=product-prices><b>{escape(benchmark_label)} ${benchmark_price:,.2f}</b>"
-            f"<b>{escape(competitor)} ${competitor_price:,.2f}</b></div>"
+            f"<div class=product-prices><b>{escape(benchmark_label)} "
+            f"{escape(benchmark_price_label)}</b>"
+            f"<b>{escape(competitor)} {escape(competitor_price_label)}</b></div>"
             f"<strong>{escape(position)}</strong><p>{escape(scope)}</p></div>{evidence_html}</article>"
         )
     return (
         f"<div class=product-decision-intro><h3>{escape(title)}</h3>"
         "<p>Each card names the exact product pair and median matched prices. PDP data supplies "
-        "identity and imagery; search evidence remains authoritative for price and location."
+        "identity and imagery; Search supplies listed price, while only explicit in-stock, "
+        "non-sponsored local Search evidence verifies availability."
         "</p></div>"
         f"<div class=product-decisions>{''.join(cards)}</div>"
     )
@@ -1188,6 +1219,12 @@ def _assortment_analysis(context: JsonObject, *, benchmark_label: str) -> str:
         return ""
 
     def product_list(title: str, products: list[JsonObject]) -> str:
+        verified_products = [
+            row
+            for row in products
+            if row.get("availability_status") == "verified_in_stock"
+            and _integer(row.get("verified_available_locations")) > 0
+        ]
         rows = "".join(
             "<div class=assortment-product>"
             + (
@@ -1198,22 +1235,55 @@ def _assortment_analysis(context: JsonObject, *, benchmark_label: str) -> str:
             + "<div><strong>"
             + escape(_display(row.get("name")))
             + "</strong><small>"
-            + f"{_integer(row.get('observed_locations')):,} locations · "
-            + f"{_integer(row.get('observed_zipcodes')):,} ZIPs"
+            + f"{_integer(row.get('verified_available_locations')):,} verified locations · "
+            + f"{_integer(row.get('verified_available_zipcodes')):,} verified ZIPs"
             + "</small></div></div>"
-            for row in products[:8]
+            for row in verified_products[:8]
         )
-        return f"<section><h4>{escape(title)}</h4>{rows or '<p class=empty>None observed.</p>'}</section>"
+        return (
+            f"<section><h4>{escape(title)}</h4>"
+            f"{rows or '<p class=empty>No products with verified local availability.</p>'}"
+            "</section>"
+        )
+
+    def has_verified_summary(summary: JsonObject) -> bool:
+        return all(
+            isinstance(summary.get(field), int)
+            and not isinstance(summary.get(field), bool)
+            and int(summary[field]) >= 0
+            for field in (
+                "verified_available_products",
+                "verified_available_locations",
+                "verified_available_zipcodes",
+            )
+        )
 
     cards = []
     for row in comparisons:
         competitor_id = str(row.get("competitor") or "")
         competitor = _retailer_label(competitor_id)
         competitor_summary = retailers.get(competitor_id, {})
+        if not has_verified_summary(benchmark) or not has_verified_summary(competitor_summary):
+            cards.append(
+                f"<article data-competitor-id='{escape(competitor_id, quote=True)}'>"
+                f"<header><div><div class=kind>{escape(benchmark_label)} vs. "
+                f"{escape(competitor)}</div><h3>Availability evidence unverified</h3></div>"
+                "<span>Legacy evidence</span></header>"
+                "<p class=empty>This publication does not contain explicit verified-local "
+                "assortment summaries for both retailers. Legacy Search reach cannot support "
+                "product, ZIP, relationship, or whitespace availability claims.</p></article>"
+            )
+            continue
         geography = _mapping(row, "geography")
         kpis = (
-            (benchmark_label + " products", benchmark.get("distinct_products")),
-            (competitor + " products", competitor_summary.get("distinct_products")),
+            (
+                benchmark_label + " verified-available products",
+                benchmark.get("verified_available_products"),
+            ),
+            (
+                competitor + " verified-available products",
+                competitor_summary.get("verified_available_products"),
+            ),
             ("Product relationships", row.get("product_relationships")),
             (benchmark_label + "-only", row.get("benchmark_only_products")),
             (competitor + " whitespace", row.get("competitor_whitespace_products")),
@@ -1226,9 +1296,9 @@ def _assortment_analysis(context: JsonObject, *, benchmark_label: str) -> str:
             f"<li>{escape(str(point))}</li>" for point in row.get("key_points", [])
         )
         geographic_points = (
-            f"<li>{benchmark_label} has broader observed variety in "
+            f"<li>{benchmark_label} has broader verified-available variety in "
             f"{_integer(geography.get('benchmark_broader_zipcodes')):,} shared ZIPs.</li>"
-            f"<li>{competitor} has broader observed variety in "
+            f"<li>{competitor} has broader verified-available variety in "
             f"{_integer(geography.get('competitor_broader_zipcodes')):,} shared ZIPs.</li>"
             f"<li>{_integer(geography.get('parity_zipcodes')):,} shared ZIPs have the same "
             "distinct-product count.</li>"
@@ -1254,9 +1324,10 @@ def _assortment_analysis(context: JsonObject, *, benchmark_label: str) -> str:
         )
     return (
         "<section class=report-section><div class=kind>Assortment intelligence</div>"
-        f"<h2>Where {escape(benchmark_label)} overlaps—and where each retailer stands alone</h2>"
-        "<p class=group-note>Search supplies store presence and observed product counts. Product "
-        "Pack rules govern matches; PDP supplies identity and imagery where available.</p>"
+        f"<h2>Verified local assortment overlap for {escape(benchmark_label)}</h2>"
+        "<p class=group-note>Local assortment requires explicit in-stock, non-sponsored Search "
+        "evidence. Search-only placements are retained separately and do not prove store "
+        "availability. Product Pack rules govern matches; PDP supplies identity and imagery.</p>"
         f"<div class=assortment-score>{''.join(cards)}</div></section>"
     )
 

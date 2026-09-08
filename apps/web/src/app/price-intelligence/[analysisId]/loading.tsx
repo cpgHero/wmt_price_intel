@@ -6,7 +6,8 @@ export default function PriceIntelligenceLoading() {
           <p className="eyebrow">Price Intelligence</p>
           <h1>Loading governed Search evidence…</h1>
           <p>
-            Preparing product, location-master, price, and distribution views.
+            Preparing product, query-context price, and verified-availability
+            views.
           </p>
         </div>
       </header>

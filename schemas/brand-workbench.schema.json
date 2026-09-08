@@ -80,6 +80,33 @@
     "brand": {
       "type": "object",
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "distribution_evidence": {
+                "const": "verified_local_search_availability"
+              }
+            },
+            "required": ["distribution_evidence"]
+          },
+          "then": {
+            "properties": {
+              "observed_products": { "type": "integer", "minimum": 1 },
+              "observed_locations": { "type": "integer", "minimum": 1 },
+              "distribution_tier": {
+                "enum": ["single_location", "concentrated", "multi_market", "broad"]
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "location_share": { "const": 0 },
+              "distribution_tier": { "const": "unknown" }
+            }
+          }
+        }
+      ],
       "required": [
         "retailer_id",
         "normalized_brand",
@@ -117,15 +144,33 @@
           "maxItems": 3,
           "items": { "$ref": "#/$defs/candidate" }
         },
-        "observed_products": { "type": "integer", "minimum": 1 },
-        "observed_locations": { "type": "integer", "minimum": 0 },
-        "observed_zipcodes": { "type": "integer", "minimum": 0 },
-        "location_share": { "type": "number", "minimum": 0, "maximum": 1 },
+        "observed_products": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Verified-available products only when distribution_evidence is verified_local_search_availability; otherwise a discovery or identity count that must remain explicitly unverified. Zero is authoritative when corrected verified-local counters prove no available products."
+        },
+        "observed_locations": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Verified locations only when distribution_evidence is verified_local_search_availability; otherwise discovery or identity reach that must remain unverified."
+        },
+        "observed_zipcodes": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Verified ZIPs only when distribution_evidence is verified_local_search_availability; otherwise discovery or identity reach that must remain unverified."
+        },
+        "location_share": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "A verified-availability footprint only when distribution_evidence is verified_local_search_availability."
+        },
         "distribution_tier": {
           "enum": ["unknown", "single_location", "concentrated", "multi_market", "broad"]
         },
         "distribution_evidence": {
           "enum": [
+            "verified_local_search_availability",
             "search_brand_field",
             "pdp_identity_joined_to_matched_search",
             "pdp_identity_only"

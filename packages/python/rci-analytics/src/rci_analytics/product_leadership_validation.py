@@ -26,6 +26,17 @@ def _rows(value: Any) -> list[JsonObject]:
     return [dict(row) for row in value] if isinstance(value, list) else []
 
 
+def _has_verified_local_evidence(location: JsonObject) -> bool:
+    """Independently enforce the four-field local-availability invariant."""
+
+    return (
+        location.get("in_stock") is True
+        and location.get("is_sponsored") is False
+        and location.get("availability_status") == "verified_in_stock"
+        and location.get("verified_local_availability") is True
+    )
+
+
 def _summary(rows: list[JsonObject]) -> JsonObject:
     outcomes = Counter(str(row.get("status")) for row in rows)
     scored = [row for row in rows if row.get("status") != "unscored"]
@@ -118,8 +129,13 @@ def certify_competitive_product_leadership(
             f"{label}: benchmark product differs from the selected product",
         )
         check(
-            bool(benchmark.get("in_stock")) and float(benchmark.get("package_price") or 0) > 0,
-            f"{label}: benchmark is not a positive-price Search observation",
+            _has_verified_local_evidence(benchmark),
+            f"{label}: benchmark lacks verified local availability evidence",
+        )
+        check(
+            benchmark.get("search_observed") is True
+            and float(benchmark.get("package_price") or 0) > 0,
+            f"{label}: benchmark lacks a positive Search-listed price",
         )
         check(
             float(benchmark.get("comparison_value") or 0) > 0,
@@ -158,8 +174,13 @@ def certify_competitive_product_leadership(
             f"{label}: competitor product differs from the relationship",
         )
         check(
-            bool(competitor.get("in_stock")) and float(competitor.get("package_price") or 0) > 0,
-            f"{label}: competitor is not a positive-price Search observation",
+            _has_verified_local_evidence(competitor),
+            f"{label}: competitor lacks verified local availability evidence",
+        )
+        check(
+            competitor.get("search_observed") is True
+            and float(competitor.get("package_price") or 0) > 0,
+            f"{label}: competitor lacks a positive Search-listed price",
         )
         expected_gap = float(competitor.get("comparison_value") or 0) - float(
             benchmark.get("comparison_value") or 0

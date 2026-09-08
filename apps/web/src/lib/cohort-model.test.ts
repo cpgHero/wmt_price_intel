@@ -98,6 +98,7 @@ describe("comparable cohort presentation model", () => {
         segment: "64 fl oz · 2%",
         matches: "1,234",
         "matched geographies": "900",
+        "benchmark verified locations": "42",
         "benchmark lower": "59.6%",
         "competitor lower": "40.4%",
         parity: "0.0%",
@@ -110,10 +111,21 @@ describe("comparable cohort presentation model", () => {
 
     expect(cohort).toMatchObject({
       matches: 1234,
+      benchmarkVerifiedLocations: 42,
       benchmarkLowerRate: 0.596,
       benchmarkMedian: 4,
       outcome: "benchmark_lower",
     });
+  });
+
+  it("fails closed instead of relabeling a legacy observed-location count as verified", () => {
+    const cohort = comparableCohort({
+      competitor: "ALDI",
+      segment: "64 fl oz · 2%",
+      "benchmark observed locations": "17",
+    });
+
+    expect(cohort?.benchmarkVerifiedLocations).toBe(0);
   });
 
   it("deduplicates a cohort projected into more than one report section", () => {

@@ -9,7 +9,11 @@ from pathlib import Path
 import pytest
 
 from rci_analytics.classification import FormulaEvaluator, OfferClassifier
-from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
+from rci_analytics.normalization import (
+    BooleanAliasValidationError,
+    CanonicalOfferNormalizer,
+    RetailerIdentityMap,
+)
 from rci_analytics.product_pack import ProductPackLoader
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
@@ -82,6 +86,141 @@ def test_normalizes_search_sponsorship_boolean(
 
     assert sponsored.is_sponsored is True
     assert organic.is_sponsored is False
+
+
+@pytest.mark.parametrize(
+    ("aliases", "expected"),
+    [
+        (
+            {
+                "in_stock": True,
+                "stock_availability": "true",
+                "available": "yes",
+                "Stock Availability": "1",
+            },
+            True,
+        ),
+        (
+            {
+                "in_stock": "out of stock",
+                "stock_availability": False,
+                "available": "0",
+            },
+            False,
+        ),
+    ],
+)
+def test_consistent_availability_aliases_are_preserved(
+    aliases: dict[str, object],
+    expected: bool,
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    offer = normalizer.normalize({**_row("Fresh Strawberries, 1 lb"), **aliases})
+
+    assert offer.in_stock is expected
+
+
+def test_consistent_sponsorship_aliases_are_preserved(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    offer = normalizer.normalize(
+        _row(
+            "Fresh Strawberries, 1 lb",
+            is_sponsored=False,
+            sponsored="false",
+            **{"Is Sponsored": "no"},
+        )
+    )
+
+    assert offer.is_sponsored is False
+
+
+@pytest.mark.parametrize(
+    "aliases",
+    [
+        {"stock_availability": True, "in_stock": False},
+        {"stock_availability": "false", "available": "true"},
+    ],
+)
+def test_rejects_conflicting_availability_aliases(
+    aliases: dict[str, object],
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    with pytest.raises(ValueError, match="conflicting availability aliases"):
+        normalizer.normalize({**_row("Fresh Strawberries, 1 lb"), **aliases})
+
+
+@pytest.mark.parametrize(
+    "aliases",
+    [
+        {"is_sponsored": True, "sponsored": False},
+        {"is_sponsored": "false", "sponsored": "true"},
+    ],
+)
+def test_rejects_conflicting_sponsorship_aliases(
+    aliases: dict[str, object],
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    with pytest.raises(ValueError, match="conflicting sponsorship aliases"):
+        normalizer.normalize(_row("Fresh Strawberries, 1 lb", **aliases))
+
+
+@pytest.mark.parametrize(
+    ("aliases", "semantic", "field"),
+    [
+        (
+            {"stock_availability": True, "available": "sometimes"},
+            "availability",
+            "available",
+        ),
+        (
+            {"is_sponsored": False, "sponsored": "promoted"},
+            "sponsorship",
+            "sponsored",
+        ),
+    ],
+)
+def test_rejects_malformed_boolean_alias_even_after_valid_alias(
+    aliases: dict[str, object],
+    semantic: str,
+    field: str,
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    with pytest.raises(
+        ValueError,
+        match=rf"{semantic} alias '{field}' has invalid boolean value",
+    ):
+        normalizer.normalize({**_row("Fresh Strawberries, 1 lb"), **aliases})
+
+
+def test_normalize_many_fails_closed_on_newer_conflicting_alias_row(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    older_verified = _row(
+        "Fresh Strawberries, 1 lb",
+        product_id="same-product",
+        collected_at="2026-08-07T06:00:00Z",
+        is_sponsored=False,
+    )
+    newer_contradictory = {
+        **older_verified,
+        "collected_at": "2026-08-07T07:00:00Z",
+        "in_stock": False,
+    }
+
+    with pytest.raises(BooleanAliasValidationError, match="conflicting availability aliases"):
+        normalizer.normalize_many([older_verified, newer_contradictory])
+
+
+def test_normalize_many_still_skips_unrelated_invalid_rows(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    valid = _row("Fresh Strawberries, 1 lb", product_id="valid")
+    missing_retailer = {**valid, "retailer_id": ""}
+
+    assert [
+        offer.retailer_product_id for offer in normalizer.normalize_many([missing_retailer, valid])
+    ] == ["valid"]
 
 
 def test_recovers_lossy_scientific_product_identifier_from_retailer_url(
@@ -171,6 +310,57 @@ def test_normalize_many_deduplicates_identical_canonical_observations(
     row = _row("Fresh Strawberries, 1 lb Container", product_id="44391605")
 
     assert len(normalizer.normalize_many([row, dict(row)])) == 1
+
+
+def test_normalize_many_preserves_same_offer_state_observed_at_different_times(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    base = _row("Fresh Strawberries, 1 lb Container", product_id="44391605")
+    older = {**base, "collected_at": "2026-08-07T06:00:00Z"}
+    newer = {**base, "collected_at": "2026-08-07T07:00:00Z"}
+
+    observations = normalizer.normalize_many([older, newer])
+
+    assert len(observations) == 2
+    assert observations[0].offer_id != observations[1].offer_id
+    assert [row.collected_at for row in observations] == [
+        "2026-08-07T06:00:00Z",
+        "2026-08-07T07:00:00Z",
+    ]
+
+
+def test_offer_identity_preserves_distinct_availability_and_sponsorship_evidence(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    base = _row("Fresh Strawberries, 1 lb Container", product_id="44391605")
+    organic_in_stock = normalizer.normalize({**base, "is_sponsored": False})
+    sponsored_in_stock = normalizer.normalize({**base, "is_sponsored": True})
+    organic_out_of_stock = normalizer.normalize(
+        {**base, "is_sponsored": False, "stock_availability": False}
+    )
+
+    assert (
+        len(
+            {
+                organic_in_stock.offer_id,
+                sponsored_in_stock.offer_id,
+                organic_out_of_stock.offer_id,
+            }
+        )
+        == 3
+    )
+    assert (
+        len(
+            normalizer.normalize_many(
+                [
+                    {**base, "is_sponsored": False},
+                    {**base, "is_sponsored": True},
+                    {**base, "is_sponsored": False, "stock_availability": False},
+                ]
+            )
+        )
+        == 3
+    )
 
 
 def test_classifies_scope_attributes_and_leaves_unproven_claims_unknown(

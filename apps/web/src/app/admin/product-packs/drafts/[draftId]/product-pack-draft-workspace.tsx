@@ -635,7 +635,7 @@ export function ProductPackDraftWorkspace({ draftId }: { draftId: string }) {
                   </FieldNote>
                 </label>
                 <label>
-                  <span>Availability authority</span>
+                  <span>Search-scope admission policy</span>
                   <select
                     value={String(
                       scope.availability_policy ?? "search_presence",
@@ -648,12 +648,21 @@ export function ProductPackDraftWorkspace({ draftId }: { draftId: string }) {
                       )
                     }
                   >
-                    <option value="search_presence">Observed in search</option>
-                    <option value="in_stock_only">Explicitly in stock</option>
+                    <option value="search_presence">
+                      Include Search-discovered products
+                    </option>
+                    <option value="in_stock_only">
+                      Exclude explicit out-of-stock rows
+                    </option>
                     <option value="retailer_specific">
                       Retailer-specific policy
                     </option>
                   </select>
+                  <FieldNote>
+                    This controls category discovery only. Local availability
+                    and price comparisons always require explicit in-stock,
+                    non-sponsored Search evidence.
+                  </FieldNote>
                 </label>
                 <label className="inline-check">
                   <input
@@ -679,8 +688,9 @@ export function ProductPackDraftWorkspace({ draftId }: { draftId: string }) {
                 <span className="section-kicker">Product meaning</span>
                 <h2>Define the attributes that make products comparable</h2>
                 <p>
-                  PDP may complete identity and package semantics. Search
-                  remains authoritative for store price and availability.
+                  PDP may complete identity and package semantics. Search-listed
+                  price remains authoritative for price. Local availability
+                  requires an explicit in-stock, non-sponsored Search result.
                 </p>
                 <button
                   className="button secondary"
@@ -1014,7 +1024,7 @@ export function ProductPackDraftWorkspace({ draftId }: { draftId: string }) {
                           normalization.primary_display_metric ??
                             "package_price",
                         ),
-                        availability_policy: "search_presence",
+                        availability_policy: "in_stock_only",
                       },
                     ])
                   }
@@ -1677,8 +1687,10 @@ export function ProductPackDraftWorkspace({ draftId }: { draftId: string }) {
           <div className="health-rail-rule">
             <b>Authority boundary</b>
             <p>
-              Search owns price and store presence. PDP supports identity.
-              Deterministic code owns metrics and match eligibility.
+              Search owns listed price, query reach, explicit stock status, and
+              sponsorship. Only an explicit in-stock, non-sponsored result
+              verifies local availability. PDP supports identity. Deterministic
+              code owns metrics and match eligibility.
             </p>
           </div>
           <details>

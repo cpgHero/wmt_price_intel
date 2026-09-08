@@ -1670,6 +1670,15 @@ def test_postgres_replay_reconciles_reviewed_exclusions_to_current_queue() -> No
     assert "exclusion_case_ids != current_insufficient_case_ids" in source
 
 
+def test_postgres_replay_source_is_scoped_to_the_review_queue_tenant() -> None:
+    source = inspect.getsource(PostgresMatchingV2ReviewRepository.create_gold_set_replay)
+
+    assert "JOIN collection_run source_collection" in source
+    assert "source_collection.id = run.collection_run_id" in source
+    assert "source_collection.organization_id" in source
+    assert '"organization_id": queue["organization_id"]' in source
+
+
 def test_postgres_forced_replay_generation_matches_collection_release_identity() -> None:
     source = inspect.getsource(PostgresMatchingV2ReviewRepository.create_gold_set_replay)
 

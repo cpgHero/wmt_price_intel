@@ -41,8 +41,11 @@ def _product_rows(retailer: PriceArchitectureRetailerInput) -> list[JsonObject]:
         grouped[observation.product_id].append(observation)
     products: list[JsonObject] = []
     for product_id, observations in grouped.items():
-        identity = observations[0]
-        prices = [row.package_price for row in observations]
+        verified = [row for row in observations if row.verified_local_availability]
+        if not verified:
+            continue
+        identity = verified[0]
+        prices = [row.package_price for row in verified]
         products.append(
             {
                 "product_id": product_id,
@@ -56,8 +59,12 @@ def _product_rows(retailer: PriceArchitectureRetailerInput) -> list[JsonObject]:
                 "median_price": _round(median(prices)),
                 "minimum_price": _round(min(prices)),
                 "maximum_price": _round(max(prices)),
-                "observed_locations": len({row.location.scope_key for row in observations}),
-                "location_keys": frozenset(row.location.scope_key for row in observations),
+                # Price-architecture coverage is a local-carriage claim and is
+                # therefore restricted to verified organic in-stock evidence.
+                "observed_locations": len({row.location.scope_key for row in verified}),
+                "verified_available_locations": len({row.location.scope_key for row in verified}),
+                "search_observed_locations": len({row.location.scope_key for row in observations}),
+                "location_keys": frozenset(row.location.scope_key for row in verified),
             }
         )
     # Product arrays are presentation-ready materialized evidence. Within any
@@ -209,22 +216,34 @@ class PriceArchitectureMatrixProjector:
         for retailer in inputs:
             products = products_by_retailer[retailer.retailer_id]
             included_product_ids = {str(product["product_id"]) for product in products}
+            search_observations = [
+                row
+                for row in retailer.observations
+                if normalized_brand is None
+                or str(row.brand or "").casefold().strip() == normalized_brand
+            ]
             observed_locations = len(
                 {
                     row.location.scope_key
                     for row in retailer.observations
-                    if row.product_id in included_product_ids
+                    if row.product_id in included_product_ids and row.verified_local_availability
                 }
             )
+            search_observed_locations = len({row.location.scope_key for row in search_observations})
+            search_observed_skus = len({row.product_id for row in search_observations})
+            retailer_status = "available" if products else "unavailable"
             retailer_rows.append(
                 {
                     "id": retailer.retailer_id,
                     "name": retailer.retailer_name,
-                    "status": "available",
+                    "status": retailer_status,
                     "location_dimension": retailer.location_dimension,
                     "sku_count": len(products),
                     "eligible_locations": len(retailer.eligible_scope_keys),
                     "observed_locations": observed_locations,
+                    "verified_available_locations": observed_locations,
+                    "search_observed_locations": search_observed_locations,
+                    "search_observed_skus": search_observed_skus,
                     "verified_first_party_skus": sum(
                         product["seller_status"] == "verified_first_party" for product in products
                     ),
@@ -235,7 +254,11 @@ class PriceArchitectureMatrixProjector:
                         product["seller_status"] == "not_governed" for product in products
                     ),
                     "population_checksum": retailer.population_checksum,
-                    "reason": None,
+                    "reason": (
+                        None
+                        if products
+                        else "No verified local availability evidence for price architecture."
+                    ),
                 }
             )
         retailer_rows.extend(dict(row) for row in unavailable_retailers)
@@ -313,15 +336,17 @@ class PriceArchitectureMatrixProjector:
         crowded = max(rung_rows, key=lambda row: int(row["competitor_sku_count"]))
         whitespace = [row for row in rung_rows if int(row["competitor_sku_count"]) == 0]
         return {
-            "schema_version": "1.1.0",
+            "schema_version": "1.2.0",
             "analysis_id": analysis_id,
             "generated_at": generated_at,
             "product_pack": product_pack,
             "source": {
                 "authority": "Search",
                 "price_grain": (
-                    "retailer product x median positive shelf price across observed locations"
+                    "retailer product x median positive Search-listed package price across "
+                    "verified-available locations"
                 ),
+                "availability_rule": ("explicit in-stock signal from an organic Search result"),
                 "assignment_rule": "price only; no product-match relationship is used",
                 "anchor_rule": (
                     "midpoints between adjacent distinct benchmark SKU median prices"

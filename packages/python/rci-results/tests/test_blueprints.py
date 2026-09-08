@@ -300,6 +300,14 @@ def test_interactive_report_view_compacts_audit_only_location_scopes() -> None:
                                 "image_url": None,
                                 "observed_locations": 2,
                                 "observed_zipcodes": 2,
+                                "verified_available_locations": 2,
+                                "verified_available_zipcodes": 2,
+                                "search_observed_locations": 4,
+                                "search_observed_zipcodes": 3,
+                                "availability_status": "verified_in_stock",
+                                "explicitly_out_of_stock_locations": 1,
+                                "unverified_locations": 1,
+                                "unverified_sponsored_locations": 1,
                                 "location_scope_keys": [
                                     "walmart_us|72712|1",
                                     "walmart_us|72712|2",
@@ -354,6 +362,14 @@ def test_interactive_report_view_compacts_audit_only_location_scopes() -> None:
         "image_url": None,
         "observed_locations": 2,
         "observed_zipcodes": 2,
+        "verified_available_locations": 2,
+        "verified_available_zipcodes": 2,
+        "search_observed_locations": 4,
+        "search_observed_zipcodes": 3,
+        "availability_status": "verified_in_stock",
+        "explicitly_out_of_stock_locations": 1,
+        "unverified_locations": 1,
+        "unverified_sponsored_locations": 1,
     }
     assert view["assortment_analysis"]["retailers"][0]["products"][1]["observed_brand"] is None
     assert view["assortment_analysis"]["retailers"][0]["products"][2]["observed_brand"] is None
@@ -1172,8 +1188,20 @@ def test_shareable_html_matches_app_groups_and_product_evidence_contract() -> No
         "assortment_analysis": {
             "benchmark_retailer": "walmart_us",
             "retailers": [
-                {"retailer": "walmart_us", "distinct_products": 8},
-                {"retailer": "aldi_us", "distinct_products": 6},
+                {
+                    "retailer": "walmart_us",
+                    "distinct_products": 8,
+                    "verified_available_products": 8,
+                    "verified_available_locations": 51,
+                    "verified_available_zipcodes": 42,
+                },
+                {
+                    "retailer": "aldi_us",
+                    "distinct_products": 6,
+                    "verified_available_products": 6,
+                    "verified_available_locations": 42,
+                    "verified_available_zipcodes": 42,
+                },
             ],
             "comparisons": [
                 {
@@ -1245,6 +1273,125 @@ def test_shareable_html_matches_app_groups_and_product_evidence_contract() -> No
     assert "Decision readiness" in html
     assert "Product relationship review" in html
     assert "Export manifest" in html
+
+
+def test_shareable_html_fails_closed_for_legacy_availability_and_missing_prices() -> None:
+    result = _result()
+    context = {
+        "product_decisions": [
+            {
+                "id": "missing-price-pair",
+                "priority": "attention",
+                "benchmark_product_id": "benchmark-missing",
+                "benchmark_product_name": "Benchmark missing price",
+                "competitor": "aldi_us",
+                "competitor_product_id": "competitor-missing",
+                "competitor_product_name": "Competitor missing price",
+                "geographies": 1,
+            }
+        ],
+        "assortment_analysis": {
+            "benchmark_retailer": "walmart_us",
+            "retailers": [
+                {
+                    "retailer": "walmart_us",
+                    "distinct_products": 99,
+                    "verified_available_products": 1,
+                    "verified_available_locations": 4,
+                    "verified_available_zipcodes": 3,
+                },
+                {
+                    "retailer": "aldi_us",
+                    "distinct_products": 1,
+                    "verified_available_products": 0,
+                    "verified_available_locations": 0,
+                    "verified_available_zipcodes": 0,
+                },
+            ],
+            "comparisons": [
+                {
+                    "competitor": "aldi_us",
+                    "product_relationships": 0,
+                    "benchmark_only_products": 1,
+                    "competitor_whitespace_products": 0,
+                    "geography": {},
+                    "key_points": [],
+                    "top_benchmark_only": [
+                        {
+                            "name": "Legacy Search-only product",
+                            "observed_locations": 4_510,
+                            "observed_zipcodes": 3_900,
+                        },
+                        {
+                            "name": "Verified local product",
+                            "availability_status": "verified_in_stock",
+                            "verified_available_locations": 4,
+                            "verified_available_zipcodes": 3,
+                        },
+                    ],
+                    "top_competitor_whitespace": [],
+                }
+            ],
+        },
+    }
+
+    html = (
+        ArtifactRenderer(REPOSITORY_ROOT)
+        .render(result, "html", presentation_context=context)
+        .body.decode()
+    )
+
+    assert "Legacy Search-only product" not in html
+    assert "Verified local product" in html
+    assert "4 verified locations · 3 verified ZIPs" in html
+    assert "Benchmark missing price</h3>" in html
+    assert html.count("Unavailable</b>") >= 2
+    assert "Median matched-price evidence is unavailable" in html
+
+
+def test_shareable_html_suppresses_legacy_assortment_rollups() -> None:
+    result = _result()
+    context = {
+        "assortment_analysis": {
+            "benchmark_retailer": "walmart_us",
+            "retailers": [
+                {"retailer": "walmart_us", "distinct_products": 99},
+                {"retailer": "aldi_us", "distinct_products": 1},
+            ],
+            "comparisons": [
+                {
+                    "competitor": "aldi_us",
+                    "product_relationships": 99,
+                    "benchmark_only_products": 99,
+                    "competitor_whitespace_products": 1,
+                    "geography": {
+                        "shared_zipcodes": 4_510,
+                        "benchmark_broader_zipcodes": 4_510,
+                    },
+                    "key_points": ["Search-only rollup must not render."],
+                    "top_benchmark_only": [
+                        {
+                            "name": "Search-only product must not render",
+                            "observed_locations": 4_510,
+                        }
+                    ],
+                    "top_competitor_whitespace": [],
+                }
+            ],
+        }
+    }
+
+    html = (
+        ArtifactRenderer(REPOSITORY_ROOT)
+        .render(result, "html", presentation_context=context)
+        .body.decode()
+    )
+
+    assert "Availability evidence unverified" in html
+    assert "Legacy Search reach cannot support" in html
+    assert "Search-only rollup must not render." not in html
+    assert "Search-only product must not render" not in html
+    assert "4,510 shared ZIPs" not in html
 
 
 def test_artifacts_reconcile_to_the_same_immutable_result_checksum() -> None:

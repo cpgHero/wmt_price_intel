@@ -3,6 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { PriceMonitoringMap, PriceMonitoringView } from "@/lib/api";
+import {
+  availabilityEvidenceLabel,
+  priceEvidenceLabel,
+} from "@/lib/availability-presentation";
 
 import styles from "./evidence-retail-map.module.css";
 
@@ -155,6 +159,7 @@ function toFeatureCollection(points: MapPoint[]) {
         status: point.status,
         position: pointPosition(point),
         price_label: point.price === null ? "" : currency(point.price),
+        availability_status: point.availability_status,
       },
     })),
   };
@@ -254,8 +259,20 @@ function addEvidenceLayers(
           ]
         : "#f5b642",
       "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 4, 9, 6, 14, 9],
-      "circle-stroke-color": isObserved ? "#ffffff" : "#4a3a16",
-      "circle-stroke-width": 1.5,
+      "circle-stroke-color": isObserved
+        ? [
+            "match",
+            ["get", "availability_status"],
+            "verified_in_stock",
+            "#14845f",
+            "explicitly_out_of_stock",
+            "#b63f3f",
+            "unverified_sponsored",
+            "#d99016",
+            "#718087",
+          ]
+        : "#4a3a16",
+      "circle-stroke-width": isObserved ? 2.5 : 1.5,
       "circle-opacity": 0.9,
     },
   });
@@ -326,9 +343,13 @@ export function EvidenceRetailMap({
     if (view.filters.zipcode) parameters.set("zipcode", view.filters.zipcode);
     fetch(
       `/api/price-monitoring/${encodeURIComponent(view.analysis_id)}/map?${parameters.toString()}`,
-      { signal: controller.signal },
+      { cache: "no-store", signal: controller.signal },
     )
       .then(async (response) => {
+        if (response.status === 409) {
+          window.location.reload();
+          throw new DOMException("Report quarantined", "AbortError");
+        }
         if (!response.ok)
           throw new Error(`Map evidence returned ${response.status}`);
         setMapError(null);
@@ -531,7 +552,7 @@ export function EvidenceRetailMap({
   );
   const modeTotal = display
     ? activeMode === "observed"
-      ? display.observed_locations
+      ? display.search_observed_locations
       : display.not_observed_locations
     : 0;
   const modePoints = display
@@ -579,8 +600,10 @@ export function EvidenceRetailMap({
             onClick={() => selectMode("observed")}
             type="button"
           >
-            Observed
-            <small>{display ? count(display.observed_locations) : "—"}</small>
+            Search reach
+            <small>
+              {display ? count(display.search_observed_locations) : "—"}
+            </small>
           </button>
           <button
             aria-pressed={activeMode === "not_observed"}
@@ -588,17 +611,40 @@ export function EvidenceRetailMap({
             onClick={() => selectMode("not_observed")}
             type="button"
           >
-            Not observed
+            Not in Search
             <small>
               {display ? count(display.not_observed_locations) : "—"}
             </small>
           </button>
         </div>
 
+        {display ? (
+          <section className={styles.positionSummary}>
+            <header>
+              <span>Local availability proof</span>
+              <strong>separate from Search reach</strong>
+            </header>
+            <dl>
+              <div className={styles.below}>
+                <dt>Verified in stock</dt>
+                <dd>{count(display.verified_available_locations)}</dd>
+              </div>
+              <div className={styles.at}>
+                <dt>Search-observed, not verified (total)</dt>
+                <dd>{count(display.unverified_locations)}</dd>
+              </div>
+              <div className={styles.above}>
+                <dt>Explicitly out of stock (subset)</dt>
+                <dd>{count(display.explicitly_out_of_stock_locations)}</dd>
+              </div>
+            </dl>
+          </section>
+        ) : null}
+
         {activeMode === "observed" && display && hasPricePositionCounts ? (
           <section className={styles.positionSummary}>
             <header>
-              <span>Store price position</span>
+              <span>Search-listed price position</span>
               <strong>
                 vs. {currency(mapData?.reference_price ?? null)} median
               </strong>
@@ -622,7 +668,7 @@ export function EvidenceRetailMap({
 
         <p className={styles.coverage}>
           <strong>{count(modePoints)} mapped</strong> of {count(modeTotal)}{" "}
-          locations
+          store-context queries
           {modeSampled ? " · bounded overview sample" : ""}
         </p>
 
@@ -630,7 +676,7 @@ export function EvidenceRetailMap({
           <section className={styles.pointDetail}>
             <small>
               {selectedPoint.status === "observed"
-                ? "Observed store"
+                ? availabilityEvidenceLabel(selectedPoint)
                 : "Search non-observation"}
             </small>
             <strong>
@@ -645,11 +691,18 @@ export function EvidenceRetailMap({
                 .join(" · ")}
             </span>
             {selectedPoint.status === "observed" ? (
-              <b>
-                {currency(selectedPoint.price)} ·{" "}
-                {signedCurrency(selectedPoint.difference_from_reference)} vs.
-                median
-              </b>
+              <>
+                <b>
+                  {priceEvidenceLabel(selectedPoint)} ·{" "}
+                  {currency(selectedPoint.price)} ·{" "}
+                  {signedCurrency(selectedPoint.difference_from_reference)} vs.
+                  median
+                </b>
+                <p>
+                  A store-context Search return proves query reach. Only a
+                  “Verified locally in stock” status proves availability.
+                </p>
+              </>
             ) : (
               <p>
                 Product did not appear in the successful Search result; this is
@@ -705,14 +758,19 @@ export function EvidenceRetailMap({
           </section>
         ) : (
           <p className={styles.prompt}>
-            Select a store point for exact price and location detail.
+            Select a store-context point for listed price and availability
+            evidence.
           </p>
         )}
 
         <footer>
-          Search is authoritative for price and observation. Store names and
-          geography come from the retailer location master. Map data ©
-          OpenStreetMap contributors.
+          Every point in Search reach is a query-context return, not a carriage
+          claim. Search is authoritative for listed price and explicit stock
+          status; sponsored or missing availability evidence remains unverified.
+          Point outlines are green for verified in stock, red for explicitly out
+          of stock, gold for unverified sponsored, and gray for other unverified
+          evidence. Store names and geography come from the retailer location
+          master. Map data © OpenStreetMap contributors.
         </footer>
       </aside>
     </div>

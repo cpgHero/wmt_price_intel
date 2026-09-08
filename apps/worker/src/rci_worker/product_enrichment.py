@@ -19,7 +19,7 @@ from rci_analytics import (
     benchmark_product_match_candidates,
 )
 from rci_analytics.models import ClassifiedOffer
-from rci_analytics.normalization import RetailerIdentityMap
+from rci_analytics.normalization import BooleanAliasValidationError, RetailerIdentityMap
 from rci_core import APP_VERSION, AppSettings
 from rci_db import DatabaseProbe
 from rci_product_packs import PostgresProductPackCatalog
@@ -180,6 +180,8 @@ async def _run(args: argparse.Namespace) -> dict[str, object]:
                         normalized = normalizer.normalize(
                             historical_source_row(row, historical_source)
                         )
+                    except BooleanAliasValidationError:
+                        raise
                     except ValueError:
                         continue
                     source_artifact_by_offer_id[normalized.offer_id] = (

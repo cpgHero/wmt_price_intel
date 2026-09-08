@@ -89,13 +89,13 @@ async function proposedScope(
 }
 
 function scopeLabel(scope: MatchReviewConnection["scope"]) {
-  if (!scope || scope.mode === "global") return "All observed locations";
+  if (!scope || scope.mode === "global") return "All governed locations";
   const count = scope.definition.benchmark_location_scope_keys?.length ?? 0;
   if (scope.mode === "explicit_benchmark_locations")
     return `${count} selected primary locations`;
   return count
-    ? `Primary product footprint · ${count} locations`
-    : "Primary product footprint";
+    ? `Verified-local primary product footprint · ${count} locations`
+    : "Verified-local primary product footprint · no locations";
 }
 
 function ProductImage({
@@ -745,9 +745,10 @@ function MatchEvidenceDrawer({
             </p>
           ) : null}
           <p>
-            Store-specific price and location evidence comes from Search. PDP
-            evidence is used for product identity, descriptions, specifications,
-            URLs, and imagery.
+            Listed price and retailer location query context come from Search.
+            Only explicit in-stock, non-sponsored evidence verifies local
+            availability. PDP evidence is used for product identity,
+            descriptions, specifications, URLs, and imagery.
           </p>
           {selection.connection ? (
             <span>
@@ -1253,9 +1254,9 @@ export function MatchReviewWorkbench({
             onChange={(event) => setScopeMode(event.target.value as ScopeMode)}
           >
             <option value="observed_benchmark_product_footprint">
-              Primary product footprint
+              Verified-local primary product footprint
             </option>
-            <option value="global">All observed locations</option>
+            <option value="global">All governed locations</option>
           </select>
         </label>
       </div>
@@ -1272,9 +1273,9 @@ export function MatchReviewWorkbench({
         </div>
         <p>
           {selectedProfile?.label}. New decisions default to the primary
-          product&apos;s observed store footprint, allowing the same competitor
-          item to map to different regional primary products only where their
-          footprints do not overlap.
+          product&apos;s verified-local store footprint, allowing the same
+          competitor item to map to different regional primary products only
+          where their footprints do not overlap.
         </p>
       </div>
 

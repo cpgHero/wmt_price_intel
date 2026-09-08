@@ -6,7 +6,9 @@ import hashlib
 import json
 import os
 import secrets
+from contextlib import suppress
 from datetime import datetime
+from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request, status
@@ -14,11 +16,16 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from rci_api.analyses import get_analysis_service
+from rci_api.availability_release_audit import (
+    audit_price_architecture_matrix,
+    audit_price_monitoring_catalog,
+)
 from rci_api.competitive_leadership import (
     get_competitive_product_leadership_service,
 )
 from rci_api.competitive_release_audit import audit_competitive_portfolio_set
 from rci_api.price_monitoring import get_price_monitoring_service
+from rci_contracts import ContractError, validate_instance
 
 router = APIRouter(prefix="/api/v1")
 
@@ -46,8 +53,8 @@ def _checksum(document: dict[str, Any]) -> str:
     return hashlib.sha256(_json(document).encode()).hexdigest()
 
 
-def _canonical_catalog_retailer_ids(report: dict[str, Any]) -> list[str]:
-    """Return canonical retailer IDs from a rendered report view.
+def _canonical_report_retailer_ids(report: dict[str, Any]) -> tuple[str, list[str]]:
+    """Return canonical benchmark and competitor IDs from a rendered report view.
 
     The top-level benchmark and competitor fields are human-readable labels.  All
     downstream Price Intelligence services are keyed by the canonical IDs in
@@ -68,6 +75,13 @@ def _canonical_catalog_retailer_ids(report: dict[str, Any]) -> list[str]:
         if not isinstance(competitor, dict) or not str(competitor.get("id") or "").strip():
             raise ValueError("A report competitor retailer ID is unavailable for materialization.")
         competitor_ids.append(str(competitor["id"]).strip())
+    return str(benchmark["id"]).strip(), competitor_ids
+
+
+def _canonical_catalog_retailer_ids(report: dict[str, Any]) -> list[str]:
+    """Return retailers that require positive-evidence publication catalogs."""
+
+    benchmark_id, competitor_ids = _canonical_report_retailer_ids(report)
     scoreable_value = report.get("scoreable_retailers")
     if scoreable_value is None:
         scoreable_ids = competitor_ids
@@ -82,7 +96,14 @@ def _canonical_catalog_retailer_ids(report: dict[str, Any]) -> list[str]:
             raise ValueError(
                 "Report scoreable retailer scope contains unconfigured IDs: " + ", ".join(unknown)
             )
-    return sorted({str(benchmark["id"]).strip(), *scoreable_ids})
+    return sorted({benchmark_id, *scoreable_ids})
+
+
+def _canonical_architecture_retailer_ids(report: dict[str, Any]) -> list[str]:
+    """Return the full configured retailer scope, including explicit unavailable rows."""
+
+    benchmark_id, competitor_ids = _canonical_report_retailer_ids(report)
+    return sorted({benchmark_id, *competitor_ids})
 
 
 def _require_internal_token(provided: str | None) -> None:
@@ -227,6 +248,46 @@ async def _stage_documents(
     return completed
 
 
+async def _archive_publication_predecessors(
+    connection: Any,
+    *,
+    analysis_result_id: str,
+    product_pack_id: str,
+    organization_id: str,
+) -> list[str]:
+    """Archive only prior publications in the current tenant/category lineage."""
+
+    return [
+        str(row)
+        for row in (
+            await connection.execute(
+                text(
+                    """
+                    UPDATE analysis_result predecessor
+                    SET archived_at = now()
+                    FROM analysis_run predecessor_run
+                    JOIN collection_run predecessor_collection
+                      ON predecessor_collection.id = predecessor_run.collection_run_id
+                    WHERE predecessor.analysis_run_id = predecessor_run.id
+                      AND predecessor_run.product_pack_id = :product_pack_id
+                      AND predecessor_collection.organization_id =
+                        CAST(:organization_id AS uuid)
+                      AND predecessor.id <> CAST(:analysis_result_id AS uuid)
+                      AND predecessor.reporting_status IN ('ready', 'blocked')
+                      AND predecessor.archived_at IS NULL
+                    RETURNING predecessor.id::text
+                    """
+                ),
+                {
+                    "product_pack_id": product_pack_id,
+                    "organization_id": organization_id,
+                    "analysis_result_id": analysis_result_id,
+                },
+            )
+        ).scalars()
+    ]
+
+
 @router.post("/internal/report-materialization-jobs/{job_id}/prepare")
 async def prepare_report_materialization(
     job_id: str,
@@ -265,6 +326,7 @@ async def prepare_report_materialization(
         )
     try:
         catalog_retailers = _canonical_catalog_retailer_ids(report)
+        architecture_retailers = _canonical_architecture_retailer_ids(report)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
@@ -275,6 +337,7 @@ async def prepare_report_materialization(
         "analysis_id": str(job["analysis_id"]),
         "price_scopes": [f"{mode}:{increment:.2f}" for mode, increment in PRICE_SCOPES],
         "catalog_retailers": catalog_retailers,
+        "architecture_retailers": architecture_retailers,
         "portfolio_scopes": [f"{profile}:{radius}" for profile in profiles for radius in (1, 3, 5)],
         "profiles": profiles,
         "radii": [1, 3, 5],
@@ -452,11 +515,30 @@ async def finalize_report_materialization(
                 )
             ).mappings()
         ]
+    document_shape_findings: list[dict[str, Any]] = []
+    for row in staged:
+        value = row.get("document")
+        if isinstance(value, dict):
+            row["document"] = dict(value)
+            continue
+        row["document"] = {}
+        document_shape_findings.append(
+            {
+                "severity": "error",
+                "code": "staged_document_not_object",
+                "message": "A staged publication document is not a JSON object.",
+                "context": {
+                    "document_kind": str(row["document_kind"]),
+                    "scope_key": str(row["scope_key"]),
+                },
+            }
+        )
     price_rows = [row for row in staged if row["document_kind"] == "price_architecture"]
     catalog_rows = [row for row in staged if row["document_kind"] == "price_catalog"]
     portfolio_rows = [row for row in staged if row["document_kind"] == "competitive_portfolio"]
     expected_price = set(plan.get("price_scopes", []))
     expected_catalogs = set(plan.get("catalog_retailers", []))
+    expected_architecture_retailers = set(plan.get("architecture_retailers", []))
     expected_portfolio = set(plan.get("portfolio_scopes", []))
     actual_price = {str(row["scope_key"]) for row in price_rows}
     actual_catalogs = {str(row["scope_key"]) for row in catalog_rows}
@@ -465,7 +547,117 @@ async def finalize_report_materialization(
         [dict(row["document"]) for row in portfolio_rows],
         expected_profiles=profiles,
     )
-    gate_findings = list(portfolio_audit["findings"])
+    gate_findings = [*document_shape_findings, *portfolio_audit["findings"]]
+    repository_root = Path(os.getenv("RCI_REPOSITORY_ROOT", Path.cwd())).resolve()
+    expected_analysis_id = str(job["analysis_id"])
+    for row in staged:
+        document = dict(row["document"])
+        if str(row["checksum"]) != _checksum(document):
+            gate_findings.append(
+                {
+                    "severity": "error",
+                    "code": "staged_document_checksum_mismatch",
+                    "message": "A staged publication document changed after certification.",
+                    "context": {
+                        "document_kind": str(row["document_kind"]),
+                        "scope_key": str(row["scope_key"]),
+                    },
+                }
+            )
+        if str(document.get("analysis_id") or "") != expected_analysis_id:
+            gate_findings.append(
+                {
+                    "severity": "error",
+                    "code": "staged_document_analysis_mismatch",
+                    "message": "A staged document belongs to another analysis.",
+                    "context": {
+                        "document_kind": str(row["document_kind"]),
+                        "scope_key": str(row["scope_key"]),
+                        "expected_analysis_id": expected_analysis_id,
+                        "actual_analysis_id": document.get("analysis_id"),
+                    },
+                }
+            )
+    for row in price_rows:
+        document = dict(row["document"])
+        filters_value = document.get("filters")
+        expected_scope: str | None = None
+        if isinstance(filters_value, dict):
+            with suppress(TypeError, ValueError):
+                expected_scope = (
+                    f"{filters_value.get('mode')}:"
+                    f"{float(filters_value.get('fixed_increment') or 0):.2f}"
+                )
+        if expected_scope is None:
+            gate_findings.append(
+                {
+                    "severity": "error",
+                    "code": "price_architecture_scope_invalid",
+                    "message": "Price Architecture document has no valid materialization scope.",
+                    "context": {"staged_scope": str(row["scope_key"])},
+                }
+            )
+        elif str(row["scope_key"]) != expected_scope:
+            gate_findings.append(
+                {
+                    "severity": "error",
+                    "code": "price_architecture_scope_mismatch",
+                    "message": "Price Architecture document differs from its staged scope.",
+                    "context": {
+                        "staged_scope": str(row["scope_key"]),
+                        "document_scope": expected_scope,
+                    },
+                }
+            )
+        try:
+            validate_instance(
+                repository_root,
+                "price-architecture-matrix.schema.json",
+                document,
+                label=f"staged-price-architecture:{row['scope_key']}",
+            )
+        except ContractError as exc:
+            gate_findings.append(
+                {
+                    "severity": "error",
+                    "code": "price_architecture_contract_invalid",
+                    "message": "Price Architecture document fails the current JSON contract.",
+                    "context": {"scope_key": str(row["scope_key"]), "error": str(exc)},
+                }
+            )
+        else:
+            gate_findings.extend(
+                audit_price_architecture_matrix(
+                    document,
+                    expected_retailer_ids=expected_architecture_retailers,
+                    expected_catalog_retailer_ids=expected_catalogs,
+                )
+            )
+    for row in catalog_rows:
+        document = dict(row["document"])
+        try:
+            validate_instance(
+                repository_root,
+                "price-monitoring-view.schema.json",
+                document,
+                label=f"staged-price-catalog:{row['scope_key']}",
+            )
+        except ContractError as exc:
+            gate_findings.append(
+                {
+                    "severity": "error",
+                    "code": "price_catalog_contract_invalid",
+                    "message": "Price Intelligence catalog fails the current JSON contract.",
+                    "context": {"scope_key": str(row["scope_key"]), "error": str(exc)},
+                }
+            )
+        else:
+            gate_findings.extend(
+                audit_price_monitoring_catalog(
+                    document,
+                    expected_retailer_id=str(row["scope_key"]),
+                )
+            )
     if actual_price != expected_price:
         gate_findings.append(
             {
@@ -544,10 +736,13 @@ async def finalize_report_materialization(
                     text(
                         """
                         SELECT job.analysis_result_id::text, result.analysis_id,
-                          run.product_pack_id, job.progress_total
+                          run.product_pack_id, current_collection.organization_id,
+                          job.progress_total
                         FROM report_materialization_job job
                         JOIN analysis_result result ON result.id = job.analysis_result_id
                         JOIN analysis_run run ON run.id = result.analysis_run_id
+                        JOIN collection_run current_collection
+                          ON current_collection.id = run.collection_run_id
                         WHERE job.id = CAST(:job_id AS uuid)
                           AND job.status = 'running' AND job.locked_by = :worker_id
                           AND job.lease_expires_at > now()
@@ -645,30 +840,12 @@ async def finalize_report_materialization(
                     "document": _json(document),
                 },
             )
-        archived_ids = [
-            str(row)
-            for row in (
-                await connection.execute(
-                    text(
-                        """
-                        UPDATE analysis_result predecessor
-                        SET archived_at = now()
-                        FROM analysis_run predecessor_run
-                        WHERE predecessor.analysis_run_id = predecessor_run.id
-                          AND predecessor_run.product_pack_id = :product_pack_id
-                          AND predecessor.id <> CAST(:analysis_result_id AS uuid)
-                          AND predecessor.reporting_status IN ('ready', 'blocked')
-                          AND predecessor.archived_at IS NULL
-                        RETURNING predecessor.id::text
-                        """
-                    ),
-                    {
-                        "product_pack_id": str(locked["product_pack_id"]),
-                        "analysis_result_id": analysis_result_id,
-                    },
-                )
-            ).scalars()
-        ]
+        archived_ids = await _archive_publication_predecessors(
+            connection,
+            analysis_result_id=analysis_result_id,
+            product_pack_id=str(locked["product_pack_id"]),
+            organization_id=str(locked["organization_id"]),
+        )
         await connection.execute(
             text(
                 """
@@ -699,7 +876,7 @@ async def finalize_report_materialization(
                 INSERT INTO audit_event (
                   organization_id, event_type, entity_type, entity_id, details
                 ) VALUES (
-                  '00000000-0000-0000-0000-000000000001',
+                  CAST(:organization_id AS uuid),
                   'report_publication_gate_passed', 'analysis_result', :entity_id,
                   CAST(:details AS jsonb)
                 )
@@ -707,6 +884,7 @@ async def finalize_report_materialization(
             ),
             {
                 "entity_id": str(locked["analysis_id"]),
+                "organization_id": str(locked["organization_id"]),
                 "details": _json(
                     {
                         "job_id": job_id,

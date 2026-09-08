@@ -41,7 +41,7 @@ export const applicationNavigation: readonly NavigationGroup[] = [
     items: [
       {
         label: "Price Intelligence",
-        description: "Store-level price distribution within each retailer",
+        description: "Search-listed prices by store query context",
         href: "/price-intelligence",
         icon: "prices",
         match: "prefix",

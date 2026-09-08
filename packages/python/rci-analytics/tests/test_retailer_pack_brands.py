@@ -38,6 +38,7 @@ def _offer(
         image_url=None,
         collected_at="2026-08-11T12:00:00Z",
         raw={},
+        is_sponsored=False,
     )
 
 
