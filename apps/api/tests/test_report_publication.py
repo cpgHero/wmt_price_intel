@@ -375,9 +375,10 @@ async def test_publication_archives_only_same_tenant_predecessor() -> None:
                 await connection.execute(
                     text(
                         "INSERT INTO collection_run "
-                        "(id, organization_id, definition_version_id, status) "
+                        "(id, organization_id, definition_version_id, status, "
+                        "estimated_pages, estimated_credits) "
                         "VALUES (CAST(:id AS uuid), CAST(:organization_id AS uuid), "
-                        "CAST(:definition_version_id AS uuid), 'succeeded')"
+                        "CAST(:definition_version_id AS uuid), 'succeeded', 0, 0)"
                     ),
                     {
                         "id": collection_run_id,
