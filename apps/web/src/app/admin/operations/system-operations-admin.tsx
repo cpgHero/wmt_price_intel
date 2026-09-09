@@ -15,6 +15,35 @@ interface QueueState {
   running: number;
   expired_leases: number;
   failures_24h: number;
+  active_blocked: number;
+}
+interface AnalysisFailure {
+  run_id: string;
+  product_pack_id: string;
+  product_pack_version: string;
+  attempt_count: number;
+  max_attempts: number;
+  last_error: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+}
+interface ReportMaterializationFailure {
+  job_id: string;
+  analysis_id: string;
+  product_pack_id: string;
+  product_pack_version: string;
+  status: string;
+  stage: string;
+  progress_current: number;
+  progress_total: number | null;
+  attempt_count: number;
+  max_attempts: number;
+  last_error: string | null;
+  created_at: string;
+  started_at: string | null;
+  completed_at: string | null;
+  updated_at: string;
 }
 interface OperationsSnapshot {
   generated_at: string;
@@ -32,6 +61,8 @@ interface OperationsSnapshot {
     retailer_packs: Array<{ id: string; version: string; checksum: string }>;
   };
   queues: QueueState[];
+  recent_analysis_failures?: AnalysisFailure[];
+  recent_report_materialization_failures?: ReportMaterializationFailure[];
   publication: {
     active_ready_reports: number;
     active_pending_reports: number;
@@ -118,6 +149,9 @@ function OperationsWorkspace({
     (total, queue) => total + queue.expired_leases,
     0,
   );
+  const recentAnalysisFailures = snapshot.recent_analysis_failures ?? [];
+  const recentReportFailures =
+    snapshot.recent_report_materialization_failures ?? [];
   return (
     <div className={styles.workspace}>
       <section className={styles.statusHero}>
@@ -258,6 +292,7 @@ function OperationsWorkspace({
                 <th>Waiting</th>
                 <th>Running</th>
                 <th>Expired leases</th>
+                <th>Active blocked</th>
                 <th>Failures / review in 24h</th>
               </tr>
             </thead>
@@ -271,12 +306,157 @@ function OperationsWorkspace({
                   <td>{queue.queued}</td>
                   <td>{queue.running}</td>
                   <td>{queue.expired_leases}</td>
+                  <td>{queue.active_blocked}</td>
                   <td>{queue.failures_24h}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+      </section>
+
+      <section className={styles.panel}>
+        <header>
+          <div>
+            <span className={styles.kicker}>
+              Incident detail · last 24 hours
+            </span>
+            <h2>Recent analysis failures</h2>
+          </div>
+          <StatePill
+            state={recentAnalysisFailures.length ? "attention" : "healthy"}
+          />
+        </header>
+        {recentAnalysisFailures.length ? (
+          <div className={styles.queueTableWrap}>
+            <table className={`${styles.queueTable} ${styles.failureTable}`}>
+              <thead>
+                <tr>
+                  <th>Product Pack</th>
+                  <th>Run</th>
+                  <th>Attempts</th>
+                  <th>Last error</th>
+                  <th>Timestamps</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentAnalysisFailures.map((failure) => (
+                  <tr key={failure.run_id}>
+                    <th>
+                      <span className={styles.failurePack}>
+                        {failure.product_pack_id}
+                      </span>
+                      <small>v{failure.product_pack_version}</small>
+                    </th>
+                    <td>
+                      <code className={styles.runId}>{failure.run_id}</code>
+                    </td>
+                    <td>
+                      {failure.attempt_count} / {failure.max_attempts}
+                    </td>
+                    <td className={styles.errorDetail}>
+                      {failure.last_error ?? "No failure detail recorded."}
+                    </td>
+                    <td>
+                      <span className={styles.failureTiming}>
+                        <span>Failed {formatTime(failure.completed_at)}</span>
+                        <small>Started {formatTime(failure.started_at)}</small>
+                        <small>Created {formatTime(failure.created_at)}</small>
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className={styles.emptyState}>
+            No analysis runs failed in the last 24 hours.
+          </p>
+        )}
+      </section>
+
+      <section className={styles.panel}>
+        <header>
+          <div>
+            <span className={styles.kicker}>
+              Publication incident detail · last 24 hours
+            </span>
+            <h2>Recent report materialization failures</h2>
+          </div>
+          <StatePill
+            state={recentReportFailures.length ? "attention" : "healthy"}
+          />
+        </header>
+        {recentReportFailures.length ? (
+          <div className={styles.queueTableWrap}>
+            <table
+              className={`${styles.queueTable} ${styles.reportFailureTable}`}
+            >
+              <thead>
+                <tr>
+                  <th>Product Pack</th>
+                  <th>Analysis / job</th>
+                  <th>Status / stage</th>
+                  <th>Progress</th>
+                  <th>Attempts</th>
+                  <th>Last error</th>
+                  <th>Timestamps</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentReportFailures.map((failure) => (
+                  <tr key={failure.job_id}>
+                    <th>
+                      <span className={styles.failurePack}>
+                        {failure.product_pack_id}
+                      </span>
+                      <small>v{failure.product_pack_version}</small>
+                    </th>
+                    <td>
+                      <span className={styles.identifierStack}>
+                        <code>{failure.analysis_id}</code>
+                        <small>Job {failure.job_id}</small>
+                      </span>
+                    </td>
+                    <td>
+                      <span className={styles.identifierStack}>
+                        <StatePill state={failure.status} />
+                        <small>Stage {failure.stage}</small>
+                      </span>
+                    </td>
+                    <td>
+                      {failure.progress_current} /{" "}
+                      {failure.progress_total ?? "—"}
+                    </td>
+                    <td>
+                      {failure.attempt_count} / {failure.max_attempts}
+                    </td>
+                    <td className={styles.errorDetail}>
+                      {failure.last_error ?? "No failure detail recorded."}
+                    </td>
+                    <td>
+                      <span className={styles.failureTiming}>
+                        <span>Updated {formatTime(failure.updated_at)}</span>
+                        <small>Started {formatTime(failure.started_at)}</small>
+                        <small>Created {formatTime(failure.created_at)}</small>
+                        {failure.completed_at ? (
+                          <small>
+                            Completed {formatTime(failure.completed_at)}
+                          </small>
+                        ) : null}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <p className={styles.emptyState}>
+            No report materialization jobs were blocked in the last 24 hours.
+          </p>
+        )}
       </section>
 
       <div className={styles.twoColumn}>

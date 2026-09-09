@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import secrets
 from contextlib import suppress
@@ -24,10 +25,12 @@ from rci_api.competitive_leadership import (
     get_competitive_product_leadership_service,
 )
 from rci_api.competitive_release_audit import audit_competitive_portfolio_set
+from rci_api.operations import _safe_error
 from rci_api.price_monitoring import get_price_monitoring_service
 from rci_contracts import ContractError, validate_instance
 
 router = APIRouter(prefix="/api/v1")
+logger = logging.getLogger(__name__)
 
 PRICE_SCOPES = (
     ("benchmark_anchored", 0.5),
@@ -466,16 +469,33 @@ async def stage_competitive_portfolio(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Competitive radius must be 1, 3, or 5 miles.",
         )
-    document = await get_competitive_product_leadership_service(request).portfolio_view(
-        str(job["analysis_id"]),
-        competitor_id="all",
-        profile_id=scope.profile_id,
-        radius_miles=scope.radius_miles,  # type: ignore[arg-type]
-        state=None,
-        city=None,
-        refresh=True,
-        publish=False,
-    )
+    analysis_id = str(job["analysis_id"])
+    try:
+        document = await get_competitive_product_leadership_service(request).portfolio_view(
+            analysis_id,
+            competitor_id="all",
+            profile_id=scope.profile_id,
+            radius_miles=scope.radius_miles,  # type: ignore[arg-type]
+            state=None,
+            city=None,
+            refresh=True,
+            publish=False,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        safe_exception = _safe_error(f"{type(exc).__name__}: {exc}") or type(exc).__name__
+        detail = (
+            "Competitive portfolio materialization failed for "
+            f"job_id={job_id!r}, analysis_id={analysis_id!r}, competitor_id='all', "
+            f"profile_id={scope.profile_id!r}, radius_miles={scope.radius_miles}, "
+            f"state=None, city=None: {safe_exception}"
+        )
+        logger.exception(detail)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=detail,
+        ) from exc
     completed = await _stage_documents(
         request,
         job_id,

@@ -233,6 +233,76 @@
 .queueTable tbody th {
   font-weight: 760;
 }
+.failureTable {
+  table-layout: fixed;
+}
+.failureTable th:nth-child(1) {
+  width: 15%;
+}
+.failureTable th:nth-child(2) {
+  width: 19%;
+}
+.failureTable th:nth-child(3) {
+  width: 8%;
+}
+.failureTable th:nth-child(4) {
+  width: 34%;
+}
+.failureTable th:nth-child(5) {
+  width: 24%;
+}
+.reportFailureTable {
+  table-layout: fixed;
+}
+.reportFailureTable th:nth-child(1) {
+  width: 12%;
+}
+.reportFailureTable th:nth-child(2) {
+  width: 19%;
+}
+.reportFailureTable th:nth-child(3) {
+  width: 11%;
+}
+.reportFailureTable th:nth-child(4),
+.reportFailureTable th:nth-child(5) {
+  width: 8%;
+}
+.reportFailureTable th:nth-child(6) {
+  width: 25%;
+}
+.reportFailureTable th:nth-child(7) {
+  width: 17%;
+}
+.failurePack,
+.failureTiming,
+.identifierStack {
+  display: grid;
+  gap: 0.12rem;
+}
+.identifierStack code,
+.identifierStack small {
+  overflow-wrap: anywhere;
+}
+.failureTable small,
+.failureTiming small {
+  color: var(--muted);
+  font-size: 0.5rem;
+  font-weight: 560;
+}
+.runId {
+  font-size: 0.54rem;
+  overflow-wrap: anywhere;
+}
+.errorDetail {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.emptyState {
+  color: var(--muted);
+  font-size: 0.62rem;
+  margin: 0;
+}
 .twoColumn {
   display: grid;
   gap: 0.9rem;

@@ -2935,6 +2935,12 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-08",
+              "Implemented and locally test-verified; production reprocessing and acceptance in progress",
+              "Governed retained-evidence replay now exposes bounded administrator diagnostics for failed analysis and report-materialization runs.",
+              "System Operations lists recent failed analyses and recent blocked materialization jobs with redacted, bounded errors, identifiers, progress, attempts, and timestamps. Active blocked report jobs remain an explicit queue signal after the 24-hour incident window. Unexpected competitive-portfolio failures persist a scoped, sanitized diagnostic while preserving expected HTTP errors. Reprocessing remains immutable and makes no provider, AI, or paid collection call. Production completion still requires terminal category runs plus publication and source-evidence acceptance; failed and blocked runs are not described as complete.",
+            ],
+            [
+              "2026-09-08",
               "Implemented and locally test-verified; category reprocessing and production acceptance in progress",
               "Restored the owner-defined positive-price Search footprint as product distribution and removed public store-level stock indicators.",
               "For each exact retailer product, a distinct physical store counts once when the product appears in that store-level Search result with price greater than $0. Service-area presence uses a separate field and is never presented as stores. Stock and sponsorship fields do not determine this distribution count; no result is extrapolated to an unobserved store. Price Intelligence product cards, maps, geographic price views, store review, and the Price Architecture Matrix now use this definition and positive Search-listed prices. Match Certification administration exposes Reprocess retained evidence with a required reason; it creates a new immutable replay generation with zero collection, provider, or AI calls while preserving prior audit history.",

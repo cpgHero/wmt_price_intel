@@ -1,16 +1,21 @@
 from __future__ import annotations
 
 import copy
+import logging
 import os
 from uuid import uuid4
 
 import pytest
+from fastapi import HTTPException
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
+import rci_api.report_publication as report_publication
 from rci_api.availability_release_audit import (
     audit_price_architecture_matrix,
     audit_price_monitoring_catalog,
 )
+from rci_api.main import create_app
 from rci_api.report_publication import (
     _archive_publication_predecessors,
     _canonical_architecture_retailer_ids,
@@ -586,6 +591,108 @@ def test_price_architecture_release_audit_rejects_omitted_configured_retailer() 
 
     assert "price_architecture_retailer_scope_mismatch" in codes
     assert "price_architecture_catalog_scope_mismatch" in codes
+
+
+async def test_competitive_portfolio_route_surfaces_scope_and_unexpected_error(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    analysis_id = "fresh-strawberries-analysis"
+
+    async def require_lease(_request: object, job_id: str, worker_id: str | None) -> dict:
+        assert job_id == "job-1"
+        assert worker_id == "worker-1"
+        return {"analysis_id": analysis_id}
+
+    class BrokenPortfolioService:
+        async def portfolio_view(self, *_args: object, **kwargs: object) -> dict:
+            assert kwargs == {
+                "competitor_id": "all",
+                "profile_id": "aldi_10mi",
+                "radius_miles": 1,
+                "state": None,
+                "city": None,
+                "refresh": True,
+                "publish": False,
+            }
+            raise TypeError(
+                "distribution_store_count is missing password=materialization-secret"
+            )
+
+    monkeypatch.setenv("RCI_INTERNAL_SERVICE_TOKEN", "internal-token")
+    monkeypatch.setattr(report_publication, "_require_lease", require_lease)
+    monkeypatch.setattr(
+        report_publication,
+        "get_competitive_product_leadership_service",
+        lambda _request: BrokenPortfolioService(),
+    )
+    caplog.set_level(logging.ERROR, logger="rci_api.report_publication")
+    app = create_app()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/internal/report-materialization-jobs/job-1/competitive-portfolio",
+            headers={
+                "X-RCI-Internal-Token": "internal-token",
+                "X-RCI-Worker-ID": "worker-1",
+            },
+            json={"profile_id": "aldi_10mi", "radius_miles": 1},
+        )
+
+    assert response.status_code == 500
+    detail = response.json()["detail"]
+    assert "job_id='job-1'" in detail
+    assert f"analysis_id='{analysis_id}'" in detail
+    assert "competitor_id='all'" in detail
+    assert "profile_id='aldi_10mi'" in detail
+    assert "radius_miles=1" in detail
+    assert "TypeError: distribution_store_count is missing password=[REDACTED]" in detail
+    assert "materialization-secret" not in response.text
+    error_record = next(
+        record
+        for record in caplog.records
+        if record.name == "rci_api.report_publication" and record.levelno == logging.ERROR
+    )
+    assert error_record.exc_info is not None
+    assert error_record.exc_info[0] is TypeError
+
+
+async def test_competitive_portfolio_route_preserves_http_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = HTTPException(
+        status_code=409,
+        detail={"code": "portfolio_conflict", "message": "preserve this detail"},
+    )
+
+    async def require_lease(_request: object, _job_id: str, _worker_id: str | None) -> dict:
+        return {"analysis_id": "analysis-1"}
+
+    class HttpFailurePortfolioService:
+        async def portfolio_view(self, *_args: object, **_kwargs: object) -> dict:
+            raise expected
+
+    monkeypatch.setenv("RCI_INTERNAL_SERVICE_TOKEN", "internal-token")
+    monkeypatch.setattr(report_publication, "_require_lease", require_lease)
+    monkeypatch.setattr(
+        report_publication,
+        "get_competitive_product_leadership_service",
+        lambda _request: HttpFailurePortfolioService(),
+    )
+    app = create_app()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/internal/report-materialization-jobs/job-2/competitive-portfolio",
+            headers={
+                "X-RCI-Internal-Token": "internal-token",
+                "X-RCI-Worker-ID": "worker-1",
+            },
+            json={"profile_id": "strict", "radius_miles": 3},
+        )
+
+    assert response.status_code == 409
+    assert response.json()["detail"] == expected.detail
 
 
 @pytest.mark.skipif(

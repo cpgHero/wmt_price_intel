@@ -13,6 +13,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from rci_core.observability import redact_secrets
 from rci_product_packs import FileProductPackCatalog
 from rci_retailer_packs import FileRetailerPackCatalog
 
@@ -148,7 +149,13 @@ class PostgresOperationsSnapshotRepository:
                                 JOIN analysis_result result
                                   ON result.id = job.analysis_result_id
                                 WHERE job.status = 'blocked'
-                                  AND result.archived_at IS NULL) AS report_blocked,
+                                  AND job.updated_at >= now() - interval '24 hours'
+                                  AND result.archived_at IS NULL) AS report_blocked_24h,
+                              (SELECT COUNT(*) FROM report_materialization_job job
+                                JOIN analysis_result result
+                                  ON result.id = job.analysis_result_id
+                                WHERE job.status = 'blocked'
+                                  AND result.archived_at IS NULL) AS report_blocked_active,
                               (SELECT COUNT(*) FROM validation_issue issue
                                 LEFT JOIN analysis_result result
                                   ON result.analysis_run_id = issue.analysis_run_id
@@ -211,7 +218,103 @@ class PostgresOperationsSnapshotRepository:
                 .mappings()
                 .one()
             )
-        return dict(row)
+            recent_analysis_failures = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT
+                              id::text AS run_id,
+                              product_pack_id,
+                              product_pack_version,
+                              attempt_count,
+                              max_attempts,
+                              last_error,
+                              created_at,
+                              started_at,
+                              completed_at
+                            FROM analysis_run
+                            WHERE status = 'failed'
+                              AND COALESCE(completed_at, created_at)
+                                >= now() - interval '24 hours'
+                            ORDER BY COALESCE(completed_at, created_at) DESC, id DESC
+                            LIMIT 10
+                            """
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            recent_report_materialization_failures = (
+                (
+                    await connection.execute(
+                        text(
+                            """
+                            SELECT
+                              job.id::text AS job_id,
+                              result.analysis_id,
+                              run.product_pack_id,
+                              run.product_pack_version,
+                              job.status,
+                              job.stage,
+                              job.progress_current,
+                              job.progress_total,
+                              job.attempt_count,
+                              job.max_attempts,
+                              job.last_error,
+                              job.created_at,
+                              job.started_at,
+                              job.completed_at,
+                              job.updated_at
+                            FROM report_materialization_job job
+                            JOIN analysis_result result
+                              ON result.id = job.analysis_result_id
+                            JOIN analysis_run run
+                              ON run.id = result.analysis_run_id
+                            WHERE job.status = 'blocked'
+                              AND job.updated_at >= now() - interval '24 hours'
+                            ORDER BY job.updated_at DESC, job.id DESC
+                            LIMIT 10
+                            """
+                        )
+                    )
+                )
+                .mappings()
+                .all()
+            )
+        return {
+            **dict(row),
+            "recent_analysis_failures": [dict(item) for item in recent_analysis_failures],
+            "recent_report_materialization_failures": [
+                dict(item) for item in recent_report_materialization_failures
+            ],
+        }
+
+
+_SENSITIVE_ERROR_PATTERNS = (
+    (re.compile(r"(?i)(authorization\s*[:=]\s*bearer\s+)[^\s,;]+"), r"\1[REDACTED]"),
+    (
+        re.compile(
+            r"(?i)\b(api[_-]?key|access[_-]?token|credential|password|signature|token)"
+            r"(\s*[:=]\s*)(?:\"[^\"]*\"|'[^']*'|[^,\s;&]+)"
+        ),
+        r"\1\2[REDACTED]",
+    ),
+    (re.compile(r"(?i)([a-z][a-z0-9+.-]*://[^:/\s]+:)[^@\s]+(@)"), r"\1[REDACTED]\2"),
+)
+
+
+def _safe_error(value: Any, *, maximum_length: int = 800) -> str | None:
+    if value is None:
+        return None
+    safe = redact_secrets(str(value))
+    for pattern, replacement in _SENSITIVE_ERROR_PATTERNS:
+        safe = pattern.sub(replacement, safe)
+    safe = " ".join(safe.split())
+    if len(safe) > maximum_length:
+        safe = f"{safe[: maximum_length - 1]}…"
+    return safe or None
 
 
 def _queue(
@@ -221,8 +324,15 @@ def _queue(
     running: int,
     expired: int,
     recent_failures: int,
+    active_blocked: int = 0,
 ) -> dict[str, Any]:
-    state = "blocked" if expired else "attention" if recent_failures else "healthy"
+    state = (
+        "blocked"
+        if expired
+        else "attention"
+        if recent_failures or active_blocked
+        else "healthy"
+    )
     return {
         "label": label,
         "state": state,
@@ -230,6 +340,7 @@ def _queue(
         "running": running,
         "expired_leases": expired,
         "failures_24h": recent_failures,
+        "active_blocked": active_blocked,
     }
 
 
@@ -276,7 +387,8 @@ async def _build_snapshot(
             queued=int(row["report_queued"]),
             running=int(row["report_running"]),
             expired=int(row["report_expired"]),
-            recent_failures=int(row["report_blocked"]),
+            recent_failures=int(row["report_blocked_24h"]),
+            active_blocked=int(row["report_blocked_active"]),
         ),
     ]
     backup_at = _parse_timestamp("RCI_LAST_DATABASE_BACKUP_VERIFIED_AT")
@@ -321,6 +433,44 @@ async def _build_snapshot(
             ],
         },
         "queues": queues,
+        "recent_analysis_failures": [
+            {
+                "run_id": str(failure["run_id"]),
+                "product_pack_id": str(failure["product_pack_id"]),
+                "product_pack_version": str(failure["product_pack_version"]),
+                "attempt_count": int(failure["attempt_count"]),
+                "max_attempts": int(failure["max_attempts"]),
+                "last_error": _safe_error(failure.get("last_error")),
+                "created_at": failure["created_at"],
+                "started_at": failure.get("started_at"),
+                "completed_at": failure.get("completed_at"),
+            }
+            for failure in row.get("recent_analysis_failures", [])[:10]
+        ],
+        "recent_report_materialization_failures": [
+            {
+                "job_id": str(failure["job_id"]),
+                "analysis_id": str(failure["analysis_id"]),
+                "product_pack_id": str(failure["product_pack_id"]),
+                "product_pack_version": str(failure["product_pack_version"]),
+                "status": str(failure["status"]),
+                "stage": str(failure["stage"]),
+                "progress_current": int(failure["progress_current"]),
+                "progress_total": (
+                    int(failure["progress_total"])
+                    if failure.get("progress_total") is not None
+                    else None
+                ),
+                "attempt_count": int(failure["attempt_count"]),
+                "max_attempts": int(failure["max_attempts"]),
+                "last_error": _safe_error(failure.get("last_error")),
+                "created_at": failure["created_at"],
+                "started_at": failure.get("started_at"),
+                "completed_at": failure.get("completed_at"),
+                "updated_at": failure["updated_at"],
+            }
+            for failure in row.get("recent_report_materialization_failures", [])[:10]
+        ],
         "publication": {
             "active_ready_reports": int(row["active_ready_reports"]),
             "active_pending_reports": int(row["active_pending_reports"]),
