@@ -83,7 +83,7 @@ const lastVerified = "August 28, 2026";
 const aiIntegrationLastVerified = "August 29, 2026";
 const integrationLineageLastVerified = "August 30, 2026";
 const productionOperationsLastVerified = "August 29, 2026";
-const availabilityEvidenceLastVerified = "September 8, 2026";
+const availabilityEvidenceLastVerified = "September 9, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
@@ -794,7 +794,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Price Intelligence Home reads one publication-time materialized catalog per configured retailer. Search, brand, brand type, seller, and pagination are applied by the API, and the browser receives 40 rows at a time. Opening a product loads its complete product-location, map, price-distribution, and PDP evidence lazily. Catalog materialization uses retained evidence and makes no MetricsCart or OpenAI call.",
             "Report Walmart-lower, competitor-lower, parity, and clear-leader rates separately. A narrow Walmart lead is Walmart-lower but not a clear leader; labels must not substitute one measure for the other.",
             "Distinguish no governed relationship, no positive-price Search observation, a location not searched, a Search non-observation, and a measured zero. These states are not interchangeable and must never share an unlabeled 0.",
-            "A Matching v2 replay is decision-ready only when certified labels, final insufficient-evidence exclusions, and pending counts reconcile to the queue; no candidate lacks a final human outcome; the AnalysisResult validation is ready; and every configured retailer has reported evidence or an explicit limitation. A final insufficient-evidence case is an explicit nonblocking limitation, not a match and not unfinished work.",
+            "A Matching v2 replay is decision-ready only when certified labels, final insufficient-evidence exclusions, and pending counts reconcile to the queue; no candidate lacks a final human outcome; the AnalysisResult validation is ready; and every configured retailer has reported evidence or an explicit limitation. Exhaustive checksum-governed certification with zero comparable relationships is a valid `no_governed_relationships` limitation only when selection is complete, pending review is zero, every retailer count reconciles, and the scorecards carry that explicit evidence state; it never publishes a zero-valued price outcome. A final insufficient-evidence case is an explicit nonblocking limitation, not a match and not unfinished work.",
             "Build local price ladders only from governed matched products with positive store-level Search prices. At each benchmark store, retain the lowest observed positive-price offer per matched competitor product within the selected 1, 3, or 5 mile radius; rank from opening price upward and preserve rung gaps, Walmart rank, retailer, product, location, and relationship identity.",
             "Treat price ladders as governed match-group × geography × snapshot constructs. Never sort unrelated category products into a ladder and imply substitutability.",
             "Keep the Price Architecture Matrix independent from matching. Admit a retailer SKU when it has at least one positive-price Search row, then assign it exactly once from its median positive Search-listed package price. In benchmark-anchored mode, deduplicate Walmart median price points and use the true midpoint between adjacent points as the boundary; in fixed mode use stable $0.50 or $1.00 bands.",
@@ -2933,6 +2933,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-09",
+              "Implemented and locally test-verified; four corrected categories active, Eggs and Vitamins publication retry pending",
+              "Retained-evidence reprocessing now preserves the owner-defined positive-price Search footprint through classified-row restoration and distinguishes an exhaustively certified no-relationship retailer from missing retailer evidence.",
+              "Nonpositive optional regular and discounted price sentinels restore as missing without changing package price. A retailer with zero certified comparable relationships is nonblocking only when its checksum-governed certification is exhaustive, complete, fully reconciled, has zero pending review, and emits explicit no-governed-relationship scorecards; all other missing evidence still fails closed. Fifty-three focused Price Monitoring and report-blueprint tests pass. Banana, Milk, Ground Beef, and Strawberries corrected generations are active. Milk product 46942839 now reports 83 distinct positive-price Walmart stores, all in California, rather than 4,510 locations. Eggs and Vitamins remain quarantined until the deployed fix is verified and their jobs are explicitly retried; no provider, AI, PDP, collection, or paid call is required.",
+            ],
             [
               "2026-09-08",
               "Implemented and locally test-verified (23 focused API checks passed); production reprocessing and acceptance in progress",

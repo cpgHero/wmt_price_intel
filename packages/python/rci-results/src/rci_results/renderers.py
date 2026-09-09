@@ -2715,8 +2715,83 @@ class ArtifactRenderer:
             for row in scorecards
             if row.get("evidence_state") == "reported"
         }
+        certification_retailers = {
+            str(row.get("competitor_retailer_id") or ""): row
+            for row in relationship_certification.get("retailers", [])
+            if isinstance(row, dict) and str(row.get("competitor_retailer_id") or "")
+        }
+
+        def has_exhaustive_no_comparable_scope(competitor_id: str) -> bool:
+            """Prove that a configured retailer has no comparable relationship to report."""
+
+            retailer = certification_retailers.get(competitor_id)
+            if (
+                not certification
+                or certification.get("selection_complete") is not True
+                or relationship_certification.get("selection_complete") is not True
+                or not isinstance(retailer, dict)
+            ):
+                return False
+            required_counts = (
+                "candidate_count",
+                "certified_count",
+                "certified_comparable_count",
+                "certified_not_comparable_count",
+                "reviewed_insufficient_evidence_count",
+                "pending_unreviewed_count",
+                "unresolved_count",
+            )
+            if any(
+                isinstance(retailer.get(field), bool) or not isinstance(retailer.get(field), int)
+                for field in required_counts
+            ):
+                return False
+            candidate_count = int(retailer["candidate_count"])
+            certified_count = int(retailer["certified_count"])
+            comparable_count = int(retailer["certified_comparable_count"])
+            not_comparable_count = int(retailer["certified_not_comparable_count"])
+            insufficient_count = int(retailer["reviewed_insufficient_evidence_count"])
+            pending_count = int(retailer["pending_unreviewed_count"])
+            unresolved_count = int(retailer["unresolved_count"])
+            if not (
+                comparable_count == 0
+                and pending_count == 0
+                and certified_count == not_comparable_count
+                and unresolved_count == insufficient_count
+                and candidate_count == certified_count + unresolved_count
+            ):
+                return False
+            scoped_scorecards = [
+                row for row in scorecards if str(row.get("competitor_id") or "") == competitor_id
+            ]
+            return bool(scoped_scorecards) and all(
+                row.get("evidence_state") == "no_governed_relationships"
+                for row in scoped_scorecards
+            )
+
+        exhaustive_no_comparable_competitors = {
+            competitor_id
+            for competitor_id in competitor_ids - reported_competitors - unavailable_competitors
+            if has_exhaustive_no_comparable_scope(competitor_id)
+        }
+        for competitor_id in sorted(exhaustive_no_comparable_competitors):
+            warnings.append(
+                {
+                    "code": "competitor_has_no_certified_comparable_relationships",
+                    "message": (
+                        "The configured competitor's exhaustive certification scope contains "
+                        "no comparable product relationship. Its explicit no-governed-"
+                        "relationships scorecard is disclosed without publishing a zero-valued "
+                        "price outcome."
+                    ),
+                    "competitor_id": competitor_id,
+                }
+            )
         missing_competitors = sorted(
-            competitor_ids - reported_competitors - unavailable_competitors
+            competitor_ids
+            - reported_competitors
+            - unavailable_competitors
+            - exhaustive_no_comparable_competitors
         )
         for competitor_id in missing_competitors:
             blocking_reasons.append(

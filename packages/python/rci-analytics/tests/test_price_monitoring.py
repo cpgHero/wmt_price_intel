@@ -429,6 +429,32 @@ def test_classified_parquet_record_preserves_explicit_price_components() -> None
     assert restored.offer.is_sponsored is True
 
 
+def test_classified_parquet_record_canonicalizes_nonpositive_reference_prices() -> None:
+    source = _classified(
+        offer_id="amazon-service-area-price-sentinel",
+        product_id="B000SE7Y7U",
+        store="",
+        price="1.11",
+        collected_at="2026-08-07T06:00:00Z",
+    )
+    record = source.to_record()
+    record.update(
+        {
+            "retailer_id": "amazon_us_same_day",
+            "regular_price": 0.0,
+            "discounted_price": -1.0,
+        }
+    )
+
+    restored = classified_offer_from_record(record)
+
+    assert restored.offer.retailer_product_id == "B000SE7Y7U"
+    assert restored.offer.store_number is None
+    assert restored.offer.price == Decimal("1.11")
+    assert restored.offer.regular_price is None
+    assert restored.offer.discounted_price is None
+
+
 def test_price_monitoring_separates_store_distribution_from_service_area_presence() -> None:
     pack = ProductPackLoader(REPOSITORY_ROOT).load("fresh_ground_beef")
     projector = PriceMonitoringProjector(

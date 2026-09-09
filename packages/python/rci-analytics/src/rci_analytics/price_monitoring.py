@@ -127,6 +127,13 @@ def classified_offer_from_record(record: JsonObject) -> ClassifiedOffer:
             return json.loads(value)
         return value
 
+    def positive_optional_price(field: str) -> Decimal | None:
+        value = record.get(field)
+        if value in (None, ""):
+            return None
+        normalized = Decimal(str(value))
+        return normalized if normalized.is_finite() and normalized > 0 else None
+
     attributes = document("attributes_json", {})
     metrics = document("metrics_json", {})
     review_reasons = document("review_reasons_json", [])
@@ -168,16 +175,8 @@ def classified_offer_from_record(record: JsonObject) -> ClassifiedOffer:
                 else None
             ),
             raw={},
-            regular_price=(
-                Decimal(str(record["regular_price"]))
-                if record.get("regular_price") not in (None, "")
-                else None
-            ),
-            discounted_price=(
-                Decimal(str(record["discounted_price"]))
-                if record.get("discounted_price") not in (None, "")
-                else None
-            ),
+            regular_price=positive_optional_price("regular_price"),
+            discounted_price=positive_optional_price("discounted_price"),
             is_sponsored=(
                 bool(record["is_sponsored"]) if record.get("is_sponsored") is not None else None
             ),
