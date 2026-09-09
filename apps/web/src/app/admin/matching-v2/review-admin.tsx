@@ -525,11 +525,11 @@ interface GoldSetReplayResult {
   replay_generation: number;
   rebuild_reason: string | null;
   coverage: {
-    candidate_count: number;
-    certified_count: number;
+    queue_case_count: number;
+    certified_label_count: number;
     certified_comparable_count: number;
     certified_not_comparable_count: number;
-    unresolved_count: number;
+    unresolved_excluded_count: number;
   };
 }
 
@@ -1229,7 +1229,7 @@ export function MatchingV2ReviewAdmin({
       );
       setReplayResult(result);
       setNotice(
-        `Governed replay ${result.analysis_run_id} is ${label(result.analysis_status).toLowerCase()}. The immutable release contains ${result.coverage.certified_count.toLocaleString()} certified cases and leaves ${result.coverage.unresolved_count.toLocaleString()} unresolved.`,
+        `Governed replay ${result.analysis_run_id} is ${label(result.analysis_status).toLowerCase()}. The immutable release covers ${result.coverage.queue_case_count.toLocaleString()} queue cases: ${result.coverage.certified_label_count.toLocaleString()} certified and ${result.coverage.unresolved_excluded_count.toLocaleString()} unresolved.`,
       );
     } catch (cause) {
       handleError(cause);
@@ -2797,15 +2797,21 @@ export function MatchingV2ReviewAdmin({
                       <dd>{replayResult.replay_generation.toLocaleString()}</dd>
                     </div>
                     <div>
+                      <dt>Queue cases</dt>
+                      <dd>
+                        {replayResult.coverage.queue_case_count.toLocaleString()}
+                      </dd>
+                    </div>
+                    <div>
                       <dt>Certified</dt>
                       <dd>
-                        {replayResult.coverage.certified_count.toLocaleString()}
+                        {replayResult.coverage.certified_label_count.toLocaleString()}
                       </dd>
                     </div>
                     <div>
                       <dt>Unresolved</dt>
                       <dd>
-                        {replayResult.coverage.unresolved_count.toLocaleString()}
+                        {replayResult.coverage.unresolved_excluded_count.toLocaleString()}
                       </dd>
                     </div>
                   </dl>

@@ -56,6 +56,117 @@ const cases = Array.from({ length: 30 }, (_, index) => ({
       : null,
 }));
 
+test("renders authoritative coverage after a forced governed replay", async ({
+  page,
+}) => {
+  const pageErrors: string[] = [];
+  let replayPayload: Record<string, unknown> | null = null;
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  await page.route("**/api/admin/session", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ configured: true, authenticated: true }),
+    });
+  });
+  await page.route("**/api/admin/matching-v2/**", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (
+      request.method() === "POST" &&
+      url.pathname.endsWith("/gold-set/replays")
+    ) {
+      replayPayload = request.postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        status: 201,
+        contentType: "application/json",
+        body: JSON.stringify({
+          gold_set_release_id: "release-1",
+          gold_set_checksum: "a".repeat(64),
+          analysis_run_id: "analysis-replay-3",
+          analysis_status: "queued",
+          replay_generation: 3,
+          rebuild_reason:
+            "Recompute reports from retained Search evidence under the current reporting contract",
+          coverage: {
+            queue_case_count: 30,
+            certified_label_count: 24,
+            certified_comparable_count: 20,
+            certified_not_comparable_count: 4,
+            unresolved_excluded_count: 6,
+          },
+        }),
+      });
+      return;
+    }
+    if (url.pathname === "/api/admin/matching-v2/review-queues") {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({ queues: [queue] }),
+      });
+      return;
+    }
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        authoritative: false,
+        queue,
+        status_counts: { approved: 24, pending: 6 },
+        competitor_retailers: [],
+        total_cases: 30,
+        selected_case_count: 30,
+        offset: 0,
+        limit: 50,
+        cases: [],
+      }),
+    });
+  });
+
+  await page.goto("/admin/matching-v2");
+  await page
+    .getByRole("textbox", { name: "Current reviewer identity" })
+    .fill("operator@cpghero.com");
+  const replayForm = page.locator("form.cert-replay");
+  await replayForm
+    .getByRole("textbox", { name: "Source analysis ID" })
+    .fill("source-analysis");
+  await replayForm
+    .getByRole("checkbox", { name: "Reprocess retained evidence" })
+    .check();
+  await replayForm
+    .getByRole("button", { name: "Create governed replay" })
+    .click();
+
+  const result = replayForm.locator(".cert-replay-result");
+  await expect(result.locator("dt")).toHaveText([
+    "Analysis run",
+    "Replay generation",
+    "Queue cases",
+    "Certified",
+    "Unresolved",
+  ]);
+  await expect(result.locator("dd")).toHaveText([
+    "analysis-replay-3",
+    "3",
+    "30",
+    "24",
+    "6",
+  ]);
+  await expect(
+    page.getByText(
+      "Governed replay analysis-replay-3 is queued. The immutable release covers 30 queue cases: 24 certified and 6 unresolved.",
+    ),
+  ).toBeVisible();
+  expect(replayPayload).toEqual({
+    source_analysis_id: "source-analysis",
+    released_by: "operator@cpghero.com",
+    force_rebuild: true,
+    rebuild_reason:
+      "Recompute reports from retained Search evidence under the current reporting contract",
+  });
+  expect(pageErrors).toEqual([]);
+});
+
 test("explains the reviewer prerequisite before a bounded AI review", async ({
   page,
 }) => {
