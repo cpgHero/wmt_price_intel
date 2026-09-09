@@ -149,7 +149,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "list",
           title: "Trust rules that never change",
           items: [
-            "Search data owns listed price, query context, sponsorship, and collection time. Observed store distribution counts a distinct store when the exact product appears in that store-level Search result with price greater than $0. It does not use stock status, does not make an inventory claim, and never extrapolates to unobserved stores.",
+            "Search data owns listed price, query context, sponsorship, and collection time. Observed store distribution counts a distinct store when the exact product appears in that store-level Search result with price greater than $0. It does not use stock status, does not make an inventory claim, and never extrapolates to unobserved stores. Conflicting or malformed provider stock aliases degrade to unknown and cannot reject that Search evidence. Zero-valued regular or discounted price sentinels are treated as missing, never as reportable prices.",
             "The location master owns current store identity, ZIP, city, state, country, latitude, and longitude. A roster's active status does not prove that a retailer Search page is callable.",
             "PDP data may improve identity, package attributes, imagery, seller, and descriptive context; it never overwrites Search-listed price, query context, sponsorship, or observed store distribution.",
             "Product Packs own category qualification, attribute, comparison-basis, and reporting rules. Retailer Packs own retailer-specific identifiers, seller policy, endpoints, and location behavior.",

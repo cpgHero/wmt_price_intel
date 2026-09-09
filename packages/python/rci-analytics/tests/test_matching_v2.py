@@ -38,7 +38,6 @@ from rci_analytics.matching_v2_shadow import (
     shadow_result_checksum,
 )
 from rci_analytics.models import ClassifiedOffer, NormalizedOffer
-from rci_analytics.normalization import BooleanAliasValidationError
 from rci_analytics.product_pack import ProductPackLoader
 from rci_contracts import validate_instance
 
@@ -603,10 +602,11 @@ def test_full_evidence_profiler_preserves_grain_and_reports_quality(tmp_path: Pa
     )
 
 
-def test_evidence_profiler_fails_closed_on_conflicting_availability_aliases(
+def test_evidence_profiler_retains_positive_price_row_with_conflicting_availability_aliases(
     tmp_path: Path,
 ) -> None:
     walmart = tmp_path / "walmart-conflict.csv"
+    aldi = tmp_path / "aldi.csv"
     walmart.write_text(
         (
             "Retailer,Product Name,Price,Zipcode,Retailer Store Id,"
@@ -618,17 +618,32 @@ def test_evidence_profiler_fails_closed_on_conflicting_availability_aliases(
         ),
         encoding="utf-8",
     )
+    aldi.write_text(
+        (
+            "Retailer,Product Name,Brand,Price,Zipcode,Retailer Store Id,"
+            "Retailer Product Id,Is Sponsored,Date\n"
+            "ALDI,Friendly Farms Whole Milk 1 Gallon,Friendly Farms,3.79,72712,10,"
+            "al1,false,2026-08-15T10:00:00Z\n"
+        ),
+        encoding="utf-8",
+    )
 
-    with pytest.raises(BooleanAliasValidationError, match="conflicting availability aliases"):
-        build_matching_v2_evidence_profile(
-            REPOSITORY_ROOT,
-            product_pack_id="fresh_fluid_milk",
-            benchmark_retailer_id="walmart_us",
-            inputs=(MatchingV2SourceInput(walmart, "walmart_us"),),
-            decided_at=DECIDED_AT,
-            competitor_retailer_ids=(),
-            per_stratum_limit=1,
-        )
+    profile, queue = build_matching_v2_evidence_profile(
+        REPOSITORY_ROOT,
+        product_pack_id="fresh_fluid_milk",
+        benchmark_retailer_id="walmart_us",
+        inputs=(
+            MatchingV2SourceInput(walmart, "walmart_us"),
+            MatchingV2SourceInput(aldi, "aldi_us"),
+        ),
+        decided_at=DECIDED_AT,
+        competitor_retailer_ids=("aldi_us",),
+        per_stratum_limit=1,
+    )
+
+    assert profile["totals"]["normalization_failures"] == 0
+    assert profile["coverage_ledger"]["observed_benchmark_products"] == 1
+    assert queue["purpose"] == "operational_match_certification"
 
 
 def test_certification_fails_a_false_exact_approval() -> None:

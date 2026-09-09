@@ -45,6 +45,13 @@ def _decimal(value: Any) -> Decimal | None:
         return None
 
 
+def _positive_decimal(value: Any) -> Decimal | None:
+    """Normalize an optional price field, treating nonpositive sentinels as absent."""
+
+    normalized = _decimal(value)
+    return normalized if normalized is not None and normalized > 0 else None
+
+
 def _float(value: Any) -> float | None:
     if value is None or str(value).strip() == "":
         return None
@@ -92,6 +99,21 @@ def _boolean_alias(row: JsonObject, semantic: str, *names: str) -> bool | None:
     return observed[0][1]
 
 
+def _availability_alias(row: JsonObject, *names: str) -> bool | None:
+    """Retain availability only when its advisory aliases agree.
+
+    Store-level Search presence with a positive price is the distribution
+    authority; provider stock flags are neither an inventory claim nor an
+    eligibility gate. Conflicting or malformed availability metadata therefore
+    degrades to an unknown diagnostic instead of rejecting the Search row.
+    """
+
+    try:
+        return _boolean_alias(row, "availability", *names)
+    except BooleanAliasValidationError:
+        return None
+
+
 def _datetime_utc(value: Any) -> str | None:
     if value is None or str(value).strip() == "":
         return None
@@ -125,11 +147,27 @@ def _datetime_utc(value: Any) -> str | None:
 
 
 def _lossless_product_id(product_id: str | None, product_url: str | None) -> str | None:
-    """Recover identifiers that spreadsheet exports converted to scientific notation."""
+    """Recover identifiers made lossy by spreadsheet numeric coercion."""
 
-    if product_id is None or not _SCIENTIFIC_IDENTIFIER.fullmatch(product_id):
+    if product_id is None:
         return product_id
     candidates = _URL_IDENTIFIER.findall(urlsplit(product_url).path) if product_url else []
+    if product_id.isdigit():
+        numeric_product_id = product_id.lstrip("0") or "0"
+        equivalent_candidates = [
+            candidate
+            for candidate in candidates
+            if len(candidate) > len(product_id)
+            and (candidate.lstrip("0") or "0") == numeric_product_id
+        ]
+        if equivalent_candidates:
+            return max(
+                enumerate(equivalent_candidates),
+                key=lambda value: (len(value[1]), value[0]),
+            )[1]
+        return product_id
+    if not _SCIENTIFIC_IDENTIFIER.fullmatch(product_id):
+        return product_id
     if not candidates:
         raise ValueError(
             "offer product identifier is lossy scientific notation and the full ID "
@@ -217,18 +255,19 @@ class CanonicalOfferNormalizer:
         currency = (_text(source, "currency", "Price Currency") or "USD").upper()
         price = _decimal(_first(source, "price", "Price")) if currency == "USD" else None
         regular_price = (
-            _decimal(_first(source, "price_regular", "regular_price", "Price Regular"))
+            _positive_decimal(_first(source, "price_regular", "regular_price", "Price Regular"))
             if currency == "USD"
             else None
         )
         discounted_price = (
-            _decimal(_first(source, "price_discounted", "discounted_price", "Price Discounted"))
+            _positive_decimal(
+                _first(source, "price_discounted", "discounted_price", "Price Discounted")
+            )
             if currency == "USD"
             else None
         )
-        in_stock = _boolean_alias(
+        in_stock = _availability_alias(
             source,
-            "availability",
             "in_stock",
             "stock_availability",
             "available",

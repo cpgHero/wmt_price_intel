@@ -29,6 +29,20 @@ The reprocessed coverage response uses the governed fields
   redacted administrator diagnostic for unexpected failures, including the exact job and
   report request context. Full tracebacks remain in protected server logs.
 
+The first governed retry identified two independent retained-evidence defects rather than
+masking them behind a generic server error:
+
+- optional `regular_price` and `discounted_price` fields used provider zero sentinels. Those
+  values now normalize to missing, while the authoritative listed price remains unchanged;
+  a `$0.00` reference price can neither enter a report nor fail schema materialization;
+- conflicting or malformed provider availability aliases now normalize to unknown. Stock is
+  advisory metadata under this contract and cannot reject an otherwise eligible positive-price
+  Search row. Sponsorship and seller-governance validation remain strict.
+
+Spreadsheet-coerced numeric product identifiers also recover a leading zero only when a longer
+numeric token in the retailer product URL is numerically equivalent. Unrelated URL numbers do
+not rewrite product identity.
+
 ## Release and production acceptance
 
 Focused regression coverage establishes the diagnostic contract. Production acceptance is
@@ -37,8 +51,9 @@ pass the publication gate, and the resulting public report must be checked again
 source evidence. A queued, running, failed, or blocked replay is not reported as complete.
 
 The focused API diagnostic suite passes 23 tests; one PostgreSQL isolation test is skipped
-only when no local test database URL is configured. Ruff format/check, Python compilation,
-and Prettier checks pass. Browser execution remains a CI acceptance item when the local
-Chromium binary cannot launch under the host sandbox.
+only when no local test database URL is configured. The normalization, Matching v2, and
+competitive-leadership regression suite passes 124 tests. Ruff format/check, Python
+compilation, and Prettier checks pass. Browser execution remains a CI acceptance item when
+the local Chromium binary cannot launch under the host sandbox.
 
 No provider call, AI call, or paid collection credit is required for this reprocessing.

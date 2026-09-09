@@ -9,11 +9,7 @@ from pathlib import Path
 import pytest
 
 from rci_analytics.classification import FormulaEvaluator, OfferClassifier
-from rci_analytics.normalization import (
-    BooleanAliasValidationError,
-    CanonicalOfferNormalizer,
-    RetailerIdentityMap,
-)
+from rci_analytics.normalization import CanonicalOfferNormalizer, RetailerIdentityMap
 from rci_analytics.product_pack import ProductPackLoader
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[4]
@@ -88,6 +84,23 @@ def test_normalizes_search_sponsorship_boolean(
     assert organic.is_sponsored is False
 
 
+def test_nonpositive_reference_price_sentinels_normalize_to_missing(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    offer = normalizer.normalize(
+        _row(
+            "Plantain, 1 Each",
+            price="1.11",
+            regular_price="0",
+            discounted_price="0.00",
+        )
+    )
+
+    assert offer.price == Decimal("1.1100")
+    assert offer.regular_price is None
+    assert offer.discounted_price is None
+
+
 @pytest.mark.parametrize(
     ("aliases", "expected"),
     [
@@ -142,12 +155,15 @@ def test_consistent_sponsorship_aliases_are_preserved(
         {"stock_availability": "false", "available": "true"},
     ],
 )
-def test_rejects_conflicting_availability_aliases(
+def test_conflicting_availability_aliases_degrade_to_unknown(
     aliases: dict[str, object],
     normalizer: CanonicalOfferNormalizer,
 ) -> None:
-    with pytest.raises(ValueError, match="conflicting availability aliases"):
-        normalizer.normalize({**_row("Fresh Strawberries, 1 lb"), **aliases})
+    offer = normalizer.normalize({**_row("Fresh Strawberries, 1 lb"), **aliases})
+
+    assert offer.in_stock is None
+    assert offer.price == Decimal("2.3800")
+    assert offer.store_number == "0007"
 
 
 @pytest.mark.parametrize(
@@ -165,35 +181,37 @@ def test_rejects_conflicting_sponsorship_aliases(
         normalizer.normalize(_row("Fresh Strawberries, 1 lb", **aliases))
 
 
-@pytest.mark.parametrize(
-    ("aliases", "semantic", "field"),
-    [
-        (
-            {"stock_availability": True, "available": "sometimes"},
-            "availability",
-            "available",
-        ),
-        (
-            {"is_sponsored": False, "sponsored": "promoted"},
-            "sponsorship",
-            "sponsored",
-        ),
-    ],
-)
-def test_rejects_malformed_boolean_alias_even_after_valid_alias(
-    aliases: dict[str, object],
-    semantic: str,
-    field: str,
+def test_malformed_availability_alias_degrades_to_unknown(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    offer = normalizer.normalize(
+        {
+            **_row("Fresh Strawberries, 1 lb"),
+            "stock_availability": True,
+            "available": "sometimes",
+        }
+    )
+
+    assert offer.in_stock is None
+
+
+def test_rejects_malformed_sponsorship_alias_even_after_valid_alias(
     normalizer: CanonicalOfferNormalizer,
 ) -> None:
     with pytest.raises(
         ValueError,
-        match=rf"{semantic} alias '{field}' has invalid boolean value",
+        match="sponsorship alias 'sponsored' has invalid boolean value",
     ):
-        normalizer.normalize({**_row("Fresh Strawberries, 1 lb"), **aliases})
+        normalizer.normalize(
+            _row(
+                "Fresh Strawberries, 1 lb",
+                is_sponsored=False,
+                sponsored="promoted",
+            )
+        )
 
 
-def test_normalize_many_fails_closed_on_newer_conflicting_alias_row(
+def test_normalize_many_retains_newer_conflicting_availability_row_as_unknown(
     normalizer: CanonicalOfferNormalizer,
 ) -> None:
     older_verified = _row(
@@ -208,8 +226,12 @@ def test_normalize_many_fails_closed_on_newer_conflicting_alias_row(
         "in_stock": False,
     }
 
-    with pytest.raises(BooleanAliasValidationError, match="conflicting availability aliases"):
-        normalizer.normalize_many([older_verified, newer_contradictory])
+    offers = normalizer.normalize_many([older_verified, newer_contradictory])
+
+    assert len(offers) == 2
+    assert offers[0].in_stock is True
+    assert offers[1].in_stock is None
+    assert all(offer.price == Decimal("2.3800") for offer in offers)
 
 
 def test_normalize_many_still_skips_unrelated_invalid_rows(
@@ -239,6 +261,41 @@ def test_recovers_lossy_scientific_product_identifier_from_retailer_url(
     )
 
     assert offer.retailer_product_id == "00815652004180"
+
+
+def test_recovers_leading_zero_product_identifier_from_numerically_equivalent_url(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    offer = normalizer.normalize(
+        {
+            "Retailer": "traderjoes.com",
+            "Retailer Product Id": "72270",
+            "Product Name": "Organic Pasture Raised Large Brown Eggs",
+            "Price": "6.99",
+            "Zipcode": "07083",
+            "Retailer Store Id": "539",
+            "Url": (
+                "https://www.traderjoes.com/home/products/pdp/"
+                "eggs-large-brown-organic-pasture-raised-dozen-072270"
+            ),
+        }
+    )
+
+    assert offer.retailer_product_id == "072270"
+
+
+def test_preserves_product_identifier_when_url_numeric_token_is_not_equivalent(
+    normalizer: CanonicalOfferNormalizer,
+) -> None:
+    offer = normalizer.normalize(
+        _row(
+            "Fresh Strawberries, 1 lb",
+            product_id="72270",
+            url="https://retailer.test/products/unrelated-172270",
+        )
+    )
+
+    assert offer.retailer_product_id == "72270"
 
 
 def test_rejects_lossy_scientific_product_identifier_without_recovery_source(
