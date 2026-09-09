@@ -1482,7 +1482,7 @@ async def test_historical_input_replays_through_same_generic_pipeline() -> None:
         "malformed-sponsorship",
     ),
 )
-async def test_historical_replay_fails_closed_on_newer_untrusted_availability_aliases(
+async def test_historical_replay_degrades_stock_aliases_but_rejects_sponsorship_aliases(
     newer_alias: dict[str, str],
 ) -> None:
     input_set_id = "00000000-0000-0000-0000-000000000704"
@@ -1497,6 +1497,18 @@ async def test_historical_replay_fails_closed_on_newer_untrusted_availability_al
         storage_uri="s3://raw/walmart.csv",
         checksum="a" * 64,
         row_count=2,
+    )
+    competitor_source = HistoricalSource(
+        dataset_artifact_id="artifact-aldi-alias-control",
+        input_set_id=input_set_id,
+        ordinal=1,
+        retailer_id="aldi_us",
+        adapter_id="historical_metricscart_search_monitor_csv",
+        source_name="aldi.csv",
+        source_format="metricscart_search_monitor_csv",
+        storage_uri="s3://raw/aldi.csv",
+        checksum="b" * 64,
+        row_count=1,
     )
     older_verified = {
         "Retailer Store Id": "2040",
@@ -1513,6 +1525,16 @@ async def test_historical_replay_fails_closed_on_newer_untrusted_availability_al
         "Date": "2026-08-07T07:00:00Z",
         **newer_alias,
     }
+    competitor = {
+        "Retailer Store Id": "0010",
+        "Zipcode": "72712",
+        "Retailer Product Id": "16383764",
+        "Product Name": "Fresh Strawberries, 1 lb",
+        "Price": "2.49",
+        "Stock Availability": "true",
+        "Is Sponsored": "false",
+        "Date": "2026-08-07T07:00:00Z",
+    }
     result_service = AnalysisResultService(
         InMemoryResultsRepository(),
         AnalysisResultValidator(REPOSITORY_ROOT),
@@ -1520,13 +1542,16 @@ async def test_historical_replay_fails_closed_on_newer_untrusted_availability_al
     )
     processor = AnalysisProcessor(
         repository_root=REPOSITORY_ROOT,
-        queue=HistoricalQueue([source]),  # type: ignore[arg-type]
+        queue=HistoricalQueue([source, competitor_source]),  # type: ignore[arg-type]
         adapters=MetricsCartAdapterRegistry.from_catalog(
             REPOSITORY_ROOT / "config" / "retailer-catalog.json"
         ),
         raw_reader=RawReader({}),  # type: ignore[arg-type]
         historical_reader=HistoricalReader(
-            {"walmart_us": [older_verified, newer_untrusted]}  # type: ignore[list-item]
+            {
+                "walmart_us": [older_verified, newer_untrusted],
+                "aldi_us": [competitor],
+            }  # type: ignore[list-item]
         ),  # type: ignore[arg-type]
         dataset_writer=ParquetDatasetWriter(InMemoryDatasetStore()),
         collections=ArtifactRecorder(),  # type: ignore[arg-type]
@@ -1542,7 +1567,10 @@ async def test_historical_replay_fails_closed_on_newer_untrusted_availability_al
         product_pack_version="1.1.0",
         definition_config={
             "benchmark_retailer": "walmart_us",
-            "retailers": [{"retailer_id": "walmart_us", "enabled": True}],
+            "retailers": [
+                {"retailer_id": "walmart_us", "enabled": True},
+                {"retailer_id": "aldi_us", "enabled": True},
+            ],
             "analysis": {"comparison_profiles": ["strict"]},
             "delivery": {},
         },
@@ -1550,8 +1578,15 @@ async def test_historical_replay_fails_closed_on_newer_untrusted_availability_al
         max_attempts=3,
     )
 
-    with pytest.raises(BooleanAliasValidationError):
-        await processor.process(job)
+    if "sponsored" in newer_alias:
+        with pytest.raises(BooleanAliasValidationError):
+            await processor.process(job)
+        return
+
+    await processor.process(job)
+    analysis = await result_service.get_by_collection_run(RUN_ID)
+    assert analysis.result["source"]["total_rows"] == 3
+    assert analysis.result["comparisons"]
 
 
 def test_analysis_orchestrator_has_no_product_category_branches() -> None:
