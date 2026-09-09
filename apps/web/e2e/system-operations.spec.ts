@@ -181,7 +181,9 @@ test("renders safe recent analysis failure details", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: "Recent analysis failures" }),
   ).toBeVisible();
-  await expect(page.getByText("fresh_shell_eggs")).toBeVisible();
+  await expect(
+    page.getByText("fresh_shell_eggs", { exact: true }).last(),
+  ).toBeVisible();
   await expect(page.getByText("v1.3.1")).toBeVisible();
   await expect(
     page.getByText("8b2c4f5a-4b5a-4d70-9e61-7f4e7aaec245"),
