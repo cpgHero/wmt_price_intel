@@ -2935,7 +2935,7 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-08",
-              "Implemented and locally test-verified; production reprocessing and acceptance in progress",
+              "Implemented and locally test-verified (23 focused API checks passed); production reprocessing and acceptance in progress",
               "Governed retained-evidence replay now exposes bounded administrator diagnostics for failed analysis and report-materialization runs.",
               "System Operations lists recent failed analyses and recent blocked materialization jobs with redacted, bounded errors, identifiers, progress, attempts, and timestamps. Active blocked report jobs remain an explicit queue signal after the 24-hour incident window. Unexpected competitive-portfolio failures persist a scoped, sanitized diagnostic while preserving expected HTTP errors. Reprocessing remains immutable and makes no provider, AI, or paid collection call. Production completion still requires terminal category runs plus publication and source-evidence acceptance; failed and blocked runs are not described as complete.",
             ],

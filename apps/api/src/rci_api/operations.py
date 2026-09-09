@@ -327,11 +327,7 @@ def _queue(
     active_blocked: int = 0,
 ) -> dict[str, Any]:
     state = (
-        "blocked"
-        if expired
-        else "attention"
-        if recent_failures or active_blocked
-        else "healthy"
+        "blocked" if expired else "attention" if recent_failures or active_blocked else "healthy"
     )
     return {
         "label": label,

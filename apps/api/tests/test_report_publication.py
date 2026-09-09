@@ -615,9 +615,7 @@ async def test_competitive_portfolio_route_surfaces_scope_and_unexpected_error(
                 "refresh": True,
                 "publish": False,
             }
-            raise TypeError(
-                "distribution_store_count is missing password=materialization-secret"
-            )
+            raise TypeError("distribution_store_count is missing password=materialization-secret")
 
     monkeypatch.setenv("RCI_INTERNAL_SERVICE_TOKEN", "internal-token")
     monkeypatch.setattr(report_publication, "_require_lease", require_lease)

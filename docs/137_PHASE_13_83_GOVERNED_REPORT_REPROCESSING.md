@@ -36,4 +36,9 @@ separate: every category replay must reach a terminal state, its materialized re
 pass the publication gate, and the resulting public report must be checked against retained
 source evidence. A queued, running, failed, or blocked replay is not reported as complete.
 
+The focused API diagnostic suite passes 23 tests; one PostgreSQL isolation test is skipped
+only when no local test database URL is configured. Ruff format/check, Python compilation,
+and Prettier checks pass. Browser execution remains a CI acceptance item when the local
+Chromium binary cannot launch under the host sandbox.
+
 No provider call, AI call, or paid collection credit is required for this reprocessing.
