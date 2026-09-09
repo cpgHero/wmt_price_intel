@@ -843,6 +843,214 @@ def test_publication_readiness_still_blocks_incomplete_no_comparable_retailer() 
     )
 
 
+def _no_admissible_retailer_readiness_case() -> tuple[dict[str, object], dict[str, object]]:
+    retailer_rows = [
+        {
+            "competitor_retailer_id": "aldi_us",
+            "candidate_count": 1,
+            "certified_count": 1,
+            "certified_comparable_count": 1,
+            "certified_not_comparable_count": 0,
+            "reviewed_insufficient_evidence_count": 0,
+            "pending_unreviewed_count": 0,
+            "unresolved_count": 0,
+        },
+        {
+            "competitor_retailer_id": "target_us",
+            "candidate_count": 2,
+            "certified_count": 2,
+            "certified_comparable_count": 2,
+            "certified_not_comparable_count": 0,
+            "reviewed_insufficient_evidence_count": 0,
+            "pending_unreviewed_count": 0,
+            "unresolved_count": 0,
+        },
+    ]
+    full_coverage = {
+        "authority": "matching_v2_certified_gold_set",
+        "source_candidate_count": 3,
+        "selected_candidate_count": 3,
+        "selection_complete": True,
+        "queue_case_count": 3,
+        "certified_label_count": 3,
+        "certified_comparable_count": 3,
+        "certified_not_comparable_count": 0,
+        "unresolved_excluded_count": 0,
+        "reviewed_insufficient_evidence_count": 0,
+        "pending_unreviewed_count": 0,
+        "automatic_fallback_enabled": False,
+        "retailers": retailer_rows,
+    }
+    reporting = {
+        "authority": "matching_v2_scoreable_retailer_projection",
+        "source_authority": "matching_v2_certified_gold_set",
+        "source_coverage_checksum": hashlib.sha256(
+            json.dumps(
+                full_coverage,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode()
+        ).hexdigest(),
+        "scoreable_retailer_ids": ["aldi_us", "target_us"],
+        "unavailable_retailer_ids": [],
+        "source_candidate_count": 3,
+        "selected_candidate_count": 3,
+        "selection_complete": True,
+        "queue_case_count": 3,
+        "certified_label_count": 3,
+        "certified_comparable_count": 3,
+        "certified_not_comparable_count": 0,
+        "unresolved_excluded_count": 0,
+        "reviewed_insufficient_evidence_count": 0,
+        "pending_unreviewed_count": 0,
+        "automatic_fallback_enabled": False,
+        "retailers": retailer_rows,
+        "excluded_unavailable_retailers": [],
+        "withheld_certified_comparable_count": 0,
+        "withheld_certified_not_comparable_count": 0,
+    }
+    reporting["projection_checksum"] = hashlib.sha256(
+        json.dumps(reporting, ensure_ascii=False, separators=(",", ":"), sort_keys=True).encode()
+    ).hexdigest()
+    result: dict[str, object] = {
+        "competitors": ["aldi_us", "target_us"],
+        "validation": {"status": "ready_to_share"},
+        "source": {
+            "matching_v2_gold_set_release_id": "release-1",
+            "matching_v2_certification_coverage": full_coverage,
+            "matching_v2_reporting_coverage": reporting,
+        },
+    }
+    view: dict[str, object] = {
+        "match_relationships": [
+            {
+                "relationship_id": "relationship-aldi",
+                "competitor_id": "aldi_us",
+                "status": "confirmed",
+            },
+            {
+                "relationship_id": "relationship-target-1",
+                "competitor_id": "target_us",
+                "status": "confirmed",
+            },
+            {
+                "relationship_id": "relationship-target-2",
+                "competitor_id": "target_us",
+                "status": "confirmed",
+            },
+        ],
+        "ambiguous_match_groups": [],
+        "suppressed_product_decisions": [],
+        "product_decisions": [],
+        "match_candidates": [],
+        "retailer_scorecards": [
+            {
+                "competitor_id": "aldi_us",
+                "evidence_state": "reported",
+                "status": "ready",
+                "benchmark_lower_rate": 1.0,
+                "competitor_lower_rate": 0.0,
+                "parity_rate": 0.0,
+            },
+            *[
+                {
+                    "competitor_id": "target_us",
+                    "profile_id": profile_id,
+                    "evidence_state": "no_admissible_observations",
+                    "status": "limited_evidence",
+                    "matches": 0,
+                    "matched_geographies": 0,
+                    "benchmark_lower_rate": None,
+                    "competitor_lower_rate": None,
+                    "parity_rate": None,
+                    "benchmark_median": None,
+                    "competitor_median": None,
+                    "median_gap": None,
+                }
+                for profile_id in ("compatible", "strict")
+            ],
+        ],
+    }
+    return result, view
+
+
+def test_publication_readiness_discloses_exhaustive_no_admissible_retailer() -> None:
+    result, view = _no_admissible_retailer_readiness_case()
+
+    ArtifactRenderer._apply_report_integrity(view, result)
+
+    assert view["report_readiness"]["status"] == "ready"
+    assert not any(
+        row["code"] == "competitor_without_reported_price_evidence"
+        and row.get("competitor_id") == "target_us"
+        for row in view["report_readiness"]["blocking_reasons"]
+    )
+    warning = next(
+        row
+        for row in view["report_readiness"]["warnings"]
+        if row["code"] == "competitor_has_no_admissible_price_observations"
+    )
+    assert warning["competitor_id"] == "target_us"
+    assert "zero-valued price outcome" in warning["message"]
+
+
+@pytest.mark.parametrize("defect", ["pending_review", "zero_price_outcome", "mixed_state"])
+def test_publication_readiness_still_blocks_unproven_no_admissible_retailer(
+    defect: str,
+) -> None:
+    result, view = _no_admissible_retailer_readiness_case()
+    coverage = result["source"]["matching_v2_certification_coverage"]
+    reporting = result["source"]["matching_v2_reporting_coverage"]
+    target_scorecards = [
+        row for row in view["retailer_scorecards"] if row["competitor_id"] == "target_us"
+    ]
+    if defect == "pending_review":
+        target_coverage = coverage["retailers"][1]
+        target_coverage["candidate_count"] = 3
+        target_coverage["pending_unreviewed_count"] = 1
+        target_coverage["unresolved_count"] = 1
+        for document in (coverage, reporting):
+            document["source_candidate_count"] = 4
+            document["selected_candidate_count"] = 4
+            document["queue_case_count"] = 4
+            document["pending_unreviewed_count"] = 1
+            document["unresolved_excluded_count"] = 1
+        reporting["source_coverage_checksum"] = hashlib.sha256(
+            json.dumps(
+                coverage,
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
+        reporting["projection_checksum"] = hashlib.sha256(
+            json.dumps(
+                {key: value for key, value in reporting.items() if key != "projection_checksum"},
+                ensure_ascii=False,
+                separators=(",", ":"),
+                sort_keys=True,
+            ).encode()
+        ).hexdigest()
+    elif defect == "zero_price_outcome":
+        target_scorecards[0]["benchmark_lower_rate"] = 0.0
+    else:
+        target_scorecards[0]["evidence_state"] = "no_governed_relationships"
+
+    ArtifactRenderer._apply_report_integrity(view, result)
+
+    assert any(
+        row["code"] == "competitor_without_reported_price_evidence"
+        and row.get("competitor_id") == "target_us"
+        for row in view["report_readiness"]["blocking_reasons"]
+    )
+    assert not any(
+        row["code"] == "competitor_has_no_admissible_price_observations"
+        and row.get("competitor_id") == "target_us"
+        for row in view["report_readiness"]["warnings"]
+    )
+
+
 def test_publication_readiness_excludes_explicitly_unavailable_competitor() -> None:
     result = _result()
     result["competitors"].append("target_us")
