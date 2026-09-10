@@ -2934,6 +2934,12 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
             [
+              "2026-09-10",
+              "Implemented and syntax-verified; release CI, deployment, egg retry, and production acceptance pending",
+              "Price Intelligence catalog publication now records `source_rows` from the selected immutable classified Search artifacts used to build each catalog.",
+              "The Egg retained-evidence replacement reached final publication but failed the semantic trust gate because non-Walmart retailer catalogs had positive classified Search observations while their catalog metadata reported zero source rows. The corrected projection uses the checksum-bound selected evidence artifact row-count sum already reconciled to the AnalysisResult evidence manifest. This changes publication metadata only: no Search collection, provider call, AI call, match decision, price, distribution rule, or report metric formula changes. The gate remains fail-closed until the hotfix is deployed and the blocked Egg materialization job is retried successfully.",
+            ],
+            [
               "2026-09-09",
               "Simplified Reports-first navigation model added behind flag",
               "The app navigation now has a preview-only simplified model enabled by `NEXT_PUBLIC_RCI_SIMPLIFIED_NAV=1`, `true`, or `enabled`.",

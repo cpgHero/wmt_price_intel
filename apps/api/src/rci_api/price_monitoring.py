@@ -1005,6 +1005,7 @@ class PriceMonitoringService:
                 artifacts,
                 _classified_evidence_set(result, retailer_id),
             )
+            selected_source_rows = sum(artifact.row_count for artifact in artifacts)
             records: list[dict[str, Any]] = []
             for artifact in artifacts:
                 records.extend(await self._reader.read(artifact))
@@ -1050,10 +1051,7 @@ class PriceMonitoringService:
                 location_index=location_index,
                 eligible_location_index=eligible_location_index,
                 expected_locations=expected_locations,
-                source_rows=await self._repository.source_rows(
-                    analysis.collection_run_id,
-                    retailer_id,
-                ),
+                source_rows=selected_source_rows,
                 artifact_checksums=tuple(artifact.checksum for artifact in artifacts),
                 product_context=product_context,
                 product_context_revision=product_context_revision,
