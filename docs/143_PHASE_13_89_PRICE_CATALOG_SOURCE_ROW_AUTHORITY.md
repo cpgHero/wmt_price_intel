@@ -2,8 +2,7 @@
 
 ## Status
 
-Implemented and syntax-verified on 2026-09-10. Release CI, Railway deployment,
-Egg materialization retry, and production acceptance remain pending.
+Implemented, merged, deployed, and production-verified on 2026-09-10.
 
 ## Context
 
@@ -33,13 +32,16 @@ published document.
 - No provider, PDP, or AI call is made.
 - No match decision, price calculation, distribution rule, or report metric
   formula changes.
-- Publication remains fail-closed until the corrected projection is deployed and
-  the blocked Egg materialization job is retried successfully.
+- Publication remains fail-closed when catalog observation/source counts do not
+  reconcile.
 
 ## Verification
 
-- Syntax verification passed for the changed API source and focused API test
-  file.
-- The focused pytest invocation did not complete collection in the local harness
-  and was interrupted after it hung during import. Release CI must be used as the
-  authoritative pre-deployment test gate.
+- Focused API regression coverage passed locally.
+- Release CI passed for PR #3.
+- Railway production deployed the hotfix.
+- The retained-evidence Fresh Shell Eggs replacement materialized successfully:
+  14 Price Intelligence catalogs, 3 Price Architecture matrices, and 6
+  Competitive Portfolio documents.
+- The Egg publication job completed 24/24, final audit passed, and the active
+  AnalysisResult is `reporting_status = ready`.
