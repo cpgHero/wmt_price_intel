@@ -253,7 +253,7 @@ async def test_parquet_reader_projects_governed_columns_and_inserts_optional_col
 
 
 async def test_product_observation_batch_reads_only_requested_products_once() -> None:
-    historical_artifact = _artifact("historical", 0, 2, "2026-08-16T00:00:00Z")
+    historical_artifact = _artifact("historical", 0, 99, "2026-08-16T00:00:00Z")
     governed_artifact = _artifact("governed", 0, 2, "2026-08-17T00:00:00Z")
 
     class Analyses:
@@ -407,6 +407,93 @@ async def test_product_observation_batch_reads_only_requested_products_once() ->
     assert first["a-1"][0].brand == "ALDI"
     assert first["a-1"][0].image_url == "https://example.com/aldi-one.jpg"
     assert reader.calls == 1
+
+
+async def test_prepare_uses_selected_artifact_rows_as_source_rows() -> None:
+    historical_artifact = _artifact("historical", 0, 99, "2026-08-16T00:00:00Z")
+    governed_artifact = _artifact("governed", 0, 2, "2026-08-17T00:00:00Z")
+
+    class Analyses:
+        async def get(self, analysis_id: str) -> object:
+            assert analysis_id == "analysis-1"
+            return SimpleNamespace(
+                analysis_id="analysis-1",
+                collection_run_id="run-1",
+                product_pack_id="fresh_ground_beef",
+                product_pack_version="1.0.0",
+                result={
+                    "benchmark_retailer": "walmart_us",
+                    "competitors": ["aldi_us"],
+                    "evidence_sets": [
+                        {
+                            "evidence_set_id": "evidence.classified.aldi_us",
+                            **_evidence([governed_artifact]),
+                        }
+                    ],
+                },
+            )
+
+    class Repository:
+        async def artifacts(self, collection_run_id: str, retailer_id: str) -> list[object]:
+            assert (collection_run_id, retailer_id) == ("run-1", "aldi_us")
+            return [historical_artifact, governed_artifact]
+
+        async def location_context(
+            self, collection_run_id: str, retailer_id: str
+        ) -> tuple[dict[tuple[str, str], dict[str, object]], dict[object, object], int]:
+            assert (collection_run_id, retailer_id) == ("run-1", "aldi_us")
+            return ({}, {}, 0)
+
+        async def product_context_bundle(
+            self, retailer_id: str, product_ids: list[str]
+        ) -> tuple[dict[str, dict[str, object]], str]:
+            assert retailer_id == "aldi_us"
+            assert product_ids == ["a-1", "a-2"]
+            return ({}, "revision-1")
+
+        async def brand_overrides(self, **_kwargs: object) -> list[object]:
+            return []
+
+    class PackLoader:
+        async def load(self, product_pack_id: str, version: str) -> object:
+            assert (product_pack_id, version) == ("fresh_ground_beef", "1.0.0")
+            return ProductPackLoader(Path(__file__).resolve().parents[3]).load(product_pack_id)
+
+    class Reader:
+        async def read(self, artifact: object) -> list[dict[str, object]]:
+            assert artifact == governed_artifact
+            return [
+                {
+                    "offer_id": f"offer-{index}",
+                    "retailer_id": "aldi_us",
+                    "retailer_product_id": product_id,
+                    "title": f"Search {product_id}",
+                    "price": price,
+                    "currency": "USD",
+                    "zipcode": zipcode,
+                    "store_number": str(index),
+                    "in_scope": True,
+                    "in_stock": True,
+                    "is_sponsored": False,
+                    "metrics_json": "{}",
+                    "collected_at": "2026-08-07T06:00:00Z",
+                }
+                for index, (product_id, zipcode, price) in enumerate(
+                    (("a-1", "72712", 3.99), ("a-2", "72756", 4.99)),
+                    start=1,
+                )
+            ]
+
+    service = PriceMonitoringService(
+        repository_root=Path(__file__).resolve().parents[3],
+        analysis_service=Analyses(),  # type: ignore[arg-type]
+        repository=Repository(),  # type: ignore[arg-type]
+        product_pack_loader=PackLoader(),  # type: ignore[arg-type]
+        reader=Reader(),  # type: ignore[arg-type]
+    )
+    prepared = await service._prepare("analysis-1", "aldi_us")
+
+    assert prepared.source_rows == governed_artifact.row_count
 
 
 async def test_price_monitoring_api_passes_governed_filters() -> None:
