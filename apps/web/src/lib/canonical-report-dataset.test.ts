@@ -393,6 +393,43 @@ describe("canonical report dataset adapter", () => {
     expect(dataset.seller_governance.status).toBe("blocked");
   });
 
+  it("warns instead of blocking when seller exclusions leave valid relationships", () => {
+    const view = reportView();
+    const walmart = view.assortment_analysis!.retailers[0]!;
+    const aldi = view.assortment_analysis!.retailers[1]!;
+    walmart.products!.push({
+      ...walmart.products![0]!,
+      product_id: "51259338",
+      canonical_product_id: "51259338",
+      name: "Marketside Fresh Organic Bananas, Bunch",
+      seller: "Marketplace seller",
+    });
+    aldi.products!.push({
+      ...aldi.products![0]!,
+      product_id: "organic-banana-bunch",
+      canonical_product_id: "organic-banana-bunch",
+      name: "Organic Banana Bunch",
+    });
+    view.product_decisions!.push({
+      ...view.product_decisions![0]!,
+      id: "decision-2",
+      relationship_id: "relationship-2",
+      benchmark_product_id: "51259338",
+      benchmark_product_name: "Marketside Fresh Organic Bananas, Bunch",
+      competitor_product_id: "organic-banana-bunch",
+      competitor_product_name: "Organic Banana Bunch",
+    });
+
+    const dataset = canonicalReportDatasetFromReportView(analysis(), view);
+
+    expect(dataset.product_relationships).toHaveLength(1);
+    expect(dataset.excluded_relationships).toHaveLength(1);
+    expect(dataset.seller_governance.status).toBe(
+      "passed_with_unverified_competitors",
+    );
+    expect(dataset.readiness.status).toBe("ready");
+  });
+
   it("excludes decisions with missing or zero reportable prices", () => {
     const view = reportView();
     view.product_decisions![0]!.median_benchmark_price = 0;

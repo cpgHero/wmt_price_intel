@@ -40,5 +40,16 @@ This phase does not change Product Pack matching rules, matching-v2 certificatio
 
 ## Production verification
 
-Status: pending release.
+Status: merged, deployed, and production-verified.
 
+- PR: `#11`
+- Merge commit: `ac85ab3b6f075ad933d2e52c4fb249a453f50035`
+- Main CI: run `34511375262` passed documentation, Python, TypeScript, and container jobs.
+- Railway production web deployment: `81a554bd-ad18-4a77-9fd4-1a81fadca721` completed with status `SUCCESS`.
+- Production health: `/health/ready` returned `{"status":"ready","service":"web","dependencies":{"api":"ok"}}`.
+- Live canonical dataset checks after deployment:
+  - Milk analysis `fresh_fluid_milk-19a350ee-90d7-4ec5-92f9-467a15c116b4-match-v2-43c67b88-r2` returned `ready` with 764 included product relationships, 262 Walmart wins, 486 competitor wins, 16 parity relationships, 3 excluded relationships, and price normalization `passed`.
+  - Egg analysis `fresh_shell_eggs-0474c5c1-3949-4623-ac12-7aa76f838bcc-match-v2-93bf1a76-r3` returned `ready` with 112 included product relationships, 87 Walmart wins, 24 competitor wins, 1 parity relationship, 0 excluded relationships, and price normalization `passed`.
+  - Banana analysis `fresh_bananas-3db3e46c-8a89-4519-9936-5e0c48161a5d-match-v2-7d95499f-r2` remained `ready` with 5 included product relationships, 2 Walmart wins, 3 competitor wins, 0 parity relationships, 0 excluded relationships, and price normalization `passed`.
+
+Follow-up verification found that milk had 3 seller-governance exclusions while retaining 764 reportable relationships. The dataset is correctly ready because the unqualified seller rows are excluded, but the seller-governance status should be a warning state rather than `blocked` when valid included relationships remain.
