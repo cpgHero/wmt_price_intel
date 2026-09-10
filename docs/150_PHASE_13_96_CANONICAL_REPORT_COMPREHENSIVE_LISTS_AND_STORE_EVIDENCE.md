@@ -10,7 +10,8 @@ The simplified canonical report must not simplify away the product-level evidenc
 - Price Architecture brand-role sections render all governed relationships in the slice instead of truncating rows.
 - Product cards and relationship tables display positive-price store footprints with searched-store percentages when a searched-store denominator is available.
 - Store evidence drawers are available from executive rows, price rows, and distribution product footprints.
-- Drawers load full price-monitoring map evidence for the exact retailer product ID, list positive-price store-level Search observations, and expose CSV, Excel-compatible, and JSON downloads.
+- Drawers load full price-monitoring map evidence for the exact retailer product ID, list positive-price store-level Search observations, calculate searched-store share from observed distribution stores plus searched-not-observed store locations, and expose CSV, Excel-compatible, and JSON downloads.
+- Drawer downloads include observed distribution rows and searched-not-observed store rows so the store-count numerator, searched-store denominator, and percentage are auditable outside the app.
 - Service-area presence remains separately labeled and is never included as a store count.
 
 ## Non-goals

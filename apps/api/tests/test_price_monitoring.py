@@ -32,6 +32,13 @@ def _allow_public_reads(app: FastAPI) -> None:
     app.dependency_overrides[require_public_analysis] = lambda: None
 
 
+def test_full_detail_map_keeps_store_drawer_exports_above_retailer_footprints() -> None:
+    source = Path(PriceMonitoringService.__module__.replace(".", "/") + ".py")
+    service_source = Path(__file__).parents[1] / "src" / source
+
+    assert 'point_limit = 1_200 if detail == "summary" else 25_000' in (service_source.read_text())
+
+
 async def test_materialized_catalog_is_filtered_sorted_and_paged() -> None:
     class Repository:
         async def catalog_materialization(
