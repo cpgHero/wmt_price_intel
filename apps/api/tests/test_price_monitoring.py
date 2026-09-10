@@ -658,7 +658,7 @@ async def test_price_architecture_api_passes_governed_scope_and_rung_method() ->
     assert response.json() == {"analysis_id": "analysis-1", "mode": "fixed_range"}
 
 
-async def test_price_architecture_unavailable_retailer_emits_zero_evidence_fields(
+async def test_price_architecture_missing_retailer_evidence_emits_zero_evidence_fields(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, object] = {}
@@ -698,7 +698,7 @@ async def test_price_architecture_unavailable_retailer_emits_zero_evidence_field
     ) -> SimpleNamespace:
         assert analysis_id == "analysis-1"
         if retailer_id == "aldi_us":
-            raise RuntimeError("competitor Search evidence unavailable")
+            raise LookupError("competitor Search evidence unavailable")
         return SimpleNamespace(
             population=SimpleNamespace(
                 checksum="benchmark-checksum",
@@ -736,6 +736,55 @@ async def test_price_architecture_unavailable_retailer_emits_zero_evidence_field
         "search_observed_locations": 0,
         "search_observed_skus": 0,
     }
+
+
+async def test_price_architecture_runtime_prepare_failure_fails_closed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Analyses:
+        async def get(self, analysis_id: str) -> SimpleNamespace:
+            assert analysis_id == "analysis-1"
+            return SimpleNamespace(
+                product_pack_id="fresh_ground_beef",
+                product_pack_version="1.0.0",
+                created_at=datetime(2026, 8, 7, tzinfo=UTC),
+                result={
+                    "benchmark_retailer": "walmart_us",
+                    "competitors": ["aldi_us"],
+                },
+            )
+
+    service = object.__new__(PriceMonitoringService)
+    service._analyses = Analyses()
+    service._retailer_names = {"walmart_us": "Walmart", "aldi_us": "ALDI"}
+    service._architecture_cache = {}
+
+    async def prepare(
+        _service: PriceMonitoringService, analysis_id: str, retailer_id: str
+    ) -> SimpleNamespace:
+        assert analysis_id == "analysis-1"
+        if retailer_id == "aldi_us":
+            raise TimeoutError("database connection pool exhausted")
+        return SimpleNamespace(
+            population=SimpleNamespace(
+                checksum="benchmark-checksum",
+                retailer_id=retailer_id,
+                observations=(),
+                eligible_scope_keys=frozenset(),
+                source_locations={},
+            ),
+            product_context_revision="benchmark-context",
+        )
+
+    class Projector:
+        def build(self, **_kwargs: object) -> dict[str, object]:
+            raise AssertionError("partial architecture matrix must not be built")
+
+    service._prepare = MethodType(prepare, service)
+    monkeypatch.setattr("rci_api.price_monitoring.PriceArchitectureMatrixProjector", Projector)
+
+    with pytest.raises(RuntimeError, match="refusing to publish a partial"):
+        await service.architecture_matrix("analysis-1", publish=False)
 
 
 async def test_price_architecture_materialization_requires_internal_token(

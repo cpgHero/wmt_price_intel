@@ -2935,9 +2935,15 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-10",
-              "Implemented and syntax-verified; release CI, deployment, egg retry, and production acceptance pending",
+              "Implemented locally; release CI, deployment, and production acceptance pending",
+              "Price Architecture generation now fails closed when retailer preparation has a runtime or infrastructure failure.",
+              "Only genuine missing Search evidence can create an explicit unavailable retailer row. Transient database, object-store, or runtime failures now refuse to build a partial architecture matrix instead of staging one and waiting for the final publication audit to reject it. This changes materialization failure handling only; it does not change Search evidence, provider calls, AI calls, PDP calls, matching, prices, distribution rules, report metric formulas, published ready reports, collection workflows, or PDF export.",
+            ],
+            [
+              "2026-09-10",
+              "Merged, deployed, and production-verified",
               "Price Intelligence catalog publication now records `source_rows` from the selected immutable classified Search artifacts used to build each catalog.",
-              "The Egg retained-evidence replacement reached final publication but failed the semantic trust gate because non-Walmart retailer catalogs had positive classified Search observations while their catalog metadata reported zero source rows. The corrected projection uses the checksum-bound selected evidence artifact row-count sum already reconciled to the AnalysisResult evidence manifest. This changes publication metadata only: no Search collection, provider call, AI call, match decision, price, distribution rule, or report metric formula changes. The gate remains fail-closed until the hotfix is deployed and the blocked Egg materialization job is retried successfully.",
+              "The Egg retained-evidence replacement originally failed the semantic trust gate because non-Walmart retailer catalogs had positive classified Search observations while their catalog metadata reported zero source rows. The corrected projection uses the checksum-bound selected evidence artifact row-count sum already reconciled to the AnalysisResult evidence manifest. PR #3 passed release CI, deployed to Railway production, and the Egg materialization completed 24/24 with 14 Price Intelligence catalogs, 3 Price Architecture matrices, 6 Competitive Portfolio documents, and a passed final audit. This changes publication metadata only: no Search collection, provider call, AI call, match decision, price, distribution rule, or report metric formula changes.",
             ],
             [
               "2026-09-09",

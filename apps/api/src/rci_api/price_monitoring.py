@@ -1398,6 +1398,12 @@ class PriceMonitoringService:
         unavailable: list[dict[str, Any]] = []
         for retailer_id, outcome in zip(retailer_ids, outcomes, strict=True):
             if isinstance(outcome, BaseException):
+                if not isinstance(outcome, LookupError):
+                    raise RuntimeError(
+                        "retailer Search evidence preparation failed for "
+                        f"{retailer_id!r}; refusing to publish a partial "
+                        "Price Architecture matrix"
+                    ) from outcome
                 if retailer_id == benchmark:
                     raise RuntimeError(
                         "benchmark Search evidence is unavailable; price rungs cannot be defined"
