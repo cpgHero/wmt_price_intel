@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.111",
+  version: "1.3.112",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2934,6 +2934,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-10",
+              "Implemented in code; CI, merge, and production verification pending",
+              "Exact-product store evidence drawers now use a product-scoped map fast path.",
+              "The `/price-monitoring/map` read model preserves the same report drawer response contract, including observed distribution store rows, searched-not-observed location rows, store-share denominator inputs, service-area separation, and the no-inventory-claim distribution definition. It now reads selected product Search observations plus the eligible searched-location set instead of rebuilding the full retailer catalog, with a regression test that fails if the map route invokes full catalog preparation. This changes only API latency and drawer evidence availability; it does not change collection, matching, price normalization, seller rules, report calculations, PDF export, provider calls, PDP calls, AI calls, or historical artifacts.",
+            ],
             [
               "2026-09-10",
               "Implemented in code; CI, merge, and production verification pending",

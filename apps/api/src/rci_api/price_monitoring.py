@@ -12,6 +12,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from io import BytesIO, StringIO
 from pathlib import Path
+from statistics import median
 from typing import Annotated, Any, Literal
 
 import polars as pl
@@ -1753,67 +1754,136 @@ class PriceMonitoringService:
             raise ValueError("a product_id is required for the price footprint map")
         if filters.city is not None and filters.state is None:
             raise ValueError("a city filter requires its state")
-        cache_key = (*self._view_key(analysis_id, filters), "map-v3", detail)
+        cache_key = (*self._view_key(analysis_id, filters), "map-v4", detail)
         cached = self._map_cache.get(cache_key)
         if cached is not None:
             return cached
 
-        prepared = await self._prepare(analysis_id, filters.retailer_id)
-        view = await asyncio.to_thread(
-            self._project,
-            prepared,
-            filters,
-            location_limit=None,
-            product_location_limit=0,
+        analysis = await self._analyses.get(analysis_id)
+        result = analysis.result
+        benchmark = str(result["benchmark_retailer"])
+        retailer_options = (benchmark, *(str(value) for value in result["competitors"]))
+        if filters.retailer_id not in retailer_options:
+            raise ValueError(f"retailer {filters.retailer_id!r} is not in this analysis")
+
+        grouped_observations, location_context = await asyncio.gather(
+            self.product_observations_for_products(
+                analysis_id,
+                retailer_id=filters.retailer_id,
+                product_ids=[filters.product_id],
+                comparison_metric="package_price",
+            ),
+            self._repository.location_context(
+                analysis.collection_run_id,
+                filters.retailer_id,
+            ),
         )
-        products = view["products"]
-        if not products:
+        observations = list(grouped_observations.get(filters.product_id, ()))
+
+        def location_matches(row: ProductPriceObservation | dict[str, Any]) -> bool:
+            state = row.state if isinstance(row, ProductPriceObservation) else row.get("state")
+            city = row.city if isinstance(row, ProductPriceObservation) else row.get("city")
+            zipcode = (
+                row.zipcode if isinstance(row, ProductPriceObservation) else row.get("zipcode")
+            )
+            return bool(
+                (filters.state is None or state == filters.state)
+                and (filters.city is None or city == filters.city)
+                and (filters.zipcode is None or zipcode == filters.zipcode)
+            )
+
+        observed_rows = [row for row in observations if location_matches(row)]
+        if not observed_rows:
             raise LookupError("no exact-product Search evidence matched the map filters")
 
-        reference_price = products[0].get("search_price_stats", products[0]["price_stats"])[
-            "observation_median"
-        ]
+        _location_index, eligible_location_index, expected_locations = location_context
+        reference_price = median(row.package_price for row in observed_rows)
         point_limit = 1_200 if detail == "summary" else 25_000
 
-        def map_point(row: dict[str, Any], status_value: str) -> dict[str, Any]:
-            search_observed = status_value == "observed"
-            price = (
-                row.get("search_median_price", row.get("median_price")) if search_observed else None
-            )
-            difference = (
-                round(float(price) - float(reference_price), 4)
-                if price is not None and reference_price is not None
-                else None
-            )
+        def eligible_location(location_key: str, row: dict[str, Any]) -> dict[str, Any]:
+            service_area = location_key.startswith("zip:")
+            scope_value = location_key.removeprefix("zip:") if service_area else location_key
             return {
-                "scope_key": str(row["scope_key"]),
-                "status": status_value,
-                "search_observed": search_observed,
-                "is_sponsored": row.get("is_sponsored") if search_observed else None,
+                "scope_key": (
+                    f"{filters.retailer_id}|service_area|{scope_value}"
+                    if service_area
+                    else f"{filters.retailer_id}|store|{scope_value}"
+                ),
+                "kind": "service_area" if service_area else "store",
+                "store_number": None if service_area else location_key,
+                "store_name": row.get("store_name"),
+                "zipcode": row.get("zipcode"),
+                "city": row.get("city"),
+                "state": row.get("state"),
+                "country": row.get("country") or "USA",
+                "latitude": row.get("latitude"),
+                "longitude": row.get("longitude"),
+            }
+
+        scoped_eligible_locations = [
+            eligible_location(str(location_key), dict(row))
+            for (retailer_id, location_key), row in eligible_location_index.items()
+            if retailer_id == filters.retailer_id
+        ]
+        scoped_eligible_locations = [
+            row for row in scoped_eligible_locations if location_matches(row)
+        ]
+
+        observed_scope_keys = {row.scope_key for row in observed_rows}
+        eligible_scope_keys = {str(row["scope_key"]) for row in scoped_eligible_locations}
+        not_observed_rows = [
+            row
+            for row in scoped_eligible_locations
+            if str(row["scope_key"]) not in observed_scope_keys
+        ]
+
+        def observed_point(row: ProductPriceObservation) -> dict[str, Any]:
+            price = row.package_price
+            return {
+                "scope_key": row.scope_key,
+                "status": "observed",
+                "search_observed": True,
+                "is_sponsored": row.is_sponsored,
                 "distribution_store_id": (
-                    row.get("store_number")
-                    if search_observed and row.get("kind") == "store"
+                    row.store_number
+                    if row.location_kind == "store" and row.store_number is not None
                     else None
                 ),
+                "kind": row.location_kind,
+                "store_number": row.store_number,
+                "store_name": row.store_name,
+                "zipcode": row.zipcode,
+                "city": row.city,
+                "state": row.state,
+                "country": row.country,
+                "latitude": float(row.latitude) if row.latitude is not None else None,
+                "longitude": float(row.longitude) if row.longitude is not None else None,
+                "price": price,
+                "difference_from_reference": round(float(price) - float(reference_price), 4),
+            }
+
+        def not_observed_point(row: dict[str, Any]) -> dict[str, Any]:
+            return {
+                "scope_key": str(row["scope_key"]),
+                "status": "not_observed",
+                "search_observed": False,
+                "is_sponsored": None,
+                "distribution_store_id": None,
                 "kind": row["kind"],
                 "store_number": row.get("store_number"),
                 "store_name": row.get("store_name"),
                 "zipcode": row.get("zipcode"),
                 "city": row.get("city"),
                 "state": row.get("state"),
-                "country": row["country"],
-                "latitude": float(row["latitude"]),
-                "longitude": float(row["longitude"]),
-                "price": price,
-                "difference_from_reference": difference,
+                "country": row.get("country") or "USA",
+                "latitude": float(row["latitude"]) if row.get("latitude") is not None else None,
+                "longitude": float(row["longitude"]) if row.get("longitude") is not None else None,
+                "price": None,
+                "difference_from_reference": None,
             }
 
-        observed_rows = list(view["locations"])
-        not_observed_rows = list(view["distribution_gaps"]["locations"])
         observed_with_coordinates = [
-            row
-            for row in observed_rows
-            if row.get("latitude") is not None and row.get("longitude") is not None
+            row for row in observed_rows if row.latitude is not None and row.longitude is not None
         ]
         not_observed_with_coordinates = [
             row
@@ -1821,41 +1891,59 @@ class PriceMonitoringService:
             if row.get("latitude") is not None and row.get("longitude") is not None
         ]
         price_positions = {"below": 0, "at": 0, "above": 0}
-        if reference_price is not None:
-            for row in observed_rows:
-                price = row.get("search_median_price", row.get("median_price"))
-                if price is None:
-                    continue
-                difference = float(price) - float(reference_price)
-                if difference < -0.005:
-                    price_positions["below"] += 1
-                elif difference > 0.005:
-                    price_positions["above"] += 1
-                else:
-                    price_positions["at"] += 1
+        for row in observed_rows:
+            difference = float(row.package_price) - float(reference_price)
+            if difference < -0.005:
+                price_positions["below"] += 1
+            elif difference > 0.005:
+                price_positions["above"] += 1
+            else:
+                price_positions["at"] += 1
 
-        def evenly_sample(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        def evenly_sample(rows: list[Any]) -> list[Any]:
             if len(rows) <= point_limit:
                 return rows
             step = len(rows) / point_limit
             return [rows[int(index * step)] for index in range(point_limit)]
 
-        observed_points = [
-            map_point(row, "observed") for row in evenly_sample(observed_with_coordinates)
-        ]
+        observed_points = [observed_point(row) for row in evenly_sample(observed_with_coordinates)]
         not_observed_points = [
-            map_point(row, "not_observed") for row in evenly_sample(not_observed_with_coordinates)
+            not_observed_point(row) for row in evenly_sample(not_observed_with_coordinates)
         ]
+        observed_store_numbers = {
+            row.store_number
+            for row in observed_rows
+            if row.location_kind == "store" and row.store_number is not None
+        }
+        service_area_scope_keys = {
+            row.scope_key for row in observed_rows if row.location_kind == "service_area"
+        }
+        scoped_expected_location_count = (
+            len(scoped_eligible_locations)
+            if filters.state is not None or filters.city is not None or filters.zipcode is not None
+            else expected_locations or len(scoped_eligible_locations)
+        )
+        effective_expected_location_count = max(
+            scoped_expected_location_count,
+            len(eligible_scope_keys | observed_scope_keys),
+        )
+        not_observed_location_count = max(
+            0,
+            effective_expected_location_count - len(observed_scope_keys),
+        )
         result = {
             "schema_version": "1.3.0",
             "analysis_id": analysis_id,
             "retailer": {
-                "id": view["retailer"]["id"],
-                "name": view["retailer"]["name"],
+                "id": filters.retailer_id,
+                "name": self._retailer_names.get(
+                    filters.retailer_id,
+                    filters.retailer_id.replace("_", " ").title(),
+                ),
             },
             "product": {
-                "id": products[0]["product_id"],
-                "name": products[0]["name"],
+                "id": observed_rows[0].product_id,
+                "name": observed_rows[0].product_name,
             },
             "distribution_contract": store_search_distribution_contract(),
             "filters": {
@@ -1875,27 +1963,24 @@ class PriceMonitoringService:
             },
             "reference_price": reference_price,
             "display": {
-                "observed_locations": int(view["location_display"]["total"]),
-                "search_observed_locations": int(view["location_display"]["total"]),
-                "distribution_store_count": int(view["summary"]["distribution_store_count"]),
-                "service_area_presence_count": int(view["summary"]["service_area_presence_count"]),
+                "observed_locations": len(observed_scope_keys),
+                "search_observed_locations": len(observed_scope_keys),
+                "distribution_store_count": len(observed_store_numbers),
+                "service_area_presence_count": len(service_area_scope_keys),
                 "observed_points": len(observed_points),
                 "observed_missing_coordinates": max(
                     0,
-                    int(view["location_display"]["total"]) - len(observed_with_coordinates),
+                    len(observed_rows) - len(observed_with_coordinates),
                 ),
                 "observed_sampled": len(observed_with_coordinates) > point_limit,
                 "below_reference_locations": price_positions["below"],
                 "at_reference_locations": price_positions["at"],
                 "above_reference_locations": price_positions["above"],
-                "not_observed_locations": int(
-                    view["distribution_gaps"]["location_display"]["total"]
-                ),
+                "not_observed_locations": not_observed_location_count,
                 "not_observed_points": len(not_observed_points),
                 "not_observed_missing_coordinates": max(
                     0,
-                    int(view["distribution_gaps"]["location_display"]["total"])
-                    - len(not_observed_with_coordinates),
+                    not_observed_location_count - len(not_observed_with_coordinates),
                 ),
                 "not_observed_sampled": len(not_observed_with_coordinates) > point_limit,
             },
