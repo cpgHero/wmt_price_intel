@@ -49,6 +49,15 @@ function coverageStatus(
   return "passed";
 }
 
+function statusReasonDetail(
+  reason: CanonicalDataset["readiness"]["blocking_reasons"][number] | undefined,
+) {
+  if (!reason) return null;
+  return reason.next_action
+    ? `${reason.message} Next action: ${reason.next_action}`
+    : reason.message;
+}
+
 export function canonicalReportChecklist(
   dataset: CanonicalDataset,
 ): CanonicalChecklistItem[] {
@@ -58,8 +67,8 @@ export function canonicalReportChecklist(
       label: "Report readiness",
       status: readinessStatus(dataset.readiness.status),
       detail:
-        dataset.readiness.blocking_reasons[0]?.message ??
-        dataset.readiness.warnings[0]?.message ??
+        statusReasonDetail(dataset.readiness.blocking_reasons[0]) ??
+        statusReasonDetail(dataset.readiness.warnings[0]) ??
         "Canonical report inputs are ready for preview review.",
     },
     {

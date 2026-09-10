@@ -219,6 +219,14 @@ describe("loadCanonicalReportDatasetResponse", () => {
     expect(response.body).toMatchObject({
       schema_version: "1.0.0",
       analysis_id: "fresh_bananas-active",
+      readiness: {
+        status: "blocked",
+        blocking_reasons: [
+          {
+            code: "no_reportable_product_relationships",
+          },
+        ],
+      },
       summary: {
         relationship_count: 0,
         excluded_relationship_count: 0,

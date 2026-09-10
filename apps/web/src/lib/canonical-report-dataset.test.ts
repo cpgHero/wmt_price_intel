@@ -363,4 +363,29 @@ describe("canonical report dataset adapter", () => {
     );
     expect(dataset.qa.products_without_valid_distribution_count).toBe(1);
   });
+
+  it("fails closed when no product relationships are reportable", () => {
+    const view = reportView();
+    view.product_decisions = [];
+    view.match_candidates = [];
+    view.assortment_analysis!.retailers = [];
+
+    const dataset = canonicalReportDatasetFromReportView(analysis(), view);
+
+    expect(dataset.product_relationships).toHaveLength(0);
+    expect(dataset.excluded_relationships).toHaveLength(0);
+    expect(dataset.readiness.status).toBe("blocked");
+    expect(dataset.readiness.blocking_reasons[0]).toMatchObject({
+      code: "no_reportable_product_relationships",
+      message:
+        "No reportable product relationships passed the canonical guardrails, so the buyer-facing report is not ready.",
+      next_action:
+        "Confirm Product Pack coverage and match certification produced product decisions with positive prices and governed distribution evidence, then rebuild the report dataset from retained evidence.",
+    });
+    expect(dataset.qa).toMatchObject({
+      included_relationship_count: 0,
+      product_pack_coverage_status: "blocked",
+      retailer_coverage_status: "blocked",
+    });
+  });
 });

@@ -191,6 +191,30 @@ describe("canonicalReportChecklist", () => {
     });
   });
 
+  it("shows the next action for blocked readiness reasons", () => {
+    const checklist = canonicalReportChecklist(
+      dataset({
+        readiness: {
+          status: "blocked",
+          blocking_reasons: [
+            {
+              code: "no_reportable_product_relationships",
+              message:
+                "No reportable product relationships passed the canonical guardrails.",
+              next_action:
+                "Rebuild the report dataset from retained evidence after match certification is complete.",
+            },
+          ],
+          warnings: [],
+        },
+      }),
+    );
+
+    expect(checklist.find((item) => item.id === "readiness")?.detail).toBe(
+      "No reportable product relationships passed the canonical guardrails. Next action: Rebuild the report dataset from retained evidence after match certification is complete.",
+    );
+  });
+
   it("warns for exclusions, pending certification, and missing images", () => {
     const checklist = canonicalReportChecklist(
       dataset({

@@ -2935,6 +2935,12 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-10",
+              "Implemented locally; release CI, deployment, and production acceptance pending",
+              "Canonical report datasets now fail closed when no product-level relationships are reportable.",
+              "A canonical buyer-facing report with zero included product relationships is marked blocked with reason `no_reportable_product_relationships` and a retained-evidence rebuild next action. The Evidence & QA readiness card now displays next actions for blocked readiness reasons, and the canonical dataset audit command treats blocked readiness or zero reportable relationships as a failed audit. This changes readiness and QA presentation only; it does not invent relationships, change prices, change distribution rules, change seller rules, call providers, call PDP, call AI, recollect data, reprocess data, publish reports, export PDFs, or delete artifacts.",
+            ],
+            [
+              "2026-09-10",
               "Merged, deployed, and production-verified",
               "Canonical report workspace is now the default AnalysisResult v2 report experience.",
               "The Reports library opens the canonical five-tab report directly and no longer presents a separate simplified-preview action. The canonical report header no longer labels itself as a preview, and the old workspace remains available only through explicit legacy query flags for audit comparison. PR #7 passed main CI, merged as 502cce5, deployed to Railway production, and the deployed Reports library plus default report route were verified against production. This changes report workspace routing and explanatory UI copy only; it does not change source data, report calculations, distribution rules, publication gates, matching, provider calls, PDP calls, AI calls, reprocessing, PDF export, or historical artifacts.",

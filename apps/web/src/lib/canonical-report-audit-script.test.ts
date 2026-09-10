@@ -36,5 +36,9 @@ describe("canonical report dataset audit script", () => {
     expect(source).toContain(
       "price_delta does not reconcile to displayed reporting prices",
     );
+    expect(source).toContain("readiness is blocked");
+    expect(source).toContain(
+      "no reportable product relationships are available for buyer-facing reporting",
+    );
   });
 });
