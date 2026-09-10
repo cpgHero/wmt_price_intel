@@ -544,6 +544,40 @@ export function canonicalReportDatasetFromReportView(
       row.reason_code === "missing_benchmark_distribution" ||
       row.reason_code === "missing_competitor_distribution",
   ).length;
+  const readinessBlockingReasons: CanonicalDataset["readiness"]["blocking_reasons"] =
+    (reportView.report_readiness.blocking_reasons ?? []).map((reason) => ({
+      code: String(reason.code ?? "report_not_ready"),
+      message: String(reason.message ?? "Report is not ready."),
+      next_action: null,
+    }));
+  if (
+    relationships.length === 0 &&
+    !readinessBlockingReasons.some(
+      (reason) => reason.code === "no_reportable_product_relationships",
+    )
+  ) {
+    readinessBlockingReasons.push({
+      code: "no_reportable_product_relationships",
+      message:
+        "No reportable product relationships passed the canonical guardrails, so the buyer-facing report is not ready.",
+      next_action: excludedRelationships.length
+        ? "Review the Evidence & QA exclusions, repair missing seller, price, or distribution evidence, then rebuild the report dataset from retained evidence."
+        : "Confirm Product Pack coverage and match certification produced product decisions with positive prices and governed distribution evidence, then rebuild the report dataset from retained evidence.",
+    });
+  }
+  const readinessWarnings: CanonicalDataset["readiness"]["warnings"] = (
+    reportView.report_readiness.warnings ?? []
+  ).map((warning) => ({
+    code: String(warning.code ?? "report_warning"),
+    message: String(warning.message ?? "Report warning."),
+    next_action: null,
+  }));
+  const readinessStatus: CanonicalDataset["readiness"]["status"] =
+    readinessBlockingReasons.length > 0
+      ? "blocked"
+      : reportView.report_readiness.status === "ready"
+        ? "ready"
+        : "ready_with_caveats";
 
   return {
     schema_version: "1.0.0",
@@ -565,24 +599,9 @@ export function canonicalReportDatasetFromReportView(
       service_area_presence: SERVICE_AREA_PRESENCE_CONTRACT,
     },
     readiness: {
-      status:
-        reportView.report_readiness.status === "ready"
-          ? "ready"
-          : reportView.report_readiness.blocking_reasons?.length
-            ? "blocked"
-            : "ready_with_caveats",
-      blocking_reasons: (
-        reportView.report_readiness.blocking_reasons ?? []
-      ).map((reason) => ({
-        code: String(reason.code ?? "report_not_ready"),
-        message: String(reason.message ?? "Report is not ready."),
-        next_action: null,
-      })),
-      warnings: (reportView.report_readiness.warnings ?? []).map((warning) => ({
-        code: String(warning.code ?? "report_warning"),
-        message: String(warning.message ?? "Report warning."),
-        next_action: null,
-      })),
+      status: readinessStatus,
+      blocking_reasons: readinessBlockingReasons,
+      warnings: readinessWarnings,
     },
     seller_governance: {
       status: unverifiedSellerProductCount ? "blocked" : "passed",
@@ -610,10 +629,12 @@ export function canonicalReportDatasetFromReportView(
       match_certification_complete:
         reportView.certification_coverage?.pending_unreviewed_count === 0 ||
         reportView.match_governance.ambiguous === 0,
-      product_pack_coverage_status: "passed",
-      retailer_coverage_status: excludedRelationships.length
-        ? "passed_with_exclusions"
-        : "passed",
+      product_pack_coverage_status: relationships.length ? "passed" : "blocked",
+      retailer_coverage_status: relationships.length
+        ? excludedRelationships.length
+          ? "passed_with_exclusions"
+          : "passed"
+        : "blocked",
     },
   };
 }

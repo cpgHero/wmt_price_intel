@@ -182,6 +182,20 @@ function auditDataset(dataset) {
       );
     }
   }
+  if (dataset.readiness?.status === "blocked") {
+    const reasons = (dataset.readiness.blocking_reasons ?? [])
+      .map((reason) => reason.code)
+      .filter(Boolean)
+      .join(", ");
+    blockers.push(
+      reasons ? `readiness is blocked: ${reasons}` : "readiness is blocked",
+    );
+  }
+  if (relationships.length === 0) {
+    blockers.push(
+      "no reportable product relationships are available for buyer-facing reporting",
+    );
+  }
 
   const relationshipIds = new Set();
   for (const relationship of relationships) {

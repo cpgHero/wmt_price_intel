@@ -155,5 +155,6 @@ Status:
 - Canonical `price_delta` and `price_delta_percent` sign conventions documented in the schema and TypeScript contract comments.
 - Canonical app report shell implemented in `apps/web/src/app/analyses/[analysisId]/canonical-report-workspace.tsx`.
 - Report experience gate implemented in `apps/web/src/lib/canonical-report-experience.ts`.
+- Empty canonical buyer-facing datasets now fail closed: if zero product relationships pass the canonical guardrails, `readiness.status` becomes `blocked` with reason `no_reportable_product_relationships`, a retained-evidence rebuild next action, blocked product-pack/retailer QA coverage statuses, and an audit-command failure.
 - As of Phase 13.93, the canonical report is the default for AnalysisResult v2 report workspaces. Visit an analysis with `?experience=legacy`, `?experience=current`, `?reportExperience=legacy`, `?reportExperience=current`, `?canonical=0`, or `?canonical=false` to render the legacy workspace for audit comparison.
 - Next work should validate the default canonical report output against bananas, milk, and eggs production reports before removing legacy workspace code.
