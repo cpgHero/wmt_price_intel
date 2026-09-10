@@ -21,7 +21,7 @@ describe("platform owner and administrator documentation", () => {
   it("provides a unique maintained guide in every documentation group", () => {
     const ids = platformDocumentation.guides.map((guide) => guide.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(platformDocumentation.version).toBe("1.3.113");
+    expect(platformDocumentation.version).toBe("1.3.114");
     expect(platformDocumentation.lastVerified).toBeTruthy();
 
     for (const group of platformDocGroups) {
@@ -226,7 +226,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.113");
+    expect(platformDocumentation.version).toBe("1.3.114");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -354,6 +354,18 @@ describe("platform owner and administrator documentation", () => {
     );
     expect(guides["analytics-reporting"]).toContain(
       "searched-row audit-share metadata",
+    );
+    expect(guides["analytics-reporting"]).toContain(
+      "filter drawer for source-backed relationship dimensions",
+    );
+    expect(guides["analytics-reporting"]).toContain(
+      "state filtering belongs in the exact-product map/store-evidence drawer",
+    );
+    expect(guides["analytics-reporting"]).toContain(
+      "a normalized $/gallon value is never labeled as shelf or package price",
+    );
+    expect(guides["change-orders"]).toContain(
+      "state_filter plus visible filtered row counts",
     );
     expect(guides["change-orders"]).toContain(
       "business footprint share from searched-row audit share",

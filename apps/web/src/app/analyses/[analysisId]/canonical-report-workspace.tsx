@@ -17,7 +17,13 @@ import {
   BROAD_WALMART_DISTRIBUTION_THRESHOLD,
   DEFAULT_CANONICAL_RELATIONSHIP_FILTERS,
   type CanonicalRelationshipFilters,
+  type CanonicalPriceBasis,
+  canonicalBenchmarkBrandOptions,
+  canonicalComparisonBasisOptions,
+  canonicalCompetitorBrandOptions,
   canonicalCompetitorOptions,
+  canonicalRelationshipPriceBasis,
+  canonicalUnitBasisOptions,
   filterCanonicalRelationships,
   groupCanonicalRelationshipsByOutcome,
   summarizeCanonicalBrandTypes,
@@ -36,6 +42,8 @@ type ReportProduct =
   | ProductRelationship["competitor_product"];
 type BrandType = ProductRelationship["benchmark_product"]["brand_type"];
 type PriceMonitoringMapPoint = PriceMonitoringMap["points"][number];
+type ExecutiveOutcomeMode = "losses" | "wins";
+type RelationshipSectionMode = "losses" | "wins" | "parity";
 type ProductEvidenceTarget = {
   product: ReportProduct;
   reportFootprintCount?: number | null;
@@ -104,6 +112,33 @@ function formatPercent(value: number) {
 function formatSignedCurrency(value: number) {
   if (Math.abs(value) < 0.005) return "$0.00";
   return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
+}
+
+function priceBasisLabel(priceBasis: CanonicalPriceBasis) {
+  if (priceBasis === "package_price") return "Package price";
+  if (priceBasis === "mixed_price_basis") return "Mixed price basis";
+  return "Normalized comparison value";
+}
+
+function priceDisplay(product: ReportProduct) {
+  const packagePrice = product.price.package_price;
+  if (
+    typeof packagePrice === "number" &&
+    Number.isFinite(packagePrice) &&
+    packagePrice > 0
+  ) {
+    return {
+      primary: formatCurrency(packagePrice),
+      secondary: product.price.normalized_unit_price
+        ? `Normalized comparison: ${product.price.reporting_price_label}`
+        : "Source-backed package price",
+    };
+  }
+  return {
+    primary: `Normalized comparison: ${product.price.reporting_price_label}`,
+    secondary:
+      "Pack/shelf price was not supplied in this report dataset; do not read as shelf price.",
+  };
 }
 
 function retailerFootprintsFromRelationships(
@@ -305,6 +340,16 @@ function exportableStoreRows(points: PriceMonitoringMapPoint[]) {
     search_observed: point.search_observed,
     is_sponsored: point.is_sponsored,
   }));
+}
+
+function stateOptionsFromPoints(points: PriceMonitoringMapPoint[]) {
+  return Array.from(
+    new Set(
+      points
+        .map((point) => point.state)
+        .filter((state): state is string => Boolean(state?.trim())),
+    ),
+  ).sort((left, right) => left.localeCompare(right, "en-US"));
 }
 
 function csvCell(value: unknown) {
@@ -578,12 +623,32 @@ function ExecutiveSummary({
     left.benchmark_product.title.localeCompare(right.benchmark_product.title);
   const priorityLosses = [...groups.walmartLosses].sort(actionSort);
   const priorityWins = [...groups.walmartWins].sort(actionSort);
+  const [outcomeMode, setOutcomeMode] =
+    useState<ExecutiveOutcomeMode>("losses");
   const broadLosses = groups.walmartLosses.filter(
     (relationship) =>
       relationship.benchmark_product.distribution
         .physical_store_distribution_count >=
       BROAD_WALMART_DISTRIBUTION_THRESHOLD,
   );
+  const broadWins = groups.walmartWins.filter(
+    (relationship) =>
+      relationship.benchmark_product.distribution
+        .physical_store_distribution_count >=
+      BROAD_WALMART_DISTRIBUTION_THRESHOLD,
+  );
+  const activeRelationships =
+    outcomeMode === "losses" ? priorityLosses : priorityWins;
+  const activeBroadCount =
+    outcomeMode === "losses" ? broadLosses.length : broadWins.length;
+  const activeTitle =
+    outcomeMode === "losses"
+      ? "Complete Walmart loss action list"
+      : "Complete Walmart win action list";
+  const activeEmptyLabel =
+    outcomeMode === "losses"
+      ? "No Walmart losses are available in the governed relationship set."
+      : "No Walmart wins are available in the governed relationship set.";
   return (
     <>
       <section className="workspace-section">
@@ -653,43 +718,45 @@ function ExecutiveSummary({
       <section className="workspace-section">
         <header>
           <div>
-            <h2>Complete Walmart loss action list</h2>
+            <h2>{activeTitle}</h2>
             <p>
-              This is the comprehensive executive loss list, not a subset or
-              gallery. Rows are sorted by Walmart product footprint and price
-              gap, and every row exposes Walmart and competitor store evidence.
+              Use the toggle to switch between the complete executive loss and
+              win lists without scrolling past one list to reach the other. Rows
+              are sorted by Walmart product footprint and price gap, and every
+              row exposes Walmart and competitor store evidence.
             </p>
           </div>
-          <span className="canonical-section-stat">
-            {priorityLosses.length.toLocaleString()} total losses ·{" "}
-            {broadLosses.length.toLocaleString()} broad-footprint
-          </span>
+          <div className="canonical-executive-actions">
+            <div
+              className="canonical-executive-toggle"
+              role="group"
+              aria-label="Executive summary outcome"
+            >
+              <button
+                className={outcomeMode === "losses" ? "active" : ""}
+                type="button"
+                onClick={() => setOutcomeMode("losses")}
+              >
+                Losses ({priorityLosses.length.toLocaleString()})
+              </button>
+              <button
+                className={outcomeMode === "wins" ? "active" : ""}
+                type="button"
+                onClick={() => setOutcomeMode("wins")}
+              >
+                Wins ({priorityWins.length.toLocaleString()})
+              </button>
+            </div>
+            <span className="canonical-section-stat">
+              {activeRelationships.length.toLocaleString()} total {outcomeMode}{" "}
+              · {activeBroadCount.toLocaleString()} broad-footprint
+            </span>
+          </div>
         </header>
         <ExecutivePriorityTable
           analysisId={analysisId}
-          emptyLabel="No Walmart losses are available in the governed relationship set."
-          relationships={priorityLosses}
-          retailerFootprints={retailerFootprints}
-        />
-      </section>
-      <section className="workspace-section">
-        <header>
-          <div>
-            <h2>Complete Walmart win action list</h2>
-            <p>
-              This is the comprehensive executive win list. It keeps the same
-              store-footprint and evidence controls so wins can be defended with
-              the same source-backed detail as losses.
-            </p>
-          </div>
-          <span className="canonical-section-stat">
-            {priorityWins.length.toLocaleString()} total wins
-          </span>
-        </header>
-        <ExecutivePriorityTable
-          analysisId={analysisId}
-          emptyLabel="No Walmart wins are available in the governed relationship set."
-          relationships={priorityWins}
+          emptyLabel={activeEmptyLabel}
+          relationships={activeRelationships}
           retailerFootprints={retailerFootprints}
         />
       </section>
@@ -768,16 +835,24 @@ function ExecutivePriorityTable({
                     {relationship.benchmark_product.retailer_product_id} ·{" "}
                     {brandTypeLabels[relationship.benchmark_product.brand_type]}
                   </span>
+                  <span>
+                    {priceDisplay(relationship.benchmark_product).primary}
+                  </span>
+                  <span className="canonical-price-note">
+                    {priceDisplay(relationship.benchmark_product).secondary}
+                  </span>
                 </td>
                 <td>
                   <strong>{relationship.competitor_product.title}</strong>
                   <span>
                     {displayLabel(relationship.competitor_product.retailer_id)}{" "}
-                    ·{" "}
-                    {
-                      relationship.competitor_product.price
-                        .reporting_price_label
-                    }
+                    · {relationship.competitor_product.retailer_product_id}
+                  </span>
+                  <span>
+                    {priceDisplay(relationship.competitor_product).primary}
+                  </span>
+                  <span className="canonical-price-note">
+                    {priceDisplay(relationship.competitor_product).secondary}
                   </span>
                 </td>
                 <td>
@@ -881,8 +956,27 @@ function ProductWinsLosses({
   const [filters, setFilters] = useState<CanonicalRelationshipFilters>(
     DEFAULT_CANONICAL_RELATIONSHIP_FILTERS,
   );
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [sectionMode, setSectionMode] =
+    useState<RelationshipSectionMode>("losses");
   const competitorOptions = useMemo(
     () => canonicalCompetitorOptions(dataset.product_relationships),
+    [dataset.product_relationships],
+  );
+  const benchmarkBrandOptions = useMemo(
+    () => canonicalBenchmarkBrandOptions(dataset.product_relationships),
+    [dataset.product_relationships],
+  );
+  const competitorBrandOptions = useMemo(
+    () => canonicalCompetitorBrandOptions(dataset.product_relationships),
+    [dataset.product_relationships],
+  );
+  const comparisonBasisOptions = useMemo(
+    () => canonicalComparisonBasisOptions(dataset.product_relationships),
+    [dataset.product_relationships],
+  );
+  const unitBasisOptions = useMemo(
+    () => canonicalUnitBasisOptions(dataset.product_relationships),
     [dataset.product_relationships],
   );
   const filteredRelationships = useMemo(
@@ -898,6 +992,38 @@ function ProductWinsLosses({
   ): void => {
     setFilters((current) => ({ ...current, ...patch }));
   };
+  const resetFilters = () => setFilters(DEFAULT_CANONICAL_RELATIONSHIP_FILTERS);
+  const activeFilterCount = [
+    filters.query.trim(),
+    filters.outcome !== "all",
+    filters.brandType !== "all",
+    filters.benchmarkBrand !== "all",
+    filters.competitorBrand !== "all",
+    filters.competitorRetailerId !== "all",
+    filters.comparisonBasis !== "all",
+    filters.unitBasis !== "all",
+    filters.priceBasis !== "all",
+    filters.minimumWalmartDistribution > 0,
+    filters.sort !== DEFAULT_CANONICAL_RELATIONSHIP_FILTERS.sort,
+  ].filter(Boolean).length;
+  const activeSection =
+    sectionMode === "losses"
+      ? {
+          title: `All Walmart losses (${groups.walmartLosses.length.toLocaleString()})`,
+          note: "These are all included competitor-win relationships matching the active filters, not illustrative examples.",
+          relationships: groups.walmartLosses,
+        }
+      : sectionMode === "wins"
+        ? {
+            title: `All Walmart wins (${groups.walmartWins.length.toLocaleString()})`,
+            note: "These are all included Walmart-win relationships matching the active filters, not illustrative examples.",
+            relationships: groups.walmartWins,
+          }
+        : {
+            title: `Parity / unscored (${groups.parity.length.toLocaleString()})`,
+            note: "Shown separately so parity does not dilute the action list.",
+            relationships: groups.parity,
+          };
 
   return (
     <>
@@ -907,16 +1033,144 @@ function ProductWinsLosses({
             <h2>Product action board</h2>
             <p>
               Default view includes every governed relationship. Use filters to
-              focus the same image cards by outcome, brand type, competitor,
-              distribution footprint, or product text.
+              focus the same image cards by brand, retailer, outcome, comparison
+              basis, price basis, distribution footprint, or product text.
             </p>
           </div>
-          <button
-            type="button"
-            className="text-link"
-            onClick={() => setFilters(DEFAULT_CANONICAL_RELATIONSHIP_FILTERS)}
+          <div className="canonical-filter-actions">
+            <button
+              type="button"
+              className="canonical-dataset-link"
+              onClick={() => setFilterDrawerOpen(true)}
+            >
+              Filters
+              {activeFilterCount ? ` (${activeFilterCount})` : ""}
+            </button>
+            <button type="button" className="text-link" onClick={resetFilters}>
+              Reset filters
+            </button>
+          </div>
+        </header>
+        <div className="canonical-filter-summary-row">
+          <label className="canonical-quick-search">
+            <span>Quick search</span>
+            <input
+              type="search"
+              value={filters.query}
+              placeholder="Name, brand, product ID…"
+              onChange={(event) => updateFilters({ query: event.target.value })}
+            />
+          </label>
+          <div
+            className="canonical-executive-toggle"
+            role="group"
+            aria-label="Card section"
           >
-            Reset filters
+            <button
+              className={sectionMode === "losses" ? "active" : ""}
+              type="button"
+              onClick={() => setSectionMode("losses")}
+            >
+              Losses ({groups.walmartLosses.length.toLocaleString()})
+            </button>
+            <button
+              className={sectionMode === "wins" ? "active" : ""}
+              type="button"
+              onClick={() => setSectionMode("wins")}
+            >
+              Wins ({groups.walmartWins.length.toLocaleString()})
+            </button>
+            <button
+              className={sectionMode === "parity" ? "active" : ""}
+              type="button"
+              onClick={() => setSectionMode("parity")}
+            >
+              Parity ({groups.parity.length.toLocaleString()})
+            </button>
+          </div>
+        </div>
+        <p className="canonical-browser-summary">
+          Showing {filteredRelationships.length.toLocaleString()} of{" "}
+          {dataset.product_relationships.length.toLocaleString()} included
+          relationships · {groups.walmartLosses.length.toLocaleString()} losses
+          · {groups.walmartWins.length.toLocaleString()} wins ·{" "}
+          {groups.parity.length.toLocaleString()} parity/unscored. Category:{" "}
+          {dataset.product_pack.name}. Store-state filtering is available in the
+          exact product location drawers where state evidence exists.
+        </p>
+      </section>
+      <RelationshipSection
+        title={activeSection.title}
+        note={activeSection.note}
+        relationships={activeSection.relationships}
+        retailerFootprints={retailerFootprints}
+      />
+      {filterDrawerOpen ? (
+        <RelationshipFilterDrawer
+          benchmarkBrandOptions={benchmarkBrandOptions}
+          categoryLabel={dataset.product_pack.name}
+          comparisonBasisOptions={comparisonBasisOptions}
+          competitorBrandOptions={competitorBrandOptions}
+          competitorOptions={competitorOptions}
+          filters={filters}
+          onClose={() => setFilterDrawerOpen(false)}
+          onReset={resetFilters}
+          onUpdate={updateFilters}
+          unitBasisOptions={unitBasisOptions}
+        />
+      ) : null}
+    </>
+  );
+}
+
+function RelationshipFilterDrawer({
+  benchmarkBrandOptions,
+  categoryLabel,
+  comparisonBasisOptions,
+  competitorBrandOptions,
+  competitorOptions,
+  filters,
+  onClose,
+  onReset,
+  onUpdate,
+  unitBasisOptions,
+}: Readonly<{
+  benchmarkBrandOptions: string[];
+  categoryLabel: string;
+  comparisonBasisOptions: string[];
+  competitorBrandOptions: string[];
+  competitorOptions: string[];
+  filters: CanonicalRelationshipFilters;
+  onClose: () => void;
+  onReset: () => void;
+  onUpdate: (patch: Partial<CanonicalRelationshipFilters>) => void;
+  unitBasisOptions: string[];
+}>) {
+  return (
+    <div className="pm-drawer-layer canonical-filter-drawer-layer">
+      <button
+        aria-label="Close filters"
+        className="pm-drawer-backdrop"
+        onClick={onClose}
+        type="button"
+      />
+      <aside
+        className="pm-product-drawer canonical-filter-drawer"
+        role="dialog"
+        aria-modal="true"
+      >
+        <header>
+          <div>
+            <p className="section-kicker">Report filters</p>
+            <h2>Focus product relationships</h2>
+            <small>
+              Filters use fields already present in the canonical relationship
+              dataset. State is applied inside exact-product store evidence
+              drawers after location rows load.
+            </small>
+          </div>
+          <button aria-label="Close filters" onClick={onClose} type="button">
+            ×
           </button>
         </header>
         <div className="canonical-filter-grid">
@@ -926,7 +1180,7 @@ function ProductWinsLosses({
               type="search"
               value={filters.query}
               placeholder="Name, brand, product ID…"
-              onChange={(event) => updateFilters({ query: event.target.value })}
+              onChange={(event) => onUpdate({ query: event.target.value })}
             />
           </label>
           <label>
@@ -934,7 +1188,7 @@ function ProductWinsLosses({
             <select
               value={filters.outcome}
               onChange={(event) =>
-                updateFilters({
+                onUpdate({
                   outcome: event.target
                     .value as CanonicalRelationshipFilters["outcome"],
                 })
@@ -948,11 +1202,27 @@ function ProductWinsLosses({
             </select>
           </label>
           <label>
+            <span>Walmart brand</span>
+            <select
+              value={filters.benchmarkBrand}
+              onChange={(event) =>
+                onUpdate({ benchmarkBrand: event.target.value })
+              }
+            >
+              <option value="all">All Walmart brands</option>
+              {benchmarkBrandOptions.map((brand) => (
+                <option key={brand} value={brand}>
+                  {brand}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             <span>Walmart brand type</span>
             <select
               value={filters.brandType}
               onChange={(event) =>
-                updateFilters({
+                onUpdate({
                   brandType: event.target
                     .value as CanonicalRelationshipFilters["brandType"],
                 })
@@ -969,14 +1239,14 @@ function ProductWinsLosses({
             </select>
           </label>
           <label>
-            <span>Competitor</span>
+            <span>Retailer</span>
             <select
               value={filters.competitorRetailerId}
               onChange={(event) =>
-                updateFilters({ competitorRetailerId: event.target.value })
+                onUpdate({ competitorRetailerId: event.target.value })
               }
             >
-              <option value="all">All competitors</option>
+              <option value="all">All competitor retailers</option>
               {competitorOptions.map((competitor) => (
                 <option key={competitor} value={competitor}>
                   {displayLabel(competitor)}
@@ -985,11 +1255,96 @@ function ProductWinsLosses({
             </select>
           </label>
           <label>
+            <span>Competitor brand</span>
+            <select
+              value={filters.competitorBrand}
+              onChange={(event) =>
+                onUpdate({ competitorBrand: event.target.value })
+              }
+            >
+              <option value="all">All competitor brands</option>
+              {competitorBrandOptions.map((brand) => (
+                <option key={brand} value={brand}>
+                  {brand}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Category</span>
+            <input readOnly value={categoryLabel} />
+          </label>
+          <label>
+            <span>Subcategory</span>
+            <input
+              readOnly
+              value="Not supplied by canonical dataset"
+              aria-label="Subcategory not supplied by canonical dataset"
+            />
+          </label>
+          <label>
+            <span>State</span>
+            <input
+              readOnly
+              value="Available in store evidence drawer"
+              aria-label="State filter available in store evidence drawer"
+            />
+          </label>
+          <label>
+            <span>Comparison basis</span>
+            <select
+              value={filters.comparisonBasis}
+              onChange={(event) =>
+                onUpdate({ comparisonBasis: event.target.value })
+              }
+            >
+              <option value="all">All comparison bases</option>
+              {comparisonBasisOptions.map((basis) => (
+                <option key={basis} value={basis}>
+                  {displayLabel(basis)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Unit basis</span>
+            <select
+              value={filters.unitBasis}
+              onChange={(event) => onUpdate({ unitBasis: event.target.value })}
+            >
+              <option value="all">All unit bases</option>
+              {unitBasisOptions.map((basis) => (
+                <option key={basis} value={basis}>
+                  {displayLabel(basis)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Price basis</span>
+            <select
+              value={filters.priceBasis}
+              onChange={(event) =>
+                onUpdate({
+                  priceBasis: event.target
+                    .value as CanonicalRelationshipFilters["priceBasis"],
+                })
+              }
+            >
+              <option value="all">All price bases</option>
+              <option value="comparison_unit_price">
+                Normalized comparison values
+              </option>
+              <option value="package_price">Package prices</option>
+              <option value="mixed_price_basis">Mixed price basis</option>
+            </select>
+          </label>
+          <label>
             <span>Walmart footprint</span>
             <select
               value={filters.minimumWalmartDistribution}
               onChange={(event) =>
-                updateFilters({
+                onUpdate({
                   minimumWalmartDistribution: Number(event.target.value),
                 })
               }
@@ -1006,7 +1361,7 @@ function ProductWinsLosses({
             <select
               value={filters.sort}
               onChange={(event) =>
-                updateFilters({
+                onUpdate({
                   sort: event.target
                     .value as CanonicalRelationshipFilters["sort"],
                 })
@@ -1019,33 +1374,20 @@ function ProductWinsLosses({
             </select>
           </label>
         </div>
-        <p className="canonical-browser-summary">
-          Showing {filteredRelationships.length.toLocaleString()} of{" "}
-          {dataset.product_relationships.length.toLocaleString()} included
-          relationships · {groups.walmartLosses.length.toLocaleString()} losses
-          · {groups.walmartWins.length.toLocaleString()} wins ·{" "}
-          {groups.parity.length.toLocaleString()} parity/unscored
-        </p>
-      </section>
-      <RelationshipSection
-        title={`All Walmart losses (${groups.walmartLosses.length.toLocaleString()})`}
-        note="These are all included competitor-win relationships, not illustrative examples."
-        relationships={groups.walmartLosses}
-        retailerFootprints={retailerFootprints}
-      />
-      <RelationshipSection
-        title={`All Walmart wins (${groups.walmartWins.length.toLocaleString()})`}
-        note="These are all included Walmart-win relationships, not illustrative examples."
-        relationships={groups.walmartWins}
-        retailerFootprints={retailerFootprints}
-      />
-      <RelationshipSection
-        title={`Parity / unscored (${groups.parity.length.toLocaleString()})`}
-        note="Shown separately so parity does not dilute the action list."
-        relationships={groups.parity}
-        retailerFootprints={retailerFootprints}
-      />
-    </>
+        <div className="canonical-filter-drawer-actions">
+          <button type="button" className="text-link" onClick={onReset}>
+            Reset all
+          </button>
+          <button
+            type="button"
+            className="canonical-dataset-link"
+            onClick={onClose}
+          >
+            Apply filters
+          </button>
+        </div>
+      </aside>
+    </div>
   );
 }
 
@@ -1564,15 +1906,45 @@ function StoreEvidenceDrawer({
 
   const mapData = mapState.requestPath === requestPath ? mapState.data : null;
   const error = mapState.requestPath === requestPath ? mapState.error : null;
+  const [selectedState, setSelectedState] = useState("all");
   const rows = useMemo(() => storeEvidenceRows(mapData), [mapData]);
   const searchedRows = useMemo(() => searchedStoreRows(mapData), [mapData]);
-  const exportRows = useMemo(
-    () => exportableStoreRows(searchedRows),
+  const stateOptions = useMemo(
+    () => stateOptionsFromPoints(searchedRows),
     [searchedRows],
+  );
+  const activeState =
+    selectedState === "all" || stateOptions.includes(selectedState)
+      ? selectedState
+      : "all";
+  const filteredRows = useMemo(
+    () =>
+      activeState === "all"
+        ? rows
+        : rows.filter((point) => point.state === activeState),
+    [rows, activeState],
+  );
+  const filteredSearchedRows = useMemo(
+    () =>
+      activeState === "all"
+        ? searchedRows
+        : searchedRows.filter((point) => point.state === activeState),
+    [searchedRows, activeState],
+  );
+  const exportRows = useMemo(
+    () => exportableStoreRows(filteredSearchedRows),
+    [filteredSearchedRows],
   );
   const searchedStoreCount =
     searchedStoreCountFromMap(mapData) ??
     target.product.distribution.searched_store_count;
+  const filteredSearchedStoreCount =
+    activeState === "all" ? searchedStoreCount : filteredSearchedRows.length;
+  const filteredObservedStoreCount =
+    activeState === "all"
+      ? (mapData?.display.distribution_store_count ??
+        target.product.distribution.physical_store_distribution_count)
+      : filteredRows.length;
   const observedStoreCount =
     mapData?.display.distribution_store_count ??
     target.product.distribution.physical_store_distribution_count;
@@ -1580,6 +1952,10 @@ function StoreEvidenceDrawer({
     searchedStoreCount === null
       ? null
       : Math.max(0, searchedStoreCount - observedStoreCount);
+  const filteredNotObservedStoreCount =
+    filteredSearchedStoreCount === null
+      ? null
+      : Math.max(0, filteredSearchedStoreCount - filteredObservedStoreCount);
   const searchedRowShare =
     searchedStoreCount && searchedStoreCount > 0
       ? observedStoreCount / searchedStoreCount
@@ -1587,6 +1963,10 @@ function StoreEvidenceDrawer({
   const reportFootprintShare =
     target.reportFootprintCount && target.reportFootprintCount > 0
       ? observedStoreCount / target.reportFootprintCount
+      : null;
+  const filteredReportFootprintShare =
+    target.reportFootprintCount && target.reportFootprintCount > 0
+      ? filteredObservedStoreCount / target.reportFootprintCount
       : null;
   const fileStem = safeDownloadName(
     `${target.product.retailer_id}-${target.product.retailer_product_id}-store-evidence`,
@@ -1611,8 +1991,12 @@ function StoreEvidenceDrawer({
           searched_store_count: searchedStoreCount,
           observed_distribution_store_count: observedStoreCount,
           not_observed_searched_store_count: notObservedStoreCount,
+          visible_observed_distribution_store_count: filteredObservedStoreCount,
+          visible_not_observed_searched_store_count:
+            filteredNotObservedStoreCount,
           searched_row_share: searchedRowShare,
           store_share: searchedRowShare,
+          state_filter: activeState === "all" ? null : activeState,
           rows: exportRows,
         },
         null,
@@ -1739,6 +2123,14 @@ ${worksheetRows
               {target.product.distribution.service_area_presence_count.toLocaleString()}
             </strong>
           </div>
+          <div>
+            <span>Visible stores</span>
+            <strong>
+              {mapData
+                ? filteredObservedStoreCount.toLocaleString()
+                : "Loading…"}
+            </strong>
+          </div>
         </section>
         <section className="pm-drawer-section">
           <header>
@@ -1755,6 +2147,21 @@ ${worksheetRows
               </p>
             </div>
             <div className="canonical-drawer-export-actions">
+              <label className="canonical-state-filter">
+                <span>State</span>
+                <select
+                  disabled={!stateOptions.length}
+                  value={activeState}
+                  onChange={(event) => setSelectedState(event.target.value)}
+                >
+                  <option value="all">All states</option>
+                  {stateOptions.map((state) => (
+                    <option key={state} value={state}>
+                      {state}
+                    </option>
+                  ))}
+                </select>
+              </label>
               <button
                 className="canonical-dataset-link"
                 disabled={!mapData}
@@ -1789,27 +2196,32 @@ ${worksheetRows
             <>
               <div className="canonical-store-drawer-summary">
                 <span>
-                  {observedStoreCount.toLocaleString()} observed distribution
-                  stores
-                  {target.reportFootprintCount && reportFootprintShare !== null
+                  {filteredObservedStoreCount.toLocaleString()} visible observed
+                  distribution stores
+                  {activeState === "all" ? "" : ` in ${activeState}`}
+                  {target.reportFootprintCount &&
+                  filteredReportFootprintShare !== null
                     ? ` · ${formatPercent(
-                        reportFootprintShare,
+                        filteredReportFootprintShare,
                       )} of ${target.reportFootprintCount.toLocaleString()} ${target.retailerLabel} report footprint stores`
                     : " · report-footprint denominator unavailable"}
                 </span>
                 <span>
-                  {rows.length.toLocaleString()} returned observed store rows ·{" "}
-                  {searchedStoreCount
-                    ? `${searchedStoreCount.toLocaleString()} returned searched store rows`
+                  {filteredRows.length.toLocaleString()} returned observed store
+                  rows ·{" "}
+                  {filteredSearchedStoreCount !== null
+                    ? `${filteredSearchedStoreCount.toLocaleString()} returned searched store rows`
                     : "returned searched-row denominator unavailable"}
-                  {searchedRowShare !== null
+                  {activeState === "all" && searchedRowShare !== null
                     ? ` · ${formatPercent(searchedRowShare)} searched-row share`
                     : ""}
                 </span>
-                {notObservedStoreCount !== null ? (
+                {filteredNotObservedStoreCount !== null ? (
                   <span>
-                    {notObservedStoreCount.toLocaleString()} searched stores did
-                    not return this exact product in positive-price Search.
+                    {filteredNotObservedStoreCount.toLocaleString()} returned
+                    searched stores
+                    {activeState === "all" ? "" : ` in ${activeState}`} did not
+                    return this exact product in positive-price Search.
                   </span>
                 ) : null}
                 {mapData.display.observed_sampled ? (
@@ -1820,7 +2232,7 @@ ${worksheetRows
                 ) : null}
               </div>
               <MappedLocationTable
-                points={rows}
+                points={filteredRows}
                 title="Store list"
                 wrapClassName="canonical-store-drawer-table"
               />
@@ -1901,6 +2313,7 @@ function ExactProductMap({
   mapError: string | null;
   reportFootprintCount: number | null;
 }>) {
+  const [selectedState, setSelectedState] = useState("all");
   const searchedStoreCount = searchedStoreCountFromMap(mapData);
   const searchedRowShare =
     mapData && searchedStoreCount
@@ -1910,12 +2323,21 @@ function ExactProductMap({
     mapData && reportFootprintCount
       ? mapData.display.distribution_store_count / reportFootprintCount
       : null;
+  const stateOptions = useMemo(
+    () => stateOptionsFromPoints(mapData?.points ?? []),
+    [mapData],
+  );
+  const activeState =
+    selectedState === "all" || stateOptions.includes(selectedState)
+      ? selectedState
+      : "all";
   const visiblePoints = useMemo(
     () =>
       (mapData?.points ?? [])
         .filter(
           (point) =>
             point.status === "observed" &&
+            (activeState === "all" || point.state === activeState) &&
             Number.isFinite(point.latitude) &&
             Number.isFinite(point.longitude) &&
             point.latitude >= 24 &&
@@ -1924,7 +2346,7 @@ function ExactProductMap({
             point.longitude <= -66,
         )
         .slice(0, 700),
-    [mapData],
+    [activeState, mapData],
   );
   return (
     <>
@@ -2013,6 +2435,22 @@ function ExactProductMap({
             <span className="price-parity">At median</span>
             <span className="price-higher">Above median</span>
           </div>
+          {stateOptions.length ? (
+            <label className="canonical-state-filter canonical-map-state-filter">
+              <span>State</span>
+              <select
+                value={activeState}
+                onChange={(event) => setSelectedState(event.target.value)}
+              >
+                <option value="all">All states</option>
+                {stateOptions.map((state) => (
+                  <option key={state} value={state}>
+                    {state}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           {mapData?.display.observed_sampled ? (
             <small>
               Map displays a deterministic sample; the store count uses the full
@@ -2118,9 +2556,9 @@ function PriceArchitecture({
             <h2>Price ladder</h2>
             <p>
               Each row is one governed product relationship with the exact
-              displayed unit basis, Walmart reporting price, competitor
-              reporting price, and signed gap. This is the price architecture
-              view; image cards stay in the action board.
+              displayed unit basis, Walmart comparison value, competitor
+              comparison value, and signed gap. Normalized values are labeled so
+              they are not confused with shelf/package prices.
             </p>
           </div>
         </header>
@@ -2219,16 +2657,27 @@ function PriceArchitectureTable({
               </td>
               <td>
                 <strong>
-                  {relationship.benchmark_product.price.reporting_price_label}
+                  {priceDisplay(relationship.benchmark_product).primary}
                 </strong>
-                <span>{relationship.comparison.comparison_basis}</span>
+                <span>
+                  {priceDisplay(relationship.benchmark_product).secondary}
+                </span>
+                <span>
+                  {priceBasisLabel(
+                    canonicalRelationshipPriceBasis(relationship),
+                  )}{" "}
+                  · {relationship.comparison.comparison_basis}
+                </span>
               </td>
               <td>
                 <strong>
-                  {relationship.competitor_product.price.reporting_price_label}
+                  {priceDisplay(relationship.competitor_product).primary}
                 </strong>
                 <span>
                   {relationship.competitor_product.retailer_product_id}
+                </span>
+                <span>
+                  {priceDisplay(relationship.competitor_product).secondary}
                 </span>
               </td>
               <td>
@@ -2488,7 +2937,7 @@ function RelationshipCard({
     delta >= 0
       ? `${formatCurrency(delta)} above competitor`
       : `${formatCurrency(Math.abs(delta))} below competitor`;
-  const deltaExplanation = `Walmart reporting price is ${deltaLabel} on the displayed basis.`;
+  const deltaExplanation = `Walmart comparison value is ${deltaLabel} on the normalized/reporting basis; it is not a shelf/package price unless a source-backed package price is shown.`;
   return (
     <article
       className={`canonical-product-card ${relationship.comparison.outcome}`}
@@ -2499,7 +2948,7 @@ function RelationshipCard({
           title={relationship.benchmark_product.title}
           imageUrl={relationship.benchmark_product.image_url}
           retailer="Walmart"
-          price={relationship.benchmark_product.price.reporting_price_label}
+          price={priceDisplay(relationship.benchmark_product)}
           distribution={reportFootprintLabel(
             relationship.benchmark_product,
             reportFootprintCountFor(
@@ -2514,7 +2963,7 @@ function RelationshipCard({
           title={relationship.competitor_product.title}
           imageUrl={relationship.competitor_product.image_url}
           retailer={displayLabel(relationship.competitor_product.retailer_id)}
-          price={relationship.competitor_product.price.reporting_price_label}
+          price={priceDisplay(relationship.competitor_product)}
           distribution={reportFootprintLabel(
             relationship.competitor_product,
             reportFootprintCountFor(
@@ -2553,7 +3002,7 @@ function ProductTile({
   title: string;
   imageUrl: string | null;
   retailer: string;
-  price: string;
+  price: ReturnType<typeof priceDisplay>;
   distribution: string;
 }>) {
   const body = (
@@ -2569,7 +3018,8 @@ function ProductTile({
       <span className="canonical-product-detail">
         <i>{retailer}</i>
         <strong>{title}</strong>
-        <em>{price}</em>
+        <em>{price.primary}</em>
+        <small className="canonical-price-note">{price.secondary}</small>
         <small>{distribution}</small>
       </span>
     </>
