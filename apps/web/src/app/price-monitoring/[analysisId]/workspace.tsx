@@ -2585,7 +2585,10 @@ export function PriceMonitoringWorkspace({
                 facts: [
                   { label: "Price source", value: "Search" },
                   { label: "Product grain", value: "One median per SKU" },
-                  { label: "Location source", value: "Retailer master" },
+                  {
+                    label: "Distribution source",
+                    value: "Positive-price store Search presence",
+                  },
                 ],
                 messages: [
                   "PDP enriches identity but never replaces Search price.",

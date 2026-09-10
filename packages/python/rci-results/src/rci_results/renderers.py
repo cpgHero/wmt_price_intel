@@ -2786,7 +2786,7 @@ class ArtifactRenderer:
                 "unresolved_count",
             )
             retailer_ids: list[str] = []
-            totals = Counter()
+            totals: Counter[str] = Counter()
             for retailer in retailer_rows:
                 if not isinstance(retailer, dict):
                     return False

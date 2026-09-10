@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   activeNavigationItem,
+  applicationNavigationForExperience,
   applicationNavigation,
   homeNavigationItem,
   navigationItemIsActive,
+  simplifiedApplicationNavigation,
+  simplifiedNavigationEnabled,
 } from "./app-navigation";
 
 describe("application navigation", () => {
@@ -65,5 +68,55 @@ describe("application navigation", () => {
       activeNavigationItem("/admin/product-packs/drafts/draft-1")?.label,
     ).toBe("Product Packs");
     expect(activeNavigationItem("/health")).toBeNull();
+  });
+
+  it("keeps simplified navigation reports-first behind an explicit flag", () => {
+    expect(simplifiedNavigationEnabled({})).toBe(false);
+    expect(
+      simplifiedNavigationEnabled({
+        NEXT_PUBLIC_RCI_SIMPLIFIED_NAV: "enabled",
+      }),
+    ).toBe(true);
+    expect(applicationNavigationForExperience(false)).toBe(
+      applicationNavigation,
+    );
+    expect(applicationNavigationForExperience(true)).toBe(
+      simplifiedApplicationNavigation,
+    );
+
+    const hrefs = [
+      homeNavigationItem.href,
+      ...simplifiedApplicationNavigation.flatMap((group) =>
+        group.items.map((item) => item.href),
+      ),
+    ];
+
+    expect(hrefs).toEqual([
+      "/",
+      "/analyses",
+      "/collections",
+      "/automation",
+      "/admin/report-publishing",
+      "/admin/matching-v2",
+      "/admin/product-packs",
+      "/workspace/brands",
+      "/admin/studies",
+      "/admin/operations",
+      "/admin/docs",
+    ]);
+    expect(hrefs).not.toContain("/price-intelligence");
+    expect(hrefs).not.toContain("/data-quality");
+    expect(
+      activeNavigationItem(
+        "/analyses/analysis-123",
+        simplifiedApplicationNavigation,
+      )?.label,
+    ).toBe("Reports");
+    expect(
+      activeNavigationItem(
+        "/admin/report-publishing",
+        simplifiedApplicationNavigation,
+      )?.label,
+    ).toBe("Pipeline Status");
   });
 });

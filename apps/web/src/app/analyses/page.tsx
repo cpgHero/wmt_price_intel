@@ -26,6 +26,17 @@ export default async function AnalysesPage({
     searchParams,
     getApi<AnalysisRecord[]>("/api/v1/analyses?limit=200"),
   ]);
+  const hasActiveFilters =
+    q.trim() !== "" ||
+    retailer !== "all" ||
+    readiness !== "all" ||
+    sort !== "newest";
+  const activeFilterLabels = [
+    q.trim() ? `search: ${q.trim()}` : null,
+    retailer !== "all" ? `retailer: ${retailer}` : null,
+    readiness !== "all" ? `readiness: ${readiness}` : null,
+    sort !== "newest" ? `sort: ${sort}` : null,
+  ].filter((label): label is string => Boolean(label));
   const summaries = (response.data ?? []).map(summarizeAnalysis);
   const retailerOptions = Array.from(
     new Set(
@@ -84,14 +95,61 @@ export default async function AnalysesPage({
         </p>
       </header>
       {summaries.length === 0 ? (
-        <EmptyState
-          eyebrow={response.error ? "API unavailable" : "No results yet"}
-          title="No reports to display"
-          message={
-            response.error ??
-            "Publish a validated AnalysisResult from a completed collection run to populate this workspace."
-          }
-        />
+        <>
+          <EmptyState
+            eyebrow={
+              response.error ? "API unavailable" : "No published reports"
+            }
+            title={
+              response.error
+                ? "Reports could not be loaded"
+                : "No published AnalysisResults were returned"
+            }
+            message={
+              response.error ??
+              "The Reports library only displays validated AnalysisResult records. If a collection or reprocess run completed but this page is empty, check report materialization, readiness, and publication status instead of assuming the data was not collected."
+            }
+          />
+          <section
+            className="report-empty-diagnostics"
+            aria-label="Report diagnostics"
+          >
+            <article>
+              <span>Source checked</span>
+              <strong>/api/v1/analyses?limit=200</strong>
+              <p>
+                This page does not query raw Search evidence directly; it lists
+                report-ready AnalysisResult records only.
+              </p>
+              <Link href="/collections">Review collection runs</Link>
+            </article>
+            <article>
+              <span>What to check next</span>
+              <strong>Materialization and readiness</strong>
+              <p>
+                A completed collection can exist without a displayed report if
+                the analysis failed readiness, was not materialized, or was not
+                activated for the library.
+              </p>
+              <Link href="/admin/report-publishing">
+                Check report materialization
+              </Link>
+            </article>
+            <article>
+              <span>Filters</span>
+              <strong>
+                {hasActiveFilters
+                  ? activeFilterLabels.join(" · ")
+                  : "No filters applied"}
+              </strong>
+              <p>
+                Filters cannot hide reports when the API returns zero report
+                records; they only apply after records are loaded.
+              </p>
+              <Link href="/data-quality">Review data quality</Link>
+            </article>
+          </section>
+        </>
       ) : (
         <>
           <form className="filter-bar report-filter-bar" method="get">
@@ -150,7 +208,14 @@ export default async function AnalysesPage({
             {summaries.length.toLocaleString()} reports
           </p>
           {analyses.length === 0 ? (
-            <div className="empty-inline">No reports match these filters.</div>
+            <div className="empty-inline report-filter-empty">
+              <strong>No loaded reports match the current filters.</strong>
+              <p>
+                Loaded {summaries.length.toLocaleString()} report records, but
+                none match {activeFilterLabels.join(" · ")}. Clear filters to
+                return to the full library.
+              </p>
+            </div>
           ) : (
             <section className="report-library" aria-label="Reports">
               {analyses.map((summary) => (
@@ -182,12 +247,22 @@ export default async function AnalysesPage({
                           : "configured competitors"}
                       </p>
                     </div>
-                    <Link
-                      className="button secondary"
-                      href={`/analyses/${encodeURIComponent(summary.analysis.analysis_id)}`}
-                    >
-                      Open report
-                    </Link>
+                    <div className="report-library-actions">
+                      <Link
+                        className="button secondary"
+                        href={`/analyses/${encodeURIComponent(summary.analysis.analysis_id)}`}
+                      >
+                        Open current report
+                      </Link>
+                      {summary.analysis.schema_version === "2.0.0" ? (
+                        <Link
+                          className="button secondary canonical-preview-action"
+                          href={`/analyses/${encodeURIComponent(summary.analysis.analysis_id)}?experience=canonical`}
+                        >
+                          Open simplified preview
+                        </Link>
+                      ) : null}
+                    </div>
                   </div>
                   <dl className="report-library-meta">
                     <div>
