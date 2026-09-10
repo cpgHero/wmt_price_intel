@@ -154,8 +154,13 @@ describe("canonical report workspace source contract", () => {
     expect(workspaceSource).toContain("RelationshipCard");
     expect(workspaceSource).toContain("ProductTile");
     expect(workspaceSource).toContain("canonical-product-image");
+    expect(workspaceSource).toContain("canonical-product-card-actions");
+    expect(workspaceSource).toContain("Walmart store list");
+    expect(workspaceSource).toContain("Competitor store list");
+    expect(workspaceSource).toContain("onSelectEvidenceTarget");
     expect(workspaceSource).toContain('loading="lazy"');
     expect(stylesSource).toContain(".canonical-product-grid");
+    expect(stylesSource).toContain(".canonical-product-card-actions");
     expect(stylesSource).toContain("grid-template-columns: 86px 1fr");
   });
 

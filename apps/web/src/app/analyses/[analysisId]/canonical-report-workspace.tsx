@@ -1100,6 +1100,7 @@ function ProductWinsLosses({
         </p>
       </section>
       <RelationshipSection
+        analysisId={dataset.analysis_id}
         title={activeSection.title}
         note={activeSection.note}
         relationships={activeSection.relationships}
@@ -2888,45 +2889,63 @@ function EvidenceQa({
 }
 
 function RelationshipSection({
+  analysisId,
   title,
   note,
   relationships,
   retailerFootprints,
 }: Readonly<{
+  analysisId: string;
   title: string;
   note: string;
   relationships: ProductRelationship[];
   retailerFootprints: Map<string, number>;
 }>) {
+  const [selectedEvidenceTarget, setSelectedEvidenceTarget] =
+    useState<ProductEvidenceTarget | null>(null);
   return (
-    <section className="workspace-section">
-      <header>
-        <div>
-          <h2>{title}</h2>
-          <p>{note}</p>
-        </div>
-      </header>
-      {relationships.length ? (
-        <div className="canonical-product-grid">
-          {relationships.map((relationship) => (
-            <RelationshipCard
-              key={relationship.relationship_id}
-              relationship={relationship}
-              retailerFootprints={retailerFootprints}
-            />
-          ))}
-        </div>
-      ) : (
-        <p className="empty-note">No included relationships in this section.</p>
-      )}
-    </section>
+    <>
+      <section className="workspace-section">
+        <header>
+          <div>
+            <h2>{title}</h2>
+            <p>{note}</p>
+          </div>
+        </header>
+        {relationships.length ? (
+          <div className="canonical-product-grid">
+            {relationships.map((relationship) => (
+              <RelationshipCard
+                key={relationship.relationship_id}
+                onSelectEvidenceTarget={setSelectedEvidenceTarget}
+                relationship={relationship}
+                retailerFootprints={retailerFootprints}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="empty-note">
+            No included relationships in this section.
+          </p>
+        )}
+      </section>
+      {selectedEvidenceTarget ? (
+        <StoreEvidenceDrawer
+          analysisId={analysisId}
+          target={selectedEvidenceTarget}
+          onClose={() => setSelectedEvidenceTarget(null)}
+        />
+      ) : null}
+    </>
   );
 }
 
 function RelationshipCard({
+  onSelectEvidenceTarget,
   relationship,
   retailerFootprints,
 }: Readonly<{
+  onSelectEvidenceTarget: (target: ProductEvidenceTarget) => void;
   relationship: ProductRelationship;
   retailerFootprints: Map<string, number>;
 }>) {
@@ -2985,6 +3004,38 @@ function RelationshipCard({
           )}
         </p>
         <small>{deltaExplanation}</small>
+        <div className="canonical-product-card-actions">
+          <button
+            type="button"
+            onClick={() =>
+              onSelectEvidenceTarget(
+                productEvidenceTarget(
+                  relationship.benchmark_product,
+                  "Walmart",
+                  "Walmart store evidence",
+                  retailerFootprints,
+                ),
+              )
+            }
+          >
+            Walmart store list
+          </button>
+          <button
+            type="button"
+            onClick={() =>
+              onSelectEvidenceTarget(
+                productEvidenceTarget(
+                  relationship.competitor_product,
+                  displayLabel(relationship.competitor_product.retailer_id),
+                  "Competitor store evidence",
+                  retailerFootprints,
+                ),
+              )
+            }
+          >
+            Competitor store list
+          </button>
+        </div>
       </div>
     </article>
   );
