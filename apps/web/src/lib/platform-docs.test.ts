@@ -21,7 +21,7 @@ describe("platform owner and administrator documentation", () => {
   it("provides a unique maintained guide in every documentation group", () => {
     const ids = platformDocumentation.guides.map((guide) => guide.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(platformDocumentation.version).toBe("1.3.110");
+    expect(platformDocumentation.version).toBe("1.3.111");
     expect(platformDocumentation.lastVerified).toBeTruthy();
 
     for (const group of platformDocGroups) {
@@ -226,7 +226,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.110");
+    expect(platformDocumentation.version).toBe("1.3.111");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -327,6 +327,12 @@ describe("platform owner and administrator documentation", () => {
     );
     expect(guides["change-orders"]).toContain(
       "csv, excel-compatible, and json downloads",
+    );
+    expect(guides["change-orders"]).toContain(
+      "searched-not-observed store locations",
+    );
+    expect(guides["analytics-reporting"]).toContain(
+      "store-share percentage are auditable",
     );
     expect(guides["analytics-reporting"]).toContain(
       "store-evidence drawers through the price-monitoring product view",

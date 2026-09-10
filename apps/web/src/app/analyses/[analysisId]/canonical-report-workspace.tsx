@@ -107,15 +107,25 @@ function formatSignedCurrency(value: number) {
 
 function distributionShareLabel(
   distribution: ProductRelationship["benchmark_product"]["distribution"],
+  searchedStoreCountOverride?: number | null,
 ) {
   const storeCount = distribution.physical_store_distribution_count;
-  const searchedStoreCount = distribution.searched_store_count;
+  const searchedStoreCount =
+    searchedStoreCountOverride ?? distribution.searched_store_count;
   if (searchedStoreCount && searchedStoreCount > 0) {
     return `${storeCount.toLocaleString()} stores (${formatPercent(
       storeCount / searchedStoreCount,
     )} of ${searchedStoreCount.toLocaleString()} searched)`;
   }
   return `${storeCount.toLocaleString()} stores (searched-store denominator unavailable)`;
+}
+
+function searchedStoreCountFromMap(mapData: PriceMonitoringMap | null) {
+  if (!mapData) return null;
+  const searchedStores =
+    mapData.display.distribution_store_count +
+    mapData.display.not_observed_locations;
+  return searchedStores > 0 ? searchedStores : null;
 }
 
 function mapEvidenceHref(
@@ -232,8 +242,14 @@ function storeEvidenceRows(mapData: PriceMonitoringMap | null) {
   );
 }
 
+function searchedStoreRows(mapData: PriceMonitoringMap | null) {
+  return (mapData?.points ?? []).filter((point) => point.kind === "store");
+}
+
 function exportableStoreRows(points: PriceMonitoringMapPoint[]) {
   return points.map((point) => ({
+    evidence_status: point.status,
+    included_in_distribution: point.status === "observed",
     scope_key: point.scope_key,
     store_number: point.store_number,
     store_name: point.store_name,
@@ -249,6 +265,42 @@ function exportableStoreRows(points: PriceMonitoringMapPoint[]) {
     search_observed: point.search_observed,
     is_sponsored: point.is_sponsored,
   }));
+}
+
+function csvCell(value: unknown) {
+  const raw = value === null || value === undefined ? "" : String(value);
+  const safe =
+    typeof value === "string" && /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  return `"${safe.replaceAll('"', '""')}"`;
+}
+
+function rowsToCsv(rows: Array<Record<string, unknown>>) {
+  const columns = Object.keys(
+    rows[0] ?? {
+      evidence_status: "",
+      included_in_distribution: "",
+      scope_key: "",
+      store_number: "",
+      store_name: "",
+      distribution_store_id: "",
+      city: "",
+      state: "",
+      zipcode: "",
+      country: "",
+      latitude: "",
+      longitude: "",
+      search_price: "",
+      difference_from_reference: "",
+      search_observed: "",
+      is_sponsored: "",
+    },
+  );
+  return [
+    columns.join(","),
+    ...rows.map((row) =>
+      columns.map((column) => csvCell(row[column])).join(","),
+    ),
+  ].join("\r\n");
 }
 
 function summarizeProductFootprints(
@@ -1398,10 +1450,32 @@ function StoreEvidenceDrawer({
   const mapData = mapState.requestPath === requestPath ? mapState.data : null;
   const error = mapState.requestPath === requestPath ? mapState.error : null;
   const rows = useMemo(() => storeEvidenceRows(mapData), [mapData]);
-  const exportRows = useMemo(() => exportableStoreRows(rows), [rows]);
+  const searchedRows = useMemo(() => searchedStoreRows(mapData), [mapData]);
+  const exportRows = useMemo(
+    () => exportableStoreRows(searchedRows),
+    [searchedRows],
+  );
+  const searchedStoreCount =
+    searchedStoreCountFromMap(mapData) ??
+    target.product.distribution.searched_store_count;
+  const observedStoreCount =
+    mapData?.display.distribution_store_count ??
+    target.product.distribution.physical_store_distribution_count;
+  const notObservedStoreCount =
+    searchedStoreCount === null
+      ? null
+      : Math.max(0, searchedStoreCount - observedStoreCount);
+  const storeShare =
+    searchedStoreCount && searchedStoreCount > 0
+      ? observedStoreCount / searchedStoreCount
+      : null;
   const fileStem = safeDownloadName(
     `${target.product.retailer_id}-${target.product.retailer_product_id}-store-evidence`,
   );
+
+  const downloadCsv = () => {
+    downloadTextFile(`${fileStem}.csv`, rowsToCsv(exportRows), "text/csv");
+  };
 
   const downloadJson = () => {
     downloadTextFile(
@@ -1413,6 +1487,10 @@ function StoreEvidenceDrawer({
           product_id: target.product.retailer_product_id,
           distribution_contract: mapData?.distribution_contract ?? null,
           display: mapData?.display ?? null,
+          searched_store_count: searchedStoreCount,
+          observed_distribution_store_count: observedStoreCount,
+          not_observed_searched_store_count: notObservedStoreCount,
+          store_share: storeShare,
           rows: exportRows,
         },
         null,
@@ -1497,7 +1575,10 @@ ${worksheetRows
               <h2>{target.product.title}</h2>
               <small>
                 {target.retailerLabel} · {target.product.retailer_product_id} ·{" "}
-                {distributionShareLabel(target.product.distribution)}
+                {distributionShareLabel(
+                  target.product.distribution,
+                  searchedStoreCount,
+                )}
               </small>
             </div>
           </div>
@@ -1519,20 +1600,13 @@ ${worksheetRows
           <div>
             <span>Searched stores</span>
             <strong>
-              {target.product.distribution.searched_store_count?.toLocaleString() ??
-                "Unavailable"}
+              {searchedStoreCount?.toLocaleString() ?? "Loading…"}
             </strong>
           </div>
           <div>
             <span>Store share</span>
             <strong>
-              {target.product.distribution.searched_store_count
-                ? formatPercent(
-                    target.product.distribution
-                      .physical_store_distribution_count /
-                      target.product.distribution.searched_store_count,
-                  )
-                : "Unavailable"}
+              {storeShare === null ? "Loading…" : formatPercent(storeShare)}
             </strong>
           </div>
           <div>
@@ -1549,18 +1623,20 @@ ${worksheetRows
               <p>
                 Store rows are exact product store-level Search observations
                 with price greater than zero. This is distribution evidence, not
-                an in-stock claim.
+                an in-stock claim. Downloads include observed distribution rows
+                and searched stores where this product was not observed, so the
+                share denominator is auditable.
               </p>
             </div>
             <div className="canonical-drawer-export-actions">
-              <a
+              <button
                 className="canonical-dataset-link"
-                href={productEvidenceCsvHref(analysisId, target.product)}
-                target="_blank"
-                rel="noreferrer"
+                disabled={!mapData}
+                onClick={downloadCsv}
+                type="button"
               >
                 CSV
-              </a>
+              </button>
               <button
                 className="canonical-dataset-link"
                 disabled={!mapData}
@@ -1587,14 +1663,29 @@ ${worksheetRows
             <>
               <div className="canonical-store-drawer-summary">
                 <span>
-                  {rows.length.toLocaleString()} returned store rows ·{" "}
+                  {observedStoreCount.toLocaleString()} observed distribution
+                  stores
+                  {searchedStoreCount
+                    ? ` · ${searchedStoreCount.toLocaleString()} searched stores · ${formatPercent(
+                        observedStoreCount / searchedStoreCount,
+                      )} store share`
+                    : " · searched-store denominator unavailable"}
+                </span>
+                <span>
+                  {rows.length.toLocaleString()} returned observed store rows ·{" "}
                   {mapData.display.distribution_store_count.toLocaleString()}{" "}
                   source-backed distribution stores
                 </span>
+                {notObservedStoreCount !== null ? (
+                  <span>
+                    {notObservedStoreCount.toLocaleString()} searched stores did
+                    not return this exact product in positive-price Search.
+                  </span>
+                ) : null}
                 {mapData.display.observed_sampled ? (
                   <span>
-                    Full-detail API returned a deterministic sample; use CSV for
-                    the server-side evidence export.
+                    Full-detail API returned a deterministic sample; downloads
+                    use the returned drawer rows.
                   </span>
                 ) : null}
               </div>
@@ -1678,6 +1769,11 @@ function ExactProductMap({
   mapData: PriceMonitoringMap | null;
   mapError: string | null;
 }>) {
+  const searchedStoreCount = searchedStoreCountFromMap(mapData);
+  const storeShare =
+    mapData && searchedStoreCount
+      ? mapData.display.distribution_store_count / searchedStoreCount
+      : null;
   const visiblePoints = useMemo(
     () =>
       (mapData?.points ?? [])
@@ -1755,14 +1851,20 @@ function ExactProductMap({
           <span>Source-backed location evidence</span>
           <strong>
             {mapData
-              ? `${mapData.display.distribution_store_count.toLocaleString()} stores`
+              ? `${mapData.display.distribution_store_count.toLocaleString()} of ${
+                  searchedStoreCount?.toLocaleString() ?? "unknown"
+                } searched stores`
               : mapError
                 ? "Unavailable"
                 : "Loading…"}
           </strong>
           <p>
             {mapData
-              ? `${mapData.display.search_observed_locations.toLocaleString()} positive-price Search observations; ${mapData.display.service_area_presence_count.toLocaleString()} service-area presences tracked separately.`
+              ? `${
+                  storeShare === null
+                    ? "Store share unavailable"
+                    : `${formatPercent(storeShare)} store share`
+                }; ${mapData.display.service_area_presence_count.toLocaleString()} service-area presences tracked separately.`
               : (mapError ??
                 "Fetching exact product map evidence from the report API.")}
           </p>

@@ -1773,7 +1773,7 @@ class PriceMonitoringService:
         reference_price = products[0].get("search_price_stats", products[0]["price_stats"])[
             "observation_median"
         ]
-        point_limit = 1_200 if detail == "summary" else 6_000
+        point_limit = 1_200 if detail == "summary" else 25_000
 
         def map_point(row: dict[str, Any], status_value: str) -> dict[str, Any]:
             search_observed = status_value == "observed"

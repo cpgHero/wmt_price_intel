@@ -88,6 +88,11 @@ describe("canonical report workspace source contract", () => {
     expect(workspaceSource).toContain("Download evidence CSV");
     expect(workspaceSource).toContain("Excel");
     expect(workspaceSource).toContain("JSON");
+    expect(workspaceSource).toContain("searchedStoreCountFromMap");
+    expect(workspaceSource).toContain("searchedStoreRows");
+    expect(workspaceSource).toContain("not_observed_searched_store_count");
+    expect(workspaceSource).toContain("observed_distribution_store_count");
+    expect(workspaceSource).toContain("store share");
     expect(workspaceSource).toContain("distribution_store_count");
     expect(workspaceSource).toContain("service_area_presence_count");
     expect(workspaceSource).toContain("searched_store_count");
