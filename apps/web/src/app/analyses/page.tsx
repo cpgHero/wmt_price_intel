@@ -107,7 +107,7 @@ export default async function AnalysesPage({
             }
             message={
               response.error ??
-              "The Reports library only displays validated AnalysisResult records. If a collection or reprocess run completed but this page is empty, check report materialization, readiness, and publication status instead of assuming the data was not collected."
+              "The Reports library only displays validated AnalysisResult records. If a collection or reprocess run completed but this page is empty, check Pipeline Status for readiness, materialization, and activation before assuming the data was not collected."
             }
           />
           <section
@@ -125,15 +125,13 @@ export default async function AnalysesPage({
             </article>
             <article>
               <span>What to check next</span>
-              <strong>Materialization and readiness</strong>
+              <strong>Pipeline Status</strong>
               <p>
                 A completed collection can exist without a displayed report if
                 the analysis failed readiness, was not materialized, or was not
                 activated for the library.
               </p>
-              <Link href="/admin/report-publishing">
-                Check report materialization
-              </Link>
+              <Link href="/admin/report-publishing">Check pipeline status</Link>
             </article>
             <article>
               <span>Filters</span>

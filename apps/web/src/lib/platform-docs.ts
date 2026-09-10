@@ -240,8 +240,8 @@ export const platformDocumentation: PlatformDocumentation = {
               "The page is read-only. Backup and restore timestamps are operator attestations; provider billing remains authoritative.",
             ],
             [
-              "Report Publishing",
-              "Monitor queued and running report materialization, trust-audit outcomes, retries, and atomic activation.",
+              "Pipeline Status",
+              "Monitor report readiness, queued and running materialization, trust-audit outcomes, retries, and atomic activation.",
               "A pending or blocked replacement never displaces the current trusted report.",
             ],
             [
@@ -360,7 +360,7 @@ export const platformDocumentation: PlatformDocumentation = {
                 "The immutable result enters a pending state and activates a durable Postgres job. A leased worker stages Price Architecture and every configured comparison-basis × 1/3/5-mile portfolio, then runs the semantic trust audit. Only one final transaction marks the replacement ready and recoverably archives its predecessor. A failed replacement remains pending or blocked while the current trusted report stays active.",
               link: {
                 href: "/admin/report-publishing",
-                label: "Report Publishing",
+                label: "Pipeline Status",
               },
             },
             {
@@ -870,7 +870,7 @@ export const platformDocumentation: PlatformDocumentation = {
       status: "Current with limitations",
       links: [
         { href: "/admin/matching-v2", label: "Open Match Certification" },
-        { href: "/admin/report-publishing", label: "Open Report Publishing" },
+        { href: "/admin/report-publishing", label: "Open Pipeline Status" },
         { href: "/data-quality", label: "Open Data Quality" },
       ],
       blocks: [
@@ -1294,7 +1294,7 @@ export const platformDocumentation: PlatformDocumentation = {
       status: "Current with limitations",
       links: [
         { href: "/admin/operations", label: "Open System Operations" },
-        { href: "/admin/report-publishing", label: "Open Report Publishing" },
+        { href: "/admin/report-publishing", label: "Open Pipeline Status" },
       ],
       blocks: [
         {
@@ -2614,7 +2614,7 @@ export const platformDocumentation: PlatformDocumentation = {
       lastVerified: availabilityEvidenceLastVerified,
       status: "Current",
       links: [
-        { href: "/admin/report-publishing", label: "Open Report Publishing" },
+        { href: "/admin/report-publishing", label: "Open Pipeline Status" },
         { href: "/analyses", label: "Open current reports" },
       ],
       blocks: [
@@ -2936,8 +2936,14 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "2026-09-10",
               "Implemented locally; release CI, deployment, and production acceptance pending",
+              "Simplified Reports-first navigation is now the default app navigation.",
+              "The default sidebar now presents Reports as the only Analytics entry, keeps Collections and Schedules & Alerts in Operations, exposes the existing report-publishing route as Pipeline Status, and keeps Match Certification, Product Packs, Brand Governance, Study Discovery, System Operations, and Platform Docs in Administration. The legacy navigation remains available only when `NEXT_PUBLIC_RCI_SIMPLIFIED_NAV` is explicitly set to `0`, `false`, or `disabled`. The Pipeline Status page title, authentication copy, and Reports empty-state diagnostics now use the same simplified terminology. This changes navigation and explanatory UI copy only; it does not delete routes, source data, report calculations, publication gates, matching, provider calls, PDP calls, AI calls, reprocessing, PDF export, or historical artifacts.",
+            ],
+            [
+              "2026-09-10",
+              "Merged, deployed, and production-verified",
               "Report Publishing now separates active report availability from materialization job activity.",
-              "A read-only admin summary endpoint reports active report counts by status, latest ready timestamp, recent job counts, and recently updated materialization jobs. The admin UI shows an Active report library status card and rewords the empty state to say no publishing jobs are running, with a link to the report library. This addresses the misleading “no reports” interpretation without changing source data, report calculations, publication gates, matching, provider calls, PDP calls, AI calls, reprocessing, PDF export, or route deletion.",
+              "A read-only admin summary endpoint reports active report counts by status, latest ready timestamp, recent job counts, and recently updated materialization jobs. The admin UI shows an Active report library status card and rewords the empty state to say no publishing jobs are running, with a link to the report library. PR #5 passed CI, merged as dff4dcd, deployed to Railway production, and the deployed API endpoint plus web bundle copy were verified in-container. This addresses the misleading “no reports” interpretation without changing source data, report calculations, publication gates, matching, provider calls, PDP calls, AI calls, reprocessing, PDF export, or route deletion.",
             ],
             [
               "2026-09-10",
@@ -2953,9 +2959,9 @@ export const platformDocumentation: PlatformDocumentation = {
             ],
             [
               "2026-09-09",
-              "Simplified Reports-first navigation model added behind flag",
-              "The app navigation now has a preview-only simplified model enabled by `NEXT_PUBLIC_RCI_SIMPLIFIED_NAV=1`, `true`, or `enabled`.",
-              "The current navigation remains the default. The simplified model makes Reports the only Analytics entry, keeps Collections and Schedules & Alerts in Operations, renames Report Publishing to Pipeline Status, and keeps Match Certification, Product Packs, Brand Governance, Study Discovery, System Operations, and Platform Docs in Administration. Price Intelligence and Data Quality routes are not deleted; they are simply removed from the simplified primary navigation so they can become drilldown/evidence/status surfaces. This changes hidden navigation configuration and tests only; it does not change report data, canonical datasets, materialization, readiness gates, distribution counts, price calculations, default navigation, default report rendering, production publication, matching, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, old-surface deletion, or PDF export.",
+              "Superseded by Phase 13.92 default navigation",
+              "A Reports-first navigation model was added behind `NEXT_PUBLIC_RCI_SIMPLIFIED_NAV` before it became the default on September 10.",
+              "The preview model proved the simplified information architecture without deleting underlying routes. Phase 13.92 then made that model the default while preserving an explicit legacy-navigation disable path.",
             ],
             [
               "2026-09-09",

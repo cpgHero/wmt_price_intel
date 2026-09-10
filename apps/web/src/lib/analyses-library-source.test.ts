@@ -53,7 +53,7 @@ describe("analyses library canonical preview source contract", () => {
       "No published AnalysisResults were returned",
     );
     expect(analysesPageSource).toContain("report-empty-diagnostics");
-    expect(analysesPageSource).toContain("Materialization and readiness");
+    expect(analysesPageSource).toContain("Pipeline Status");
     expect(analysesPageText).toContain(
       "Filters cannot hide reports when the API returns zero report records",
     );
@@ -67,7 +67,7 @@ describe("analyses library canonical preview source contract", () => {
   it("links empty report-library states to concrete follow-up workspaces", () => {
     expect(analysesPageSource).toContain("Review collection runs");
     expect(analysesPageSource).toContain('href="/collections"');
-    expect(analysesPageSource).toContain("Check report materialization");
+    expect(analysesPageSource).toContain("Check pipeline status");
     expect(analysesPageSource).toContain('href="/admin/report-publishing"');
     expect(analysesPageSource).toContain("Review data quality");
     expect(analysesPageSource).toContain('href="/data-quality"');

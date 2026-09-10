@@ -78,7 +78,7 @@ test("shows durable report progress and trust audit evidence", async ({
 
   await page.goto("/admin/report-publishing");
   await expect(
-    page.getByRole("heading", { name: "Report Publishing" }),
+    page.getByRole("heading", { name: "Pipeline Status" }),
   ).toBeVisible();
   await expect(page.getByText("5 ready reports")).toBeVisible();
   await expect(page.getByText("0 pending · 0 blocked")).toBeVisible();

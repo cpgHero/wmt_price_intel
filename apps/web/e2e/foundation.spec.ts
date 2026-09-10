@@ -8,7 +8,7 @@ test("serves the application shell, workflow routes, and health route", async ({
   const homeHtml = await home.text();
   expect(homeHtml).toContain("Your competitive intelligence workspace.");
   expect(homeHtml).toContain("Schedules &amp; Alerts");
-  expect(homeHtml).toContain("Data Quality");
+  expect(homeHtml).toContain("Pipeline Status");
 
   const collections = await request.get("/collections");
   expect(collections.ok()).toBe(true);
@@ -69,8 +69,9 @@ test("serves the branded shell and no-flash theme controls", async ({
   expect(html).toContain("Analytics");
   expect(html).not.toContain(">Workspace<");
   expect(html).toContain("Match Certification");
-  expect(html).toContain("Brand Workbench");
-  expect(html).toContain("Competitive Intelligence");
+  expect(html).toContain("Brand Governance");
+  expect(html).toContain("Reports");
+  expect(html).toContain("Pipeline Status");
   expect(html).toContain("Study Discovery");
   expect(html).not.toContain("Price Intelligence (Coming soon)");
   expect(html).toContain("theme-init");
@@ -100,7 +101,7 @@ test("supports the responsive application navigation", async ({ page }) => {
     sidebar.getByRole("link", { name: "Match Certification" }),
   ).toBeVisible();
   await expect(
-    sidebar.getByRole("link", { name: "Brand Workbench" }),
+    sidebar.getByRole("link", { name: "Brand Governance" }),
   ).toBeVisible();
 
   const operationsGroup = sidebar.getByRole("button", { name: "Operations" });
@@ -135,7 +136,7 @@ test("supports the responsive application navigation", async ({ page }) => {
   });
   await expect(mobileNavigation).toBeVisible();
   await expect(
-    mobileNavigation.getByText("Competitive Intelligence", { exact: true }),
+    mobileNavigation.getByText("Reports", { exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(mobileNavigation).toBeHidden();
