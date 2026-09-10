@@ -12,6 +12,33 @@
   color: var(--muted);
   margin: 0;
 }
+.statusPanel {
+  align-items: flex-start;
+  background: linear-gradient(
+    135deg,
+    rgba(32, 167, 104, 0.12),
+    rgba(32, 174, 221, 0.08)
+  );
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(260px, 1.2fr);
+  padding: 18px;
+}
+.statusPanel h2 {
+  font-size: 1.35rem;
+  margin: 4px 0;
+}
+.statusPanel p {
+  color: var(--muted);
+  margin: 0;
+}
+.statusPanelMeta {
+  color: var(--muted);
+  display: grid;
+  gap: 8px;
+}
 .jobs {
   display: grid;
   gap: 12px;
@@ -167,4 +194,15 @@
   border-radius: 16px;
   padding: 28px;
   text-align: center;
+}
+.empty p {
+  color: var(--muted);
+  margin: 8px auto 16px;
+  max-width: 680px;
+}
+
+@media (max-width: 760px) {
+  .statusPanel {
+    grid-template-columns: 1fr;
+  }
 }

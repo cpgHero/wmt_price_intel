@@ -2936,8 +2936,14 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "2026-09-10",
               "Implemented locally; release CI, deployment, and production acceptance pending",
+              "Report Publishing now separates active report availability from materialization job activity.",
+              "A read-only admin summary endpoint reports active report counts by status, latest ready timestamp, recent job counts, and recently updated materialization jobs. The admin UI shows an Active report library status card and rewords the empty state to say no publishing jobs are running, with a link to the report library. This addresses the misleading “no reports” interpretation without changing source data, report calculations, publication gates, matching, provider calls, PDP calls, AI calls, reprocessing, PDF export, or route deletion.",
+            ],
+            [
+              "2026-09-10",
+              "Merged, deployed, and production-verified",
               "Price Architecture generation now fails closed when retailer preparation has a runtime or infrastructure failure.",
-              "Only genuine missing Search evidence can create an explicit unavailable retailer row. Transient database, object-store, or runtime failures now refuse to build a partial architecture matrix instead of staging one and waiting for the final publication audit to reject it. This changes materialization failure handling only; it does not change Search evidence, provider calls, AI calls, PDP calls, matching, prices, distribution rules, report metric formulas, published ready reports, collection workflows, or PDF export.",
+              "Only genuine missing Search evidence can create an explicit unavailable retailer row. Transient database, object-store, or runtime failures now refuse to build a partial architecture matrix instead of staging one and waiting for the final publication audit to reject it. PR #4 passed CI, merged as a606748d, deployed to Railway production, and the deployed API guard was verified in-container. This changes materialization failure handling only; it does not change Search evidence, provider calls, AI calls, PDP calls, matching, prices, distribution rules, report metric formulas, published ready reports, collection workflows, or PDF export.",
             ],
             [
               "2026-09-10",

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 
 import styles from "./report-publishing-admin.module.css";
 
@@ -51,6 +52,27 @@ interface PublishingJob {
   audit_document: AuditDocument | null;
   created_at: string;
   updated_at: string;
+}
+interface PublishingSummary {
+  active_reports: {
+    active_total: number;
+    active_ready: number;
+    active_pending: number;
+    active_blocked: number;
+    latest_ready_at: string | null;
+  };
+  recent_job_counts: Record<string, number>;
+  recent_jobs: Array<{
+    id: string;
+    analysis_id: string;
+    product_pack_id: string;
+    status: string;
+    stage: string;
+    progress_current: number;
+    progress_total: number;
+    last_error: string | null;
+    updated_at: string;
+  }>;
 }
 
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
@@ -208,12 +230,25 @@ function JobCard({
 export function ReportPublishingAdmin() {
   const [session, setSession] = useState<AdminSession | null>(null);
   const [jobs, setJobs] = useState<PublishingJob[]>([]);
+  const [summary, setSummary] = useState<PublishingSummary | null>(null);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const loadJobs = useCallback(async () => {
-    setJobs(await jsonRequest<PublishingJob[]>("/api/admin/report-publishing"));
+    const nextJobs = await jsonRequest<PublishingJob[]>(
+      "/api/admin/report-publishing",
+    );
+    setJobs(nextJobs);
+    try {
+      setSummary(
+        await jsonRequest<PublishingSummary>(
+          "/api/admin/report-publishing/summary",
+        ),
+      );
+    } catch {
+      setSummary(null);
+    }
   }, []);
 
   useEffect(() => {
@@ -314,8 +349,8 @@ export function ReportPublishingAdmin() {
     <section className={styles.workspace}>
       <div className={styles.toolbar}>
         <p className={styles.summary}>
-          New reports remain pending until every read model is complete and the
-          semantic audit passes.
+          This page tracks publishing jobs. Completed reports remain available
+          in the report library even when no job is currently running.
         </p>
         <button
           className="button secondary"
@@ -325,17 +360,52 @@ export function ReportPublishingAdmin() {
           Refresh
         </button>
       </div>
+      {summary ? (
+        <section className={styles.statusPanel} aria-label="Publishing status">
+          <div>
+            <span className="section-kicker">Active report library</span>
+            <h2>{summary.active_reports.active_ready} ready reports</h2>
+            <p>
+              {summary.active_reports.active_pending} pending ·{" "}
+              {summary.active_reports.active_blocked} blocked ·{" "}
+              {summary.active_reports.active_total} active total
+            </p>
+          </div>
+          <div className={styles.statusPanelMeta}>
+            <span>
+              <b>Latest ready:</b>{" "}
+              {summary.active_reports.latest_ready_at
+                ? new Date(
+                    summary.active_reports.latest_ready_at,
+                  ).toLocaleString()
+                : "—"}
+            </span>
+            <span>
+              <b>Recent jobs:</b>{" "}
+              {Object.entries(summary.recent_job_counts).length
+                ? Object.entries(summary.recent_job_counts)
+                    .map(([status, count]) => `${count} ${status}`)
+                    .join(" · ")
+                : "none in the last 14 days"}
+            </span>
+          </div>
+        </section>
+      ) : null}
       {error ? <p className="form-error">{error}</p> : null}
       <div className={styles.jobs}>
         {jobs.length ? (
           jobs.map((job) => <JobCard job={job} key={job.id} retry={retry} />)
         ) : (
           <div className={styles.empty}>
-            <h2>No publishing jobs yet</h2>
+            <h2>No publishing jobs are running</h2>
             <p>
-              The five certified baseline reports remain active. Future replays
-              will appear here.
+              This does not mean there are no reports. Open the report library
+              to view active reports; new reprocessing jobs will appear here
+              while they are being prepared, audited, or retried.
             </p>
+            <Link className="button secondary" href="/analyses">
+              Open report library
+            </Link>
           </div>
         )}
       </div>
