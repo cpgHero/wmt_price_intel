@@ -31,8 +31,16 @@ import { displayDate, displayLabel } from "@/lib/presentation";
 type CanonicalDataset = RetailCompetitiveIntelligenceCanonicalReportDataset;
 type ProductRelationship = CanonicalDataset["product_relationships"][number];
 type BenchmarkProduct = ProductRelationship["benchmark_product"];
+type ReportProduct =
+  | ProductRelationship["benchmark_product"]
+  | ProductRelationship["competitor_product"];
 type BrandType = ProductRelationship["benchmark_product"]["brand_type"];
 type PriceMonitoringMapPoint = PriceMonitoringMap["points"][number];
+type ProductEvidenceTarget = {
+  product: ReportProduct;
+  retailerLabel: string;
+  roleLabel: string;
+};
 type StateFeature = {
   id?: string | number;
   geometry: { type: string; coordinates: unknown };
@@ -97,10 +105,30 @@ function formatSignedCurrency(value: number) {
   return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
 }
 
-function distributionLabel(
+function distributionShareLabel(
   distribution: ProductRelationship["benchmark_product"]["distribution"],
 ) {
-  return `${distribution.physical_store_distribution_count.toLocaleString()} positive-price stores`;
+  const storeCount = distribution.physical_store_distribution_count;
+  const searchedStoreCount = distribution.searched_store_count;
+  if (searchedStoreCount && searchedStoreCount > 0) {
+    return `${storeCount.toLocaleString()} stores (${formatPercent(
+      storeCount / searchedStoreCount,
+    )} of ${searchedStoreCount.toLocaleString()} searched)`;
+  }
+  return `${storeCount.toLocaleString()} stores (searched-store denominator unavailable)`;
+}
+
+function mapEvidenceHref(
+  analysisId: string,
+  product: ReportProduct,
+  detail: "summary" | "full" = "full",
+) {
+  const parameters = new URLSearchParams({
+    retailer: product.retailer_id,
+    product_id: product.retailer_product_id,
+    detail,
+  });
+  return `/api/price-monitoring/${encodeURIComponent(analysisId)}/map?${parameters.toString()}`;
 }
 
 function productHref(url: string | null) {
@@ -155,7 +183,7 @@ function brandTypeGroups(dataset: CanonicalDataset) {
 
 function productMonitoringHref(
   analysisId: string,
-  product: BenchmarkProduct,
+  product: ReportProduct,
   tab = "overview",
 ) {
   const parameters = new URLSearchParams({
@@ -166,12 +194,61 @@ function productMonitoringHref(
   return `/price-monitoring/${encodeURIComponent(analysisId)}?${parameters.toString()}`;
 }
 
-function productEvidenceCsvHref(analysisId: string, product: BenchmarkProduct) {
+function productEvidenceCsvHref(analysisId: string, product: ReportProduct) {
   const parameters = new URLSearchParams({
     retailer: product.retailer_id,
     product_id: product.retailer_product_id,
   });
   return `/api/price-monitoring/${encodeURIComponent(analysisId)}/evidence.csv?${parameters.toString()}`;
+}
+
+function safeDownloadName(value: string) {
+  return value.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "");
+}
+
+function escapeXml(value: string | number | boolean | null) {
+  if (value === null) return "";
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+function downloadTextFile(filename: string, text: string, type: string) {
+  const blob = new Blob([text], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function storeEvidenceRows(mapData: PriceMonitoringMap | null) {
+  return (mapData?.points ?? []).filter(
+    (point) => point.status === "observed" && point.kind === "store",
+  );
+}
+
+function exportableStoreRows(points: PriceMonitoringMapPoint[]) {
+  return points.map((point) => ({
+    scope_key: point.scope_key,
+    store_number: point.store_number,
+    store_name: point.store_name,
+    distribution_store_id: point.distribution_store_id,
+    city: point.city,
+    state: point.state,
+    zipcode: point.zipcode,
+    country: point.country,
+    latitude: point.latitude,
+    longitude: point.longitude,
+    search_price: point.price,
+    difference_from_reference: point.difference_from_reference,
+    search_observed: point.search_observed,
+    is_sponsored: point.is_sponsored,
+  }));
 }
 
 function summarizeProductFootprints(
@@ -339,6 +416,7 @@ export function CanonicalReportWorkspace({
       <section className="workspace-panel" role="tabpanel">
         {activeTab === "Executive Summary" ? (
           <ExecutiveSummary
+            analysisId={analysis.analysis_id}
             dataset={dataset}
             groups={groups}
             brandTypeSummary={brandTypeSummary}
@@ -361,6 +439,7 @@ export function CanonicalReportWorkspace({
         ) : null}
         {activeTab === "Price Architecture" ? (
           <PriceArchitecture
+            analysisId={analysis.analysis_id}
             brandGroups={brandGroups}
             relationships={dataset.product_relationships}
           />
@@ -374,27 +453,24 @@ export function CanonicalReportWorkspace({
 }
 
 function ExecutiveSummary({
+  analysisId,
   dataset,
   groups,
   brandTypeSummary,
 }: Readonly<{
+  analysisId: string;
   dataset: CanonicalDataset;
   groups: ReturnType<typeof relationshipGroups>;
   brandTypeSummary: ReturnType<typeof summarizeCanonicalBrandTypes>;
 }>) {
-  const topLosses = [...groups.walmartLosses]
-    .sort(
-      (left, right) =>
-        right.benchmark_product.distribution.physical_store_distribution_count -
-          left.benchmark_product.distribution
-            .physical_store_distribution_count ||
-        Math.abs(right.comparison.price_delta_percent) -
-          Math.abs(left.comparison.price_delta_percent) ||
-        left.benchmark_product.title.localeCompare(
-          right.benchmark_product.title,
-        ),
-    )
-    .slice(0, 8);
+  const actionSort = (left: ProductRelationship, right: ProductRelationship) =>
+    right.benchmark_product.distribution.physical_store_distribution_count -
+      left.benchmark_product.distribution.physical_store_distribution_count ||
+    Math.abs(right.comparison.price_delta_percent) -
+      Math.abs(left.comparison.price_delta_percent) ||
+    left.benchmark_product.title.localeCompare(right.benchmark_product.title);
+  const priorityLosses = [...groups.walmartLosses].sort(actionSort);
+  const priorityWins = [...groups.walmartWins].sort(actionSort);
   const broadLosses = groups.walmartLosses.filter(
     (relationship) =>
       relationship.benchmark_product.distribution
@@ -470,18 +546,43 @@ function ExecutiveSummary({
       <section className="workspace-section">
         <header>
           <div>
-            <h2>Highest-priority losses</h2>
+            <h2>Complete Walmart loss action list</h2>
             <p>
-              This is the executive triage list, not a gallery. Rows prioritize
-              Walmart losses with broad product footprints, large normalized
-              price gaps, and inspectable match evidence.
+              This is the comprehensive executive loss list, not a subset or
+              gallery. Rows are sorted by Walmart product footprint and price
+              gap, and every row exposes Walmart and competitor store evidence.
             </p>
           </div>
           <span className="canonical-section-stat">
-            {broadLosses.length.toLocaleString()} broad-footprint losses
+            {priorityLosses.length.toLocaleString()} total losses ·{" "}
+            {broadLosses.length.toLocaleString()} broad-footprint
           </span>
         </header>
-        <ExecutivePriorityTable relationships={topLosses} />
+        <ExecutivePriorityTable
+          analysisId={analysisId}
+          emptyLabel="No Walmart losses are available in the governed relationship set."
+          relationships={priorityLosses}
+        />
+      </section>
+      <section className="workspace-section">
+        <header>
+          <div>
+            <h2>Complete Walmart win action list</h2>
+            <p>
+              This is the comprehensive executive win list. It keeps the same
+              store-footprint and evidence controls so wins can be defended with
+              the same source-backed detail as losses.
+            </p>
+          </div>
+          <span className="canonical-section-stat">
+            {priorityWins.length.toLocaleString()} total wins
+          </span>
+        </header>
+        <ExecutivePriorityTable
+          analysisId={analysisId}
+          emptyLabel="No Walmart wins are available in the governed relationship set."
+          relationships={priorityWins}
+        />
       </section>
       <section className="workspace-section">
         <header>
@@ -521,70 +622,127 @@ function ExecutiveSummary({
 }
 
 function ExecutivePriorityTable({
+  analysisId,
+  emptyLabel,
   relationships,
-}: Readonly<{ relationships: ProductRelationship[] }>) {
+}: Readonly<{
+  analysisId: string;
+  emptyLabel: string;
+  relationships: ProductRelationship[];
+}>) {
+  const [selectedEvidenceTarget, setSelectedEvidenceTarget] =
+    useState<ProductEvidenceTarget | null>(null);
   if (!relationships.length) {
-    return (
-      <p className="empty-note">
-        No Walmart losses are available in the governed relationship set.
-      </p>
-    );
+    return <p className="empty-note">{emptyLabel}</p>;
   }
   return (
-    <div className="canonical-table-wrap">
-      <table className="canonical-insight-table">
-        <thead>
-          <tr>
-            <th>Walmart product</th>
-            <th>Competitor lower</th>
-            <th>Gap</th>
-            <th>Footprint</th>
-            <th>Basis</th>
-          </tr>
-        </thead>
-        <tbody>
-          {relationships.map((relationship) => (
-            <tr key={relationship.relationship_id}>
-              <td>
-                <strong>{relationship.benchmark_product.title}</strong>
-                <span>
-                  {relationship.benchmark_product.retailer_product_id} ·{" "}
-                  {brandTypeLabels[relationship.benchmark_product.brand_type]}
-                </span>
-              </td>
-              <td>
-                <strong>{relationship.competitor_product.title}</strong>
-                <span>
-                  {displayLabel(relationship.competitor_product.retailer_id)} ·{" "}
-                  {relationship.competitor_product.price.reporting_price_label}
-                </span>
-              </td>
-              <td>
-                <strong>
-                  {formatSignedCurrency(relationship.comparison.price_delta)}
-                </strong>
-                <span>
-                  {formatPercent(
-                    Math.abs(relationship.comparison.price_delta_percent),
-                  )}{" "}
-                  competitor advantage
-                </span>
-              </td>
-              <td>
-                <strong>
-                  {relationship.benchmark_product.distribution.physical_store_distribution_count.toLocaleString()}
-                </strong>
-                <span>positive-price stores</span>
-              </td>
-              <td>
-                <strong>{relationship.comparison.unit_basis}</strong>
-                <span>{relationship.comparison.comparison_basis}</span>
-              </td>
+    <>
+      <div className="canonical-table-wrap">
+        <table className="canonical-insight-table canonical-executive-table">
+          <thead>
+            <tr>
+              <th>Walmart product</th>
+              <th>Competitor product</th>
+              <th>Gap</th>
+              <th>Store footprint</th>
+              <th>Basis</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {relationships.map((relationship) => (
+              <tr key={relationship.relationship_id}>
+                <td>
+                  <strong>{relationship.benchmark_product.title}</strong>
+                  <span>
+                    {relationship.benchmark_product.retailer_product_id} ·{" "}
+                    {brandTypeLabels[relationship.benchmark_product.brand_type]}
+                  </span>
+                </td>
+                <td>
+                  <strong>{relationship.competitor_product.title}</strong>
+                  <span>
+                    {displayLabel(relationship.competitor_product.retailer_id)}{" "}
+                    ·{" "}
+                    {
+                      relationship.competitor_product.price
+                        .reporting_price_label
+                    }
+                  </span>
+                </td>
+                <td>
+                  <strong>
+                    {formatSignedCurrency(relationship.comparison.price_delta)}
+                  </strong>
+                  <span>
+                    {formatPercent(
+                      Math.abs(relationship.comparison.price_delta_percent),
+                    )}{" "}
+                    {relationship.comparison.outcome === "walmart_wins"
+                      ? "Walmart advantage"
+                      : relationship.comparison.outcome === "competitor_wins"
+                        ? "competitor advantage"
+                        : "gap"}
+                  </span>
+                </td>
+                <td>
+                  <strong>
+                    Walmart:{" "}
+                    {distributionShareLabel(
+                      relationship.benchmark_product.distribution,
+                    )}
+                  </strong>
+                  <span>
+                    Competitor:{" "}
+                    {distributionShareLabel(
+                      relationship.competitor_product.distribution,
+                    )}
+                  </span>
+                  <span className="canonical-table-actions">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedEvidenceTarget({
+                          product: relationship.benchmark_product,
+                          retailerLabel: "Walmart",
+                          roleLabel: "Walmart store evidence",
+                        })
+                      }
+                    >
+                      Walmart stores
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedEvidenceTarget({
+                          product: relationship.competitor_product,
+                          retailerLabel: displayLabel(
+                            relationship.competitor_product.retailer_id,
+                          ),
+                          roleLabel: "Competitor store evidence",
+                        })
+                      }
+                    >
+                      Competitor stores
+                    </button>
+                  </span>
+                </td>
+                <td>
+                  <strong>{relationship.comparison.unit_basis}</strong>
+                  <span>{relationship.comparison.comparison_basis}</span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {selectedEvidenceTarget ? (
+        <StoreEvidenceDrawer
+          analysisId={analysisId}
+          target={selectedEvidenceTarget}
+          onClose={() => setSelectedEvidenceTarget(null)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -916,6 +1074,8 @@ function ProductFootprintTable({
   analysisId,
   rows,
 }: Readonly<{ analysisId: string; rows: ProductFootprint[] }>) {
+  const [selectedEvidenceTarget, setSelectedEvidenceTarget] =
+    useState<ProductEvidenceTarget | null>(null);
   if (!rows.length) {
     return (
       <p className="empty-note">
@@ -924,130 +1084,149 @@ function ProductFootprintTable({
     );
   }
   return (
-    <div className="canonical-table-wrap">
-      <table className="canonical-insight-table canonical-footprint-table">
-        <thead>
-          <tr>
-            <th>Walmart product</th>
-            <th>Footprint</th>
-            <th>Relationships</th>
-            <th>Largest loss / strongest win</th>
-            <th>Evidence</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.product.retailer_product_id}>
-              <td>
-                <span className="canonical-table-product">
-                  <ProductThumb
-                    imageUrl={row.product.image_url}
-                    title={row.product.title}
-                  />
-                  <span>
-                    <strong>{row.product.title}</strong>
+    <>
+      <div className="canonical-table-wrap">
+        <table className="canonical-insight-table canonical-footprint-table">
+          <thead>
+            <tr>
+              <th>Walmart product</th>
+              <th>Footprint</th>
+              <th>Relationships</th>
+              <th>Largest loss / strongest win</th>
+              <th>Evidence</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.product.retailer_product_id}>
+                <td>
+                  <span className="canonical-table-product">
+                    <ProductThumb
+                      imageUrl={row.product.image_url}
+                      title={row.product.title}
+                    />
                     <span>
-                      {row.product.retailer_product_id} ·{" "}
-                      {brandTypeLabels[row.product.brand_type]}
+                      <strong>{row.product.title}</strong>
+                      <span>
+                        {row.product.retailer_product_id} ·{" "}
+                        {brandTypeLabels[row.product.brand_type]}
+                      </span>
                     </span>
                   </span>
-                </span>
-              </td>
-              <td>
-                <strong>
-                  {row.product.distribution.physical_store_distribution_count.toLocaleString()}
-                </strong>
-                <span>
-                  positive-price stores
-                  {row.product.distribution.searched_store_count
-                    ? ` / ${row.product.distribution.searched_store_count.toLocaleString()} searched`
-                    : ""}
-                </span>
-              </td>
-              <td>
-                <strong>{row.relationships.length.toLocaleString()}</strong>
-                <span>
-                  {row.walmartLosses.toLocaleString()} losses ·{" "}
-                  {row.walmartWins.toLocaleString()} wins ·{" "}
-                  {row.parityOrUnscored.toLocaleString()} parity/unscored
-                </span>
-                <span>
-                  {row.competitorRetailers.map(displayLabel).join(", ")}
-                </span>
-              </td>
-              <td>
-                {row.largestLoss ? (
-                  <>
-                    <strong>
-                      Loss{" "}
-                      {formatSignedCurrency(
-                        row.largestLoss.comparison.price_delta,
-                      )}
-                    </strong>
-                    <span>
-                      vs.{" "}
-                      {displayLabel(
-                        row.largestLoss.competitor_product.retailer_id,
-                      )}{" "}
-                      ·{" "}
-                      {formatPercent(
-                        Math.abs(
-                          row.largestLoss.comparison.price_delta_percent,
-                        ),
-                      )}
-                    </span>
-                  </>
-                ) : row.strongestWin ? (
-                  <>
-                    <strong>
-                      Win{" "}
-                      {formatSignedCurrency(
-                        row.strongestWin.comparison.price_delta,
-                      )}
-                    </strong>
-                    <span>
-                      vs.{" "}
-                      {displayLabel(
-                        row.strongestWin.competitor_product.retailer_id,
-                      )}{" "}
-                      ·{" "}
-                      {formatPercent(
-                        Math.abs(
-                          row.strongestWin.comparison.price_delta_percent,
-                        ),
-                      )}
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <strong>Parity / unscored</strong>
-                    <span>No loss or win relationship in this row.</span>
-                  </>
-                )}
-              </td>
-              <td>
-                <span className="canonical-table-actions">
-                  <Link
-                    href={productMonitoringHref(analysisId, row.product)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Map
-                  </Link>
-                  <Link
-                    href={productEvidenceCsvHref(analysisId, row.product)}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    CSV
-                  </Link>
-                </span>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+                </td>
+                <td>
+                  <strong>
+                    {distributionShareLabel(row.product.distribution)}
+                  </strong>
+                  <span>
+                    Store distribution counts exact product Search results with
+                    price greater than zero.
+                  </span>
+                </td>
+                <td>
+                  <strong>{row.relationships.length.toLocaleString()}</strong>
+                  <span>
+                    {row.walmartLosses.toLocaleString()} losses ·{" "}
+                    {row.walmartWins.toLocaleString()} wins ·{" "}
+                    {row.parityOrUnscored.toLocaleString()} parity/unscored
+                  </span>
+                  <span>
+                    {row.competitorRetailers.map(displayLabel).join(", ")}
+                  </span>
+                </td>
+                <td>
+                  {row.largestLoss ? (
+                    <>
+                      <strong>
+                        Loss{" "}
+                        {formatSignedCurrency(
+                          row.largestLoss.comparison.price_delta,
+                        )}
+                      </strong>
+                      <span>
+                        vs.{" "}
+                        {displayLabel(
+                          row.largestLoss.competitor_product.retailer_id,
+                        )}{" "}
+                        ·{" "}
+                        {formatPercent(
+                          Math.abs(
+                            row.largestLoss.comparison.price_delta_percent,
+                          ),
+                        )}
+                      </span>
+                    </>
+                  ) : row.strongestWin ? (
+                    <>
+                      <strong>
+                        Win{" "}
+                        {formatSignedCurrency(
+                          row.strongestWin.comparison.price_delta,
+                        )}
+                      </strong>
+                      <span>
+                        vs.{" "}
+                        {displayLabel(
+                          row.strongestWin.competitor_product.retailer_id,
+                        )}{" "}
+                        ·{" "}
+                        {formatPercent(
+                          Math.abs(
+                            row.strongestWin.comparison.price_delta_percent,
+                          ),
+                        )}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <strong>Parity / unscored</strong>
+                      <span>No loss or win relationship in this row.</span>
+                    </>
+                  )}
+                </td>
+                <td>
+                  <span className="canonical-table-actions">
+                    <Link
+                      href={productMonitoringHref(analysisId, row.product)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Map
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setSelectedEvidenceTarget({
+                          product: row.product,
+                          retailerLabel: "Walmart",
+                          roleLabel: "Walmart store evidence",
+                        })
+                      }
+                    >
+                      Drawer
+                    </button>
+                    <Link
+                      href={productEvidenceCsvHref(analysisId, row.product)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      CSV
+                    </Link>
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {selectedEvidenceTarget ? (
+        <StoreEvidenceDrawer
+          analysisId={analysisId}
+          target={selectedEvidenceTarget}
+          onClose={() => setSelectedEvidenceTarget(null)}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -1071,18 +1250,12 @@ function ProductLocationEvidencePanel({
   analysisId,
   footprint,
 }: Readonly<{ analysisId: string; footprint: ProductFootprint }>) {
-  const mapRequestPath = useMemo(() => {
-    const parameters = new URLSearchParams({
-      retailer: footprint.product.retailer_id,
-      product_id: footprint.product.retailer_product_id,
-      detail: "summary",
-    });
-    return `/api/price-monitoring/${encodeURIComponent(analysisId)}/map?${parameters.toString()}`;
-  }, [
-    analysisId,
-    footprint.product.retailer_id,
-    footprint.product.retailer_product_id,
-  ]);
+  const [selectedEvidenceTarget, setSelectedEvidenceTarget] =
+    useState<ProductEvidenceTarget | null>(null);
+  const mapRequestPath = useMemo(
+    () => mapEvidenceHref(analysisId, footprint.product, "summary"),
+    [analysisId, footprint.product],
+  );
   const [mapState, setMapState] = useState<{
     requestPath: string;
     data: PriceMonitoringMap | null;
@@ -1138,15 +1311,309 @@ function ProductLocationEvidencePanel({
           <strong>{footprint.product.title}</strong>
           <p>
             {footprint.product.retailer_product_id} ·{" "}
-            {distributionLabel(footprint.product.distribution)} ·{" "}
+            {distributionShareLabel(footprint.product.distribution)} ·{" "}
             {brandTypeLabels[footprint.product.brand_type]}
           </p>
         </div>
+        <button
+          className="canonical-dataset-link"
+          type="button"
+          onClick={() =>
+            setSelectedEvidenceTarget({
+              product: footprint.product,
+              retailerLabel: "Walmart",
+              roleLabel: "Walmart store evidence",
+            })
+          }
+        >
+          Store list drawer
+        </button>
       </article>
       <ExactProductMap
         mapData={displayedMapData}
         mapError={displayedMapError}
       />
+      {selectedEvidenceTarget ? (
+        <StoreEvidenceDrawer
+          analysisId={analysisId}
+          target={selectedEvidenceTarget}
+          onClose={() => setSelectedEvidenceTarget(null)}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function StoreEvidenceDrawer({
+  analysisId,
+  target,
+  onClose,
+}: Readonly<{
+  analysisId: string;
+  target: ProductEvidenceTarget;
+  onClose: () => void;
+}>) {
+  const requestPath = useMemo(
+    () => mapEvidenceHref(analysisId, target.product, "full"),
+    [analysisId, target.product],
+  );
+  const [mapState, setMapState] = useState<{
+    requestPath: string;
+    data: PriceMonitoringMap | null;
+    error: string | null;
+  }>({
+    requestPath: "",
+    data: null,
+    error: null,
+  });
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(requestPath, { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Store evidence returned ${response.status}`);
+        }
+        setMapState({
+          requestPath,
+          data: (await response.json()) as PriceMonitoringMap,
+          error: null,
+        });
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === "AbortError")
+          return;
+        setMapState({
+          requestPath,
+          data: null,
+          error:
+            reason instanceof Error
+              ? reason.message
+              : "Store evidence could not be loaded.",
+        });
+      });
+    return () => controller.abort();
+  }, [requestPath]);
+
+  const mapData = mapState.requestPath === requestPath ? mapState.data : null;
+  const error = mapState.requestPath === requestPath ? mapState.error : null;
+  const rows = useMemo(() => storeEvidenceRows(mapData), [mapData]);
+  const exportRows = useMemo(() => exportableStoreRows(rows), [rows]);
+  const fileStem = safeDownloadName(
+    `${target.product.retailer_id}-${target.product.retailer_product_id}-store-evidence`,
+  );
+
+  const downloadJson = () => {
+    downloadTextFile(
+      `${fileStem}.json`,
+      JSON.stringify(
+        {
+          analysis_id: analysisId,
+          retailer: target.product.retailer_id,
+          product_id: target.product.retailer_product_id,
+          distribution_contract: mapData?.distribution_contract ?? null,
+          display: mapData?.display ?? null,
+          rows: exportRows,
+        },
+        null,
+        2,
+      ),
+      "application/json",
+    );
+  };
+
+  const downloadExcel = () => {
+    const columns = Object.keys(
+      exportRows[0] ?? {
+        scope_key: "",
+        store_number: "",
+        store_name: "",
+        distribution_store_id: "",
+        city: "",
+        state: "",
+        zipcode: "",
+        country: "",
+        latitude: "",
+        longitude: "",
+        search_price: "",
+        difference_from_reference: "",
+        search_observed: "",
+        is_sponsored: "",
+      },
+    );
+    const worksheetRows = [
+      columns,
+      ...exportRows.map((row) =>
+        columns.map((column) => row[column as keyof typeof row] ?? ""),
+      ),
+    ];
+    const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+<Worksheet ss:Name="Store evidence">
+<Table>
+${worksheetRows
+  .map(
+    (row) =>
+      `<Row>${row
+        .map(
+          (value) =>
+            `<Cell><Data ss:Type="${
+              typeof value === "number" ? "Number" : "String"
+            }">${escapeXml(value)}</Data></Cell>`,
+        )
+        .join("")}</Row>`,
+  )
+  .join("\n")}
+</Table>
+</Worksheet>
+</Workbook>`;
+    downloadTextFile(`${fileStem}.xls`, xml, "application/vnd.ms-excel");
+  };
+
+  return (
+    <div className="pm-drawer-layer canonical-store-drawer-layer">
+      <button
+        aria-label="Close store evidence"
+        className="pm-drawer-backdrop"
+        onClick={onClose}
+        type="button"
+      />
+      <aside
+        className="pm-product-drawer canonical-store-drawer"
+        role="dialog"
+        aria-modal="true"
+      >
+        <header>
+          <div className="pm-product-identity">
+            {target.product.image_url ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={target.product.image_url} alt="" loading="lazy" />
+            ) : (
+              <span>{target.product.title.slice(0, 1)}</span>
+            )}
+            <div>
+              <p className="section-kicker">{target.roleLabel}</p>
+              <h2>{target.product.title}</h2>
+              <small>
+                {target.retailerLabel} · {target.product.retailer_product_id} ·{" "}
+                {distributionShareLabel(target.product.distribution)}
+              </small>
+            </div>
+          </div>
+          <button
+            aria-label="Close store evidence"
+            onClick={onClose}
+            type="button"
+          >
+            ×
+          </button>
+        </header>
+        <section className="pm-drawer-metrics canonical-store-drawer-metrics">
+          <div>
+            <span>Distribution stores</span>
+            <strong>
+              {target.product.distribution.physical_store_distribution_count.toLocaleString()}
+            </strong>
+          </div>
+          <div>
+            <span>Searched stores</span>
+            <strong>
+              {target.product.distribution.searched_store_count?.toLocaleString() ??
+                "Unavailable"}
+            </strong>
+          </div>
+          <div>
+            <span>Store share</span>
+            <strong>
+              {target.product.distribution.searched_store_count
+                ? formatPercent(
+                    target.product.distribution
+                      .physical_store_distribution_count /
+                      target.product.distribution.searched_store_count,
+                  )
+                : "Unavailable"}
+            </strong>
+          </div>
+          <div>
+            <span>Service areas</span>
+            <strong>
+              {target.product.distribution.service_area_presence_count.toLocaleString()}
+            </strong>
+          </div>
+        </section>
+        <section className="pm-drawer-section">
+          <header>
+            <div>
+              <h3>Store list detail</h3>
+              <p>
+                Store rows are exact product store-level Search observations
+                with price greater than zero. This is distribution evidence, not
+                an in-stock claim.
+              </p>
+            </div>
+            <div className="canonical-drawer-export-actions">
+              <a
+                className="canonical-dataset-link"
+                href={productEvidenceCsvHref(analysisId, target.product)}
+                target="_blank"
+                rel="noreferrer"
+              >
+                CSV
+              </a>
+              <button
+                className="canonical-dataset-link"
+                disabled={!mapData}
+                onClick={downloadExcel}
+                type="button"
+              >
+                Excel
+              </button>
+              <button
+                className="canonical-dataset-link"
+                disabled={!mapData}
+                onClick={downloadJson}
+                type="button"
+              >
+                JSON
+              </button>
+            </div>
+          </header>
+          {error ? <p className="empty-note">{error}</p> : null}
+          {!mapData && !error ? (
+            <p className="empty-note">Loading full store evidence…</p>
+          ) : null}
+          {mapData ? (
+            <>
+              <div className="canonical-store-drawer-summary">
+                <span>
+                  {rows.length.toLocaleString()} returned store rows ·{" "}
+                  {mapData.display.distribution_store_count.toLocaleString()}{" "}
+                  source-backed distribution stores
+                </span>
+                {mapData.display.observed_sampled ? (
+                  <span>
+                    Full-detail API returned a deterministic sample; use CSV for
+                    the server-side evidence export.
+                  </span>
+                ) : null}
+              </div>
+              <MappedLocationTable
+                points={rows}
+                title="Store list"
+                wrapClassName="canonical-store-drawer-table"
+              />
+            </>
+          ) : null}
+        </section>
+        <footer>
+          <p>
+            Distribution is based only on positive-price store-level Search
+            presence for the exact retailer product ID. Service areas remain
+            separately labeled.
+          </p>
+        </footer>
+      </aside>
     </div>
   );
 }
@@ -1313,7 +1780,10 @@ function ExactProductMap({
         </aside>
       </div>
       {mapData ? (
-        <MappedLocationTable points={visiblePoints.slice(0, 12)} />
+        <MappedLocationTable
+          points={visiblePoints.slice(0, 12)}
+          title="Mapped preview"
+        />
       ) : null}
     </>
   );
@@ -1321,7 +1791,13 @@ function ExactProductMap({
 
 function MappedLocationTable({
   points,
-}: Readonly<{ points: PriceMonitoringMapPoint[] }>) {
+  title = "Store list",
+  wrapClassName = "",
+}: Readonly<{
+  points: PriceMonitoringMapPoint[];
+  title?: string;
+  wrapClassName?: string;
+}>) {
   if (!points.length) {
     return (
       <p className="empty-note">
@@ -1331,11 +1807,11 @@ function MappedLocationTable({
     );
   }
   return (
-    <div className="canonical-table-wrap">
+    <div className={`canonical-table-wrap ${wrapClassName}`.trim()}>
       <table className="canonical-insight-table canonical-location-table">
         <thead>
           <tr>
-            <th>Mapped store sample</th>
+            <th>{title}</th>
             <th>City</th>
             <th>State</th>
             <th>ZIP</th>
@@ -1379,9 +1855,11 @@ function MappedLocationTable({
 }
 
 function PriceArchitecture({
+  analysisId,
   relationships,
   brandGroups,
 }: Readonly<{
+  analysisId: string;
   relationships: ProductRelationship[];
   brandGroups: Array<{
     brandType: BrandType;
@@ -1402,7 +1880,10 @@ function PriceArchitecture({
             </p>
           </div>
         </header>
-        <PriceArchitectureTable relationships={relationships} />
+        <PriceArchitectureTable
+          analysisId={analysisId}
+          relationships={relationships}
+        />
       </section>
       {brandGroups
         .filter(({ relationships }) => relationships.length > 0)
@@ -1422,7 +1903,8 @@ function PriceArchitecture({
               </div>
             </header>
             <PriceArchitectureTable
-              relationships={relationships.slice(0, 25)}
+              analysisId={analysisId}
+              relationships={relationships}
             />
           </section>
         ))}
@@ -1431,8 +1913,11 @@ function PriceArchitecture({
 }
 
 function PriceArchitectureTable({
+  analysisId,
   relationships,
-}: Readonly<{ relationships: ProductRelationship[] }>) {
+}: Readonly<{ analysisId: string; relationships: ProductRelationship[] }>) {
+  const [selectedEvidenceTarget, setSelectedEvidenceTarget] =
+    useState<ProductEvidenceTarget | null>(null);
   const rows = [...relationships].sort(
     (left, right) =>
       left.benchmark_product.brand_type.localeCompare(
@@ -1456,6 +1941,7 @@ function PriceArchitectureTable({
             <th>Brand role</th>
             <th>Walmart</th>
             <th>Competitor</th>
+            <th>Store footprint</th>
             <th>Gap</th>
             <th>Outcome</th>
           </tr>
@@ -1495,6 +1981,48 @@ function PriceArchitectureTable({
                 </span>
               </td>
               <td>
+                <strong>
+                  WMT{" "}
+                  {distributionShareLabel(
+                    relationship.benchmark_product.distribution,
+                  )}
+                </strong>
+                <span>
+                  {displayLabel(relationship.competitor_product.retailer_id)}{" "}
+                  {distributionShareLabel(
+                    relationship.competitor_product.distribution,
+                  )}
+                </span>
+                <span className="canonical-table-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedEvidenceTarget({
+                        product: relationship.benchmark_product,
+                        retailerLabel: "Walmart",
+                        roleLabel: "Walmart store evidence",
+                      })
+                    }
+                  >
+                    WMT stores
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setSelectedEvidenceTarget({
+                        product: relationship.competitor_product,
+                        retailerLabel: displayLabel(
+                          relationship.competitor_product.retailer_id,
+                        ),
+                        roleLabel: "Competitor store evidence",
+                      })
+                    }
+                  >
+                    Comp stores
+                  </button>
+                </span>
+              </td>
+              <td>
                 <span className="canonical-gap-cell">
                   <strong>
                     {formatSignedCurrency(relationship.comparison.price_delta)}
@@ -1517,6 +2045,13 @@ function PriceArchitectureTable({
           ))}
         </tbody>
       </table>
+      {selectedEvidenceTarget ? (
+        <StoreEvidenceDrawer
+          analysisId={analysisId}
+          target={selectedEvidenceTarget}
+          onClose={() => setSelectedEvidenceTarget(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -1693,7 +2228,7 @@ function RelationshipCard({
           imageUrl={relationship.benchmark_product.image_url}
           retailer="Walmart"
           price={relationship.benchmark_product.price.reporting_price_label}
-          distribution={distributionLabel(
+          distribution={distributionShareLabel(
             relationship.benchmark_product.distribution,
           )}
         />
@@ -1704,7 +2239,7 @@ function RelationshipCard({
           imageUrl={relationship.competitor_product.image_url}
           retailer={displayLabel(relationship.competitor_product.retailer_id)}
           price={relationship.competitor_product.price.reporting_price_label}
-          distribution={distributionLabel(
+          distribution={distributionShareLabel(
             relationship.competitor_product.distribution,
           )}
         />
