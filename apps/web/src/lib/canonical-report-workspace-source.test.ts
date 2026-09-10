@@ -92,11 +92,16 @@ describe("canonical report workspace source contract", () => {
     expect(workspaceSource).toContain("searchedStoreRows");
     expect(workspaceSource).toContain("not_observed_searched_store_count");
     expect(workspaceSource).toContain("observed_distribution_store_count");
-    expect(workspaceSource).toContain("store share");
+    expect(workspaceSource).toContain("retailerFootprintsFromRelationships");
+    expect(workspaceSource).toContain("reportFootprintLabel");
+    expect(workspaceSource).toContain("report_footprint_store_count");
+    expect(workspaceSource).toContain("report_footprint_share");
+    expect(workspaceSource).toContain("searched_row_share");
+    expect(workspaceSource).toContain("searched-row share");
+    expect(workspaceSource).toContain("report-footprint denominator");
     expect(workspaceSource).toContain("distribution_store_count");
     expect(workspaceSource).toContain("service_area_presence_count");
     expect(workspaceSource).toContain("searched_store_count");
-    expect(workspaceSource).toContain("distributionShareLabel");
     expect(compact).toContain("not inventory or in-stock status");
     expect(compact).toContain(
       "This is distribution evidence, not an in-stock claim.",

@@ -38,6 +38,7 @@ type BrandType = ProductRelationship["benchmark_product"]["brand_type"];
 type PriceMonitoringMapPoint = PriceMonitoringMap["points"][number];
 type ProductEvidenceTarget = {
   product: ReportProduct;
+  reportFootprintCount?: number | null;
   retailerLabel: string;
   roleLabel: string;
 };
@@ -105,19 +106,58 @@ function formatSignedCurrency(value: number) {
   return `${value > 0 ? "+" : "-"}${formatCurrency(Math.abs(value))}`;
 }
 
-function distributionShareLabel(
-  distribution: ProductRelationship["benchmark_product"]["distribution"],
-  searchedStoreCountOverride?: number | null,
+function retailerFootprintsFromRelationships(
+  relationships: ProductRelationship[],
 ) {
-  const storeCount = distribution.physical_store_distribution_count;
-  const searchedStoreCount =
-    searchedStoreCountOverride ?? distribution.searched_store_count;
-  if (searchedStoreCount && searchedStoreCount > 0) {
-    return `${storeCount.toLocaleString()} stores (${formatPercent(
-      storeCount / searchedStoreCount,
-    )} of ${searchedStoreCount.toLocaleString()} searched)`;
+  const footprints = new Map<string, number>();
+  for (const relationship of relationships) {
+    for (const product of [
+      relationship.benchmark_product,
+      relationship.competitor_product,
+    ]) {
+      const count = product.distribution.physical_store_distribution_count;
+      footprints.set(
+        product.retailer_id,
+        Math.max(footprints.get(product.retailer_id) ?? 0, count),
+      );
+    }
   }
-  return `${storeCount.toLocaleString()} stores (searched-store denominator unavailable)`;
+  return footprints;
+}
+
+function reportFootprintCountFor(
+  product: ReportProduct,
+  retailerFootprints: Map<string, number>,
+) {
+  const footprint = retailerFootprints.get(product.retailer_id) ?? null;
+  return footprint && footprint > 0 ? footprint : null;
+}
+
+function reportFootprintLabel(
+  product: ReportProduct,
+  reportFootprintCount?: number | null,
+) {
+  const storeCount = product.distribution.physical_store_distribution_count;
+  if (reportFootprintCount && reportFootprintCount > 0) {
+    return `${storeCount.toLocaleString()} stores (${formatPercent(
+      storeCount / reportFootprintCount,
+    )} of ${reportFootprintCount.toLocaleString()} report footprint)`;
+  }
+  return `${storeCount.toLocaleString()} stores (report-footprint denominator unavailable)`;
+}
+
+function productEvidenceTarget(
+  product: ReportProduct,
+  retailerLabel: string,
+  roleLabel: string,
+  retailerFootprints: Map<string, number>,
+): ProductEvidenceTarget {
+  return {
+    product,
+    reportFootprintCount: reportFootprintCountFor(product, retailerFootprints),
+    retailerLabel,
+    roleLabel,
+  };
 }
 
 function searchedStoreCountFromMap(mapData: PriceMonitoringMap | null) {
@@ -378,6 +418,10 @@ export function CanonicalReportWorkspace({
   );
   const groups = useMemo(() => relationshipGroups(dataset), [dataset]);
   const brandGroups = useMemo(() => brandTypeGroups(dataset), [dataset]);
+  const retailerFootprints = useMemo(
+    () => retailerFootprintsFromRelationships(dataset.product_relationships),
+    [dataset.product_relationships],
+  );
   const productFootprints = useMemo(
     () => summarizeProductFootprints(dataset.product_relationships),
     [dataset.product_relationships],
@@ -472,20 +516,28 @@ export function CanonicalReportWorkspace({
             dataset={dataset}
             groups={groups}
             brandTypeSummary={brandTypeSummary}
+            retailerFootprints={retailerFootprints}
           />
         ) : null}
         {activeTab === "Product Wins & Losses" ? (
-          <ProductWinsLosses dataset={dataset} />
+          <ProductWinsLosses
+            dataset={dataset}
+            retailerFootprints={retailerFootprints}
+          />
         ) : null}
         {activeTab === "Distribution & Assortment" ? (
           <DistributionAssortment
             analysisId={analysis.analysis_id}
-            relationships={broadWalmartRelationships}
-            productFootprints={productFootprints.filter(
-              (row) =>
-                row.product.distribution.physical_store_distribution_count >=
-                BROAD_WALMART_DISTRIBUTION_THRESHOLD,
-            )}
+            productFootprints={productFootprints}
+            retailerFootprints={retailerFootprints}
+            broadWalmartProductCount={
+              productFootprints.filter(
+                (row) =>
+                  row.product.distribution.physical_store_distribution_count >=
+                  BROAD_WALMART_DISTRIBUTION_THRESHOLD,
+              ).length
+            }
+            broadWalmartRelationshipCount={broadWalmartRelationships.length}
             totalRelationships={dataset.product_relationships.length}
           />
         ) : null}
@@ -494,6 +546,7 @@ export function CanonicalReportWorkspace({
             analysisId={analysis.analysis_id}
             brandGroups={brandGroups}
             relationships={dataset.product_relationships}
+            retailerFootprints={retailerFootprints}
           />
         ) : null}
         {activeTab === "Evidence & QA" ? (
@@ -509,11 +562,13 @@ function ExecutiveSummary({
   dataset,
   groups,
   brandTypeSummary,
+  retailerFootprints,
 }: Readonly<{
   analysisId: string;
   dataset: CanonicalDataset;
   groups: ReturnType<typeof relationshipGroups>;
   brandTypeSummary: ReturnType<typeof summarizeCanonicalBrandTypes>;
+  retailerFootprints: Map<string, number>;
 }>) {
   const actionSort = (left: ProductRelationship, right: ProductRelationship) =>
     right.benchmark_product.distribution.physical_store_distribution_count -
@@ -614,6 +669,7 @@ function ExecutiveSummary({
           analysisId={analysisId}
           emptyLabel="No Walmart losses are available in the governed relationship set."
           relationships={priorityLosses}
+          retailerFootprints={retailerFootprints}
         />
       </section>
       <section className="workspace-section">
@@ -634,6 +690,7 @@ function ExecutiveSummary({
           analysisId={analysisId}
           emptyLabel="No Walmart wins are available in the governed relationship set."
           relationships={priorityWins}
+          retailerFootprints={retailerFootprints}
         />
       </section>
       <section className="workspace-section">
@@ -677,10 +734,12 @@ function ExecutivePriorityTable({
   analysisId,
   emptyLabel,
   relationships,
+  retailerFootprints,
 }: Readonly<{
   analysisId: string;
   emptyLabel: string;
   relationships: ProductRelationship[];
+  retailerFootprints: Map<string, number>;
 }>) {
   const [selectedEvidenceTarget, setSelectedEvidenceTarget] =
     useState<ProductEvidenceTarget | null>(null);
@@ -739,25 +798,36 @@ function ExecutivePriorityTable({
                 <td>
                   <strong>
                     Walmart:{" "}
-                    {distributionShareLabel(
-                      relationship.benchmark_product.distribution,
+                    {reportFootprintLabel(
+                      relationship.benchmark_product,
+                      reportFootprintCountFor(
+                        relationship.benchmark_product,
+                        retailerFootprints,
+                      ),
                     )}
                   </strong>
                   <span>
                     Competitor:{" "}
-                    {distributionShareLabel(
-                      relationship.competitor_product.distribution,
+                    {reportFootprintLabel(
+                      relationship.competitor_product,
+                      reportFootprintCountFor(
+                        relationship.competitor_product,
+                        retailerFootprints,
+                      ),
                     )}
                   </span>
                   <span className="canonical-table-actions">
                     <button
                       type="button"
                       onClick={() =>
-                        setSelectedEvidenceTarget({
-                          product: relationship.benchmark_product,
-                          retailerLabel: "Walmart",
-                          roleLabel: "Walmart store evidence",
-                        })
+                        setSelectedEvidenceTarget(
+                          productEvidenceTarget(
+                            relationship.benchmark_product,
+                            "Walmart",
+                            "Walmart store evidence",
+                            retailerFootprints,
+                          ),
+                        )
                       }
                     >
                       Walmart stores
@@ -765,13 +835,16 @@ function ExecutivePriorityTable({
                     <button
                       type="button"
                       onClick={() =>
-                        setSelectedEvidenceTarget({
-                          product: relationship.competitor_product,
-                          retailerLabel: displayLabel(
-                            relationship.competitor_product.retailer_id,
+                        setSelectedEvidenceTarget(
+                          productEvidenceTarget(
+                            relationship.competitor_product,
+                            displayLabel(
+                              relationship.competitor_product.retailer_id,
+                            ),
+                            "Competitor store evidence",
+                            retailerFootprints,
                           ),
-                          roleLabel: "Competitor store evidence",
-                        })
+                        )
                       }
                     >
                       Competitor stores
@@ -800,7 +873,11 @@ function ExecutivePriorityTable({
 
 function ProductWinsLosses({
   dataset,
-}: Readonly<{ dataset: CanonicalDataset }>) {
+  retailerFootprints,
+}: Readonly<{
+  dataset: CanonicalDataset;
+  retailerFootprints: Map<string, number>;
+}>) {
   const [filters, setFilters] = useState<CanonicalRelationshipFilters>(
     DEFAULT_CANONICAL_RELATIONSHIP_FILTERS,
   );
@@ -954,16 +1031,19 @@ function ProductWinsLosses({
         title={`All Walmart losses (${groups.walmartLosses.length.toLocaleString()})`}
         note="These are all included competitor-win relationships, not illustrative examples."
         relationships={groups.walmartLosses}
+        retailerFootprints={retailerFootprints}
       />
       <RelationshipSection
         title={`All Walmart wins (${groups.walmartWins.length.toLocaleString()})`}
         note="These are all included Walmart-win relationships, not illustrative examples."
         relationships={groups.walmartWins}
+        retailerFootprints={retailerFootprints}
       />
       <RelationshipSection
         title={`Parity / unscored (${groups.parity.length.toLocaleString()})`}
         note="Shown separately so parity does not dilute the action list."
         relationships={groups.parity}
+        retailerFootprints={retailerFootprints}
       />
     </>
   );
@@ -971,13 +1051,17 @@ function ProductWinsLosses({
 
 function DistributionAssortment({
   analysisId,
-  relationships,
   productFootprints,
+  retailerFootprints,
+  broadWalmartProductCount,
+  broadWalmartRelationshipCount,
   totalRelationships,
 }: Readonly<{
   analysisId: string;
-  relationships: ProductRelationship[];
   productFootprints: ProductFootprint[];
+  retailerFootprints: Map<string, number>;
+  broadWalmartProductCount: number;
+  broadWalmartRelationshipCount: number;
   totalRelationships: number;
 }>) {
   const [selectedProductId, setSelectedProductId] = useState(
@@ -1006,10 +1090,11 @@ function DistributionAssortment({
         <div className="canonical-callout-grid">
           <article>
             <span>Broadly distributed</span>
-            <strong>{productFootprints.length.toLocaleString()}</strong>
+            <strong>{broadWalmartProductCount.toLocaleString()}</strong>
             <p>
               Walmart products with at least 1,000 positive-price stores across{" "}
-              {relationships.length.toLocaleString()} included relationships.
+              {broadWalmartRelationshipCount.toLocaleString()} included
+              relationships.
             </p>
           </article>
           <article>
@@ -1035,7 +1120,7 @@ function DistributionAssortment({
           <div>
             <h2>Exact-product map</h2>
             <p>
-              Select a Walmart product to load its source-backed location
+              Select any Walmart product to load its source-backed location
               evidence map. Counts are distribution/search-presence counts, not
               inventory or in-stock status.
             </p>
@@ -1082,8 +1167,10 @@ function DistributionAssortment({
                     key={row.product.retailer_product_id}
                   >
                     {row.product.title} ·{" "}
-                    {row.product.distribution.physical_store_distribution_count.toLocaleString()}{" "}
-                    stores
+                    {reportFootprintLabel(
+                      row.product,
+                      reportFootprintCountFor(row.product, retailerFootprints),
+                    )}
                   </option>
                 ))}
               </select>
@@ -1092,13 +1179,14 @@ function DistributionAssortment({
               <ProductLocationEvidencePanel
                 analysisId={analysisId}
                 footprint={selectedFootprint}
+                retailerFootprints={retailerFootprints}
               />
             ) : null}
           </>
         ) : (
           <p className="empty-note">
-            No Walmart products meet the broad-footprint threshold in this
-            governed relationship set.
+            No Walmart products have governed location evidence in this
+            relationship set.
           </p>
         )}
       </section>
@@ -1115,6 +1203,7 @@ function DistributionAssortment({
         </header>
         <ProductFootprintTable
           analysisId={analysisId}
+          retailerFootprints={retailerFootprints}
           rows={productFootprints}
         />
       </section>
@@ -1124,14 +1213,19 @@ function DistributionAssortment({
 
 function ProductFootprintTable({
   analysisId,
+  retailerFootprints,
   rows,
-}: Readonly<{ analysisId: string; rows: ProductFootprint[] }>) {
+}: Readonly<{
+  analysisId: string;
+  retailerFootprints: Map<string, number>;
+  rows: ProductFootprint[];
+}>) {
   const [selectedEvidenceTarget, setSelectedEvidenceTarget] =
     useState<ProductEvidenceTarget | null>(null);
   if (!rows.length) {
     return (
       <p className="empty-note">
-        No product footprints are available for the selected threshold.
+        No product footprints are available in this governed relationship set.
       </p>
     );
   }
@@ -1168,7 +1262,10 @@ function ProductFootprintTable({
                 </td>
                 <td>
                   <strong>
-                    {distributionShareLabel(row.product.distribution)}
+                    {reportFootprintLabel(
+                      row.product,
+                      reportFootprintCountFor(row.product, retailerFootprints),
+                    )}
                   </strong>
                   <span>
                     Store distribution counts exact product Search results with
@@ -1248,11 +1345,14 @@ function ProductFootprintTable({
                     <button
                       type="button"
                       onClick={() =>
-                        setSelectedEvidenceTarget({
-                          product: row.product,
-                          retailerLabel: "Walmart",
-                          roleLabel: "Walmart store evidence",
-                        })
+                        setSelectedEvidenceTarget(
+                          productEvidenceTarget(
+                            row.product,
+                            "Walmart",
+                            "Walmart store evidence",
+                            retailerFootprints,
+                          ),
+                        )
                       }
                     >
                       Drawer
@@ -1301,7 +1401,12 @@ function ProductThumb({
 function ProductLocationEvidencePanel({
   analysisId,
   footprint,
-}: Readonly<{ analysisId: string; footprint: ProductFootprint }>) {
+  retailerFootprints,
+}: Readonly<{
+  analysisId: string;
+  footprint: ProductFootprint;
+  retailerFootprints: Map<string, number>;
+}>) {
   const [selectedEvidenceTarget, setSelectedEvidenceTarget] =
     useState<ProductEvidenceTarget | null>(null);
   const mapRequestPath = useMemo(
@@ -1363,19 +1468,25 @@ function ProductLocationEvidencePanel({
           <strong>{footprint.product.title}</strong>
           <p>
             {footprint.product.retailer_product_id} ·{" "}
-            {distributionShareLabel(footprint.product.distribution)} ·{" "}
-            {brandTypeLabels[footprint.product.brand_type]}
+            {reportFootprintLabel(
+              footprint.product,
+              reportFootprintCountFor(footprint.product, retailerFootprints),
+            )}{" "}
+            · {brandTypeLabels[footprint.product.brand_type]}
           </p>
         </div>
         <button
           className="canonical-dataset-link"
           type="button"
           onClick={() =>
-            setSelectedEvidenceTarget({
-              product: footprint.product,
-              retailerLabel: "Walmart",
-              roleLabel: "Walmart store evidence",
-            })
+            setSelectedEvidenceTarget(
+              productEvidenceTarget(
+                footprint.product,
+                "Walmart",
+                "Walmart store evidence",
+                retailerFootprints,
+              ),
+            )
           }
         >
           Store list drawer
@@ -1384,6 +1495,10 @@ function ProductLocationEvidencePanel({
       <ExactProductMap
         mapData={displayedMapData}
         mapError={displayedMapError}
+        reportFootprintCount={reportFootprintCountFor(
+          footprint.product,
+          retailerFootprints,
+        )}
       />
       {selectedEvidenceTarget ? (
         <StoreEvidenceDrawer
@@ -1465,9 +1580,13 @@ function StoreEvidenceDrawer({
     searchedStoreCount === null
       ? null
       : Math.max(0, searchedStoreCount - observedStoreCount);
-  const storeShare =
+  const searchedRowShare =
     searchedStoreCount && searchedStoreCount > 0
       ? observedStoreCount / searchedStoreCount
+      : null;
+  const reportFootprintShare =
+    target.reportFootprintCount && target.reportFootprintCount > 0
+      ? observedStoreCount / target.reportFootprintCount
       : null;
   const fileStem = safeDownloadName(
     `${target.product.retailer_id}-${target.product.retailer_product_id}-store-evidence`,
@@ -1487,10 +1606,13 @@ function StoreEvidenceDrawer({
           product_id: target.product.retailer_product_id,
           distribution_contract: mapData?.distribution_contract ?? null,
           display: mapData?.display ?? null,
+          report_footprint_store_count: target.reportFootprintCount ?? null,
+          report_footprint_share: reportFootprintShare,
           searched_store_count: searchedStoreCount,
           observed_distribution_store_count: observedStoreCount,
           not_observed_searched_store_count: notObservedStoreCount,
-          store_share: storeShare,
+          searched_row_share: searchedRowShare,
+          store_share: searchedRowShare,
           rows: exportRows,
         },
         null,
@@ -1575,9 +1697,9 @@ ${worksheetRows
               <h2>{target.product.title}</h2>
               <small>
                 {target.retailerLabel} · {target.product.retailer_product_id} ·{" "}
-                {distributionShareLabel(
-                  target.product.distribution,
-                  searchedStoreCount,
+                {reportFootprintLabel(
+                  target.product,
+                  target.reportFootprintCount,
                 )}
               </small>
             </div>
@@ -1598,15 +1720,17 @@ ${worksheetRows
             </strong>
           </div>
           <div>
-            <span>Searched stores</span>
+            <span>Report footprint share</span>
             <strong>
-              {searchedStoreCount?.toLocaleString() ?? "Loading…"}
+              {reportFootprintShare === null
+                ? "Unavailable"
+                : formatPercent(reportFootprintShare)}
             </strong>
           </div>
           <div>
-            <span>Store share</span>
+            <span>Searched rows returned</span>
             <strong>
-              {storeShare === null ? "Loading…" : formatPercent(storeShare)}
+              {searchedStoreCount?.toLocaleString() ?? "Loading…"}
             </strong>
           </div>
           <div>
@@ -1624,8 +1748,10 @@ ${worksheetRows
                 Store rows are exact product store-level Search observations
                 with price greater than zero. This is distribution evidence, not
                 an in-stock claim. Downloads include observed distribution rows
-                and searched stores where this product was not observed, so the
-                share denominator is auditable.
+                and returned searched stores where this product was not
+                observed. Report footprint share uses the retailer denominator
+                shown in the current report, and searched-row share remains an
+                audit field.
               </p>
             </div>
             <div className="canonical-drawer-export-actions">
@@ -1665,16 +1791,20 @@ ${worksheetRows
                 <span>
                   {observedStoreCount.toLocaleString()} observed distribution
                   stores
-                  {searchedStoreCount
-                    ? ` · ${searchedStoreCount.toLocaleString()} searched stores · ${formatPercent(
-                        observedStoreCount / searchedStoreCount,
-                      )} store share`
-                    : " · searched-store denominator unavailable"}
+                  {target.reportFootprintCount && reportFootprintShare !== null
+                    ? ` · ${formatPercent(
+                        reportFootprintShare,
+                      )} of ${target.reportFootprintCount.toLocaleString()} ${target.retailerLabel} report footprint stores`
+                    : " · report-footprint denominator unavailable"}
                 </span>
                 <span>
                   {rows.length.toLocaleString()} returned observed store rows ·{" "}
-                  {mapData.display.distribution_store_count.toLocaleString()}{" "}
-                  source-backed distribution stores
+                  {searchedStoreCount
+                    ? `${searchedStoreCount.toLocaleString()} returned searched store rows`
+                    : "returned searched-row denominator unavailable"}
+                  {searchedRowShare !== null
+                    ? ` · ${formatPercent(searchedRowShare)} searched-row share`
+                    : ""}
                 </span>
                 {notObservedStoreCount !== null ? (
                   <span>
@@ -1765,14 +1895,20 @@ function pointClass(point: PriceMonitoringMapPoint) {
 function ExactProductMap({
   mapData,
   mapError,
+  reportFootprintCount,
 }: Readonly<{
   mapData: PriceMonitoringMap | null;
   mapError: string | null;
+  reportFootprintCount: number | null;
 }>) {
   const searchedStoreCount = searchedStoreCountFromMap(mapData);
-  const storeShare =
+  const searchedRowShare =
     mapData && searchedStoreCount
       ? mapData.display.distribution_store_count / searchedStoreCount
+      : null;
+  const reportFootprintShare =
+    mapData && reportFootprintCount
+      ? mapData.display.distribution_store_count / reportFootprintCount
       : null;
   const visiblePoints = useMemo(
     () =>
@@ -1851,9 +1987,11 @@ function ExactProductMap({
           <span>Source-backed location evidence</span>
           <strong>
             {mapData
-              ? `${mapData.display.distribution_store_count.toLocaleString()} of ${
-                  searchedStoreCount?.toLocaleString() ?? "unknown"
-                } searched stores`
+              ? reportFootprintCount
+                ? `${mapData.display.distribution_store_count.toLocaleString()} stores (${formatPercent(
+                    reportFootprintShare ?? 0,
+                  )} of ${reportFootprintCount.toLocaleString()} report footprint)`
+                : `${mapData.display.distribution_store_count.toLocaleString()} stores`
               : mapError
                 ? "Unavailable"
                 : "Loading…"}
@@ -1861,10 +1999,12 @@ function ExactProductMap({
           <p>
             {mapData
               ? `${
-                  storeShare === null
-                    ? "Store share unavailable"
-                    : `${formatPercent(storeShare)} store share`
-                }; ${mapData.display.service_area_presence_count.toLocaleString()} service-area presences tracked separately.`
+                  searchedStoreCount && searchedRowShare !== null
+                    ? `${searchedStoreCount.toLocaleString()} returned searched store rows; ${formatPercent(
+                        searchedRowShare,
+                      )} searched-row share.`
+                    : "Returned searched-row denominator unavailable."
+                } ${mapData.display.service_area_presence_count.toLocaleString()} service-area presences tracked separately.`
               : (mapError ??
                 "Fetching exact product map evidence from the report API.")}
           </p>
@@ -1960,6 +2100,7 @@ function PriceArchitecture({
   analysisId,
   relationships,
   brandGroups,
+  retailerFootprints,
 }: Readonly<{
   analysisId: string;
   relationships: ProductRelationship[];
@@ -1967,6 +2108,7 @@ function PriceArchitecture({
     brandType: BrandType;
     relationships: ProductRelationship[];
   }>;
+  retailerFootprints: Map<string, number>;
 }>) {
   return (
     <>
@@ -1985,6 +2127,7 @@ function PriceArchitecture({
         <PriceArchitectureTable
           analysisId={analysisId}
           relationships={relationships}
+          retailerFootprints={retailerFootprints}
         />
       </section>
       {brandGroups
@@ -2007,6 +2150,7 @@ function PriceArchitecture({
             <PriceArchitectureTable
               analysisId={analysisId}
               relationships={relationships}
+              retailerFootprints={retailerFootprints}
             />
           </section>
         ))}
@@ -2017,7 +2161,12 @@ function PriceArchitecture({
 function PriceArchitectureTable({
   analysisId,
   relationships,
-}: Readonly<{ analysisId: string; relationships: ProductRelationship[] }>) {
+  retailerFootprints,
+}: Readonly<{
+  analysisId: string;
+  relationships: ProductRelationship[];
+  retailerFootprints: Map<string, number>;
+}>) {
   const [selectedEvidenceTarget, setSelectedEvidenceTarget] =
     useState<ProductEvidenceTarget | null>(null);
   const rows = [...relationships].sort(
@@ -2085,25 +2234,36 @@ function PriceArchitectureTable({
               <td>
                 <strong>
                   WMT{" "}
-                  {distributionShareLabel(
-                    relationship.benchmark_product.distribution,
+                  {reportFootprintLabel(
+                    relationship.benchmark_product,
+                    reportFootprintCountFor(
+                      relationship.benchmark_product,
+                      retailerFootprints,
+                    ),
                   )}
                 </strong>
                 <span>
                   {displayLabel(relationship.competitor_product.retailer_id)}{" "}
-                  {distributionShareLabel(
-                    relationship.competitor_product.distribution,
+                  {reportFootprintLabel(
+                    relationship.competitor_product,
+                    reportFootprintCountFor(
+                      relationship.competitor_product,
+                      retailerFootprints,
+                    ),
                   )}
                 </span>
                 <span className="canonical-table-actions">
                   <button
                     type="button"
                     onClick={() =>
-                      setSelectedEvidenceTarget({
-                        product: relationship.benchmark_product,
-                        retailerLabel: "Walmart",
-                        roleLabel: "Walmart store evidence",
-                      })
+                      setSelectedEvidenceTarget(
+                        productEvidenceTarget(
+                          relationship.benchmark_product,
+                          "Walmart",
+                          "Walmart store evidence",
+                          retailerFootprints,
+                        ),
+                      )
                     }
                   >
                     WMT stores
@@ -2111,13 +2271,16 @@ function PriceArchitectureTable({
                   <button
                     type="button"
                     onClick={() =>
-                      setSelectedEvidenceTarget({
-                        product: relationship.competitor_product,
-                        retailerLabel: displayLabel(
-                          relationship.competitor_product.retailer_id,
+                      setSelectedEvidenceTarget(
+                        productEvidenceTarget(
+                          relationship.competitor_product,
+                          displayLabel(
+                            relationship.competitor_product.retailer_id,
+                          ),
+                          "Competitor store evidence",
+                          retailerFootprints,
                         ),
-                        roleLabel: "Competitor store evidence",
-                      })
+                      )
                     }
                   >
                     Comp stores
@@ -2279,10 +2442,12 @@ function RelationshipSection({
   title,
   note,
   relationships,
+  retailerFootprints,
 }: Readonly<{
   title: string;
   note: string;
   relationships: ProductRelationship[];
+  retailerFootprints: Map<string, number>;
 }>) {
   return (
     <section className="workspace-section">
@@ -2298,6 +2463,7 @@ function RelationshipSection({
             <RelationshipCard
               key={relationship.relationship_id}
               relationship={relationship}
+              retailerFootprints={retailerFootprints}
             />
           ))}
         </div>
@@ -2310,7 +2476,11 @@ function RelationshipSection({
 
 function RelationshipCard({
   relationship,
-}: Readonly<{ relationship: ProductRelationship }>) {
+  retailerFootprints,
+}: Readonly<{
+  relationship: ProductRelationship;
+  retailerFootprints: Map<string, number>;
+}>) {
   const benchmarkHref = productHref(relationship.benchmark_product.url);
   const competitorHref = productHref(relationship.competitor_product.url);
   const delta = relationship.comparison.price_delta;
@@ -2330,8 +2500,12 @@ function RelationshipCard({
           imageUrl={relationship.benchmark_product.image_url}
           retailer="Walmart"
           price={relationship.benchmark_product.price.reporting_price_label}
-          distribution={distributionShareLabel(
-            relationship.benchmark_product.distribution,
+          distribution={reportFootprintLabel(
+            relationship.benchmark_product,
+            reportFootprintCountFor(
+              relationship.benchmark_product,
+              retailerFootprints,
+            ),
           )}
         />
         <span className="canonical-versus">vs</span>
@@ -2341,8 +2515,12 @@ function RelationshipCard({
           imageUrl={relationship.competitor_product.image_url}
           retailer={displayLabel(relationship.competitor_product.retailer_id)}
           price={relationship.competitor_product.price.reporting_price_label}
-          distribution={distributionShareLabel(
-            relationship.competitor_product.distribution,
+          distribution={reportFootprintLabel(
+            relationship.competitor_product,
+            reportFootprintCountFor(
+              relationship.competitor_product,
+              retailerFootprints,
+            ),
           )}
         />
       </div>
