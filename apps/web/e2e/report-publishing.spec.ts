@@ -56,11 +56,32 @@ test("shows durable report progress and trust audit evidence", async ({
       ]),
     });
   });
+  await page.route("**/api/admin/report-publishing/summary", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        active_reports: {
+          active_total: 5,
+          active_ready: 5,
+          active_pending: 0,
+          active_blocked: 0,
+          latest_ready_at: "2026-09-10T03:33:06.685Z",
+        },
+        recent_job_counts: {
+          running: 1,
+          succeeded: 1,
+        },
+        recent_jobs: [],
+      }),
+    });
+  });
 
   await page.goto("/admin/report-publishing");
   await expect(
     page.getByRole("heading", { name: "Report Publishing" }),
   ).toBeVisible();
+  await expect(page.getByText("5 ready reports")).toBeVisible();
+  await expect(page.getByText("0 pending · 0 blocked")).toBeVisible();
   await expect(
     page.getByText("fresh_fluid_milk-release-candidate"),
   ).toBeVisible();

@@ -952,6 +952,74 @@ async def list_report_materialization_jobs(
         return [dict(row) for row in rows]
 
 
+@router.get("/admin/report-materialization-jobs/summary")
+async def report_materialization_summary(
+    request: Request,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> dict[str, Any]:
+    _require_admin(request, x_rci_admin_token)
+    async with request.app.state.database_probe.engine.connect() as connection:
+        active = (
+            await connection.execute(
+                text(
+                    """
+                    SELECT
+                      COUNT(*) FILTER (WHERE r.archived_at IS NULL) AS active_total,
+                      COUNT(*) FILTER (
+                        WHERE r.archived_at IS NULL AND r.reporting_status = 'ready'
+                      ) AS active_ready,
+                      COUNT(*) FILTER (
+                        WHERE r.archived_at IS NULL AND r.reporting_status = 'pending'
+                      ) AS active_pending,
+                      COUNT(*) FILTER (
+                        WHERE r.archived_at IS NULL AND r.reporting_status = 'blocked'
+                      ) AS active_blocked,
+                      MAX(r.created_at) FILTER (
+                        WHERE r.archived_at IS NULL AND r.reporting_status = 'ready'
+                      ) AS latest_ready_at
+                    FROM analysis_result r
+                    """
+                )
+            )
+            .mappings()
+            .one()
+        )
+        job_counts = (
+            await connection.execute(
+                text(
+                    """
+                    SELECT status, COUNT(*) AS count
+                    FROM report_materialization_job
+                    WHERE created_at >= now() - interval '14 days'
+                    GROUP BY status
+                    ORDER BY status
+                    """
+                )
+            )
+        ).mappings()
+        recent_jobs = (
+            await connection.execute(
+                text(
+                    """
+                    SELECT job.id::text, result.analysis_id, run.product_pack_id,
+                      job.status, job.stage, job.progress_current, job.progress_total,
+                      job.last_error, job.updated_at
+                    FROM report_materialization_job job
+                    JOIN analysis_result result ON result.id = job.analysis_result_id
+                    JOIN analysis_run run ON run.id = result.analysis_run_id
+                    ORDER BY job.updated_at DESC
+                    LIMIT 5
+                    """
+                )
+            )
+        ).mappings()
+    return {
+        "active_reports": dict(active),
+        "recent_job_counts": {str(row["status"]): int(row["count"]) for row in job_counts},
+        "recent_jobs": [dict(row) for row in recent_jobs],
+    }
+
+
 @router.post("/admin/report-materialization-jobs/{job_id}/retry")
 async def retry_report_materialization_job(
     job_id: str,

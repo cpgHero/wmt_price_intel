@@ -2,8 +2,7 @@
 
 ## Status
 
-Implemented locally on 2026-09-10. Release CI, deployment, and production
-acceptance are pending.
+Implemented, merged, deployed, and production-verified on 2026-09-10.
 
 ## Context
 
@@ -42,3 +41,10 @@ retailer preparation raises anything other than `LookupError`.
 - Focused API tests cover both paths:
   - missing retailer evidence emits a zero-evidence unavailable row;
   - runtime preparation failure refuses to build a partial matrix.
+- PR #4 passed release CI and merged as `a606748d`.
+- Railway production health returned ready with API dependency OK.
+- The deployed API container was inspected directly and contains the fail-closed
+  preparation guard.
+- Production report-library verification showed one active ready report and zero
+  active blocked reports for Fresh Bananas, Fresh Fluid Milk, Fresh Ground Beef,
+  Fresh Shell Eggs, and Fresh Strawberries.
