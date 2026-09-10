@@ -236,7 +236,7 @@ export function simplifiedNavigationEnabled(
   environment: Record<string, string | undefined> = process.env,
 ): boolean {
   const flag = environment.NEXT_PUBLIC_RCI_SIMPLIFIED_NAV;
-  return flag === "1" || flag === "true" || flag === "enabled";
+  return flag !== "0" && flag !== "false" && flag !== "disabled";
 }
 
 export function applicationNavigationForExperience(

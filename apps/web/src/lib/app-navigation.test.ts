@@ -48,8 +48,12 @@ describe("application navigation", () => {
       true,
     );
     expect(activeNavigationItem("/workspace/matches")).toBeNull();
+    expect(activeNavigationItem("/price-intelligence/analysis-123")).toBeNull();
     expect(
-      activeNavigationItem("/price-intelligence/analysis-123")?.label,
+      activeNavigationItem(
+        "/price-intelligence/analysis-123",
+        applicationNavigation,
+      )?.label,
     ).toBe("Price Intelligence");
     expect(activeNavigationItem("/admin/matching-v2")?.label).toBe(
       "Match Certification",
@@ -70,8 +74,23 @@ describe("application navigation", () => {
     expect(activeNavigationItem("/health")).toBeNull();
   });
 
-  it("keeps simplified navigation reports-first behind an explicit flag", () => {
-    expect(simplifiedNavigationEnabled({})).toBe(false);
+  it("uses simplified navigation by default and keeps legacy navigation behind an explicit disable flag", () => {
+    expect(simplifiedNavigationEnabled({})).toBe(true);
+    expect(
+      simplifiedNavigationEnabled({
+        NEXT_PUBLIC_RCI_SIMPLIFIED_NAV: "0",
+      }),
+    ).toBe(false);
+    expect(
+      simplifiedNavigationEnabled({
+        NEXT_PUBLIC_RCI_SIMPLIFIED_NAV: "false",
+      }),
+    ).toBe(false);
+    expect(
+      simplifiedNavigationEnabled({
+        NEXT_PUBLIC_RCI_SIMPLIFIED_NAV: "disabled",
+      }),
+    ).toBe(false);
     expect(
       simplifiedNavigationEnabled({
         NEXT_PUBLIC_RCI_SIMPLIFIED_NAV: "enabled",

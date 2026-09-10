@@ -7,13 +7,13 @@ export default function ReportPublishingPage() {
     <main>
       <header className="page-header compact product-pack-page-header">
         <div>
-          <p className="eyebrow">Publication reliability</p>
-          <h1>Report Publishing</h1>
+          <p className="eyebrow">Pipeline reliability</p>
+          <h1>Pipeline Status</h1>
         </div>
         <div className="page-header-actions">
           <p>
-            Follow background materialization, semantic trust checks, retries,
-            and atomic report activation.
+            Follow report readiness, background materialization, semantic trust
+            checks, retries, and atomic activation.
           </p>
         </div>
       </header>

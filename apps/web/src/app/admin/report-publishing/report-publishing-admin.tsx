@@ -318,8 +318,8 @@ export function ReportPublishingAdmin() {
         <span className="section-kicker">Restricted operations</span>
         <h2>Administrator authentication required</h2>
         <p>
-          Report-publishing status contains release diagnostics and retry
-          controls.
+          Pipeline Status contains release diagnostics, report readiness, and
+          retry controls.
         </p>
         {session.configured ? (
           <form onSubmit={signIn}>
@@ -334,7 +334,7 @@ export function ReportPublishingAdmin() {
               />
             </label>
             <button className="button primary" disabled={busy} type="submit">
-              {busy ? "Checking…" : "Open Report Publishing"}
+              {busy ? "Checking…" : "Open Pipeline Status"}
             </button>
           </form>
         ) : (
@@ -349,8 +349,8 @@ export function ReportPublishingAdmin() {
     <section className={styles.workspace}>
       <div className={styles.toolbar}>
         <p className={styles.summary}>
-          This page tracks publishing jobs. Completed reports remain available
-          in the report library even when no job is currently running.
+          This page tracks report pipeline jobs. Completed reports remain
+          available in the report library even when no job is currently running.
         </p>
         <button
           className="button secondary"
@@ -397,7 +397,7 @@ export function ReportPublishingAdmin() {
           jobs.map((job) => <JobCard job={job} key={job.id} retry={retry} />)
         ) : (
           <div className={styles.empty}>
-            <h2>No publishing jobs are running</h2>
+            <h2>No report pipeline jobs are running</h2>
             <p>
               This does not mean there are no reports. Open the report library
               to view active reports; new reprocessing jobs will appear here
