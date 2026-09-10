@@ -123,13 +123,13 @@ function brandTypesSummary(
 export function AnalysisWorkspace({
   analysis,
   reportView,
-  canonicalPreview = false,
+  canonicalReport = false,
 }: Readonly<{
   analysis: AnalysisRecord;
   reportView: AnalysisReportView | null;
-  canonicalPreview?: boolean;
+  canonicalReport?: boolean;
 }>) {
-  if (reportView && canonicalPreview) {
+  if (reportView && canonicalReport) {
     return (
       <CanonicalReportWorkspace analysis={analysis} reportView={reportView} />
     );

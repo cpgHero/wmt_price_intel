@@ -250,16 +250,8 @@ export default async function AnalysesPage({
                         className="button secondary"
                         href={`/analyses/${encodeURIComponent(summary.analysis.analysis_id)}`}
                       >
-                        Open current report
+                        Open report
                       </Link>
-                      {summary.analysis.schema_version === "2.0.0" ? (
-                        <Link
-                          className="button secondary canonical-preview-action"
-                          href={`/analyses/${encodeURIComponent(summary.analysis.analysis_id)}?experience=canonical`}
-                        >
-                          Open simplified preview
-                        </Link>
-                      ) : null}
                     </div>
                   </div>
                   <dl className="report-library-meta">

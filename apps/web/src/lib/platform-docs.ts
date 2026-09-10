@@ -2936,6 +2936,12 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "2026-09-10",
               "Implemented locally; release CI, deployment, and production acceptance pending",
+              "Canonical report workspace is now the default AnalysisResult v2 report experience.",
+              "The Reports library opens the canonical five-tab report directly and no longer presents a separate simplified-preview action. The canonical report header no longer labels itself as a preview, and the old workspace remains available only through explicit legacy query flags for audit comparison. This changes report workspace routing and explanatory UI copy only; it does not change source data, report calculations, distribution rules, publication gates, matching, provider calls, PDP calls, AI calls, reprocessing, PDF export, or historical artifacts.",
+            ],
+            [
+              "2026-09-10",
+              "Merged, deployed, and production-verified",
               "Simplified Reports-first navigation is now the default app navigation.",
               "The default sidebar now presents Reports as the only Analytics entry, keeps Collections and Schedules & Alerts in Operations, exposes the existing report-publishing route as Pipeline Status, and keeps Match Certification, Product Packs, Brand Governance, Study Discovery, System Operations, and Platform Docs in Administration. The legacy navigation remains available only when `NEXT_PUBLIC_RCI_SIMPLIFIED_NAV` is explicitly set to `0`, `false`, or `disabled`. The Pipeline Status page title, authentication copy, and Reports empty-state diagnostics now use the same simplified terminology. This changes navigation and explanatory UI copy only; it does not delete routes, source data, report calculations, publication gates, matching, provider calls, PDP calls, AI calls, reprocessing, PDF export, or historical artifacts.",
             ],
