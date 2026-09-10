@@ -15,6 +15,7 @@ const contracts = [
   ["analysis-result.schema.json", "analysis-result.ts"],
   ["analysis-result-v2.schema.json", "analysis-result-v2.ts"],
   ["canonical-product.schema.json", "canonical-product.ts"],
+  ["canonical-report-dataset.schema.json", "canonical-report-dataset.ts"],
   ["collection-definition.schema.json", "collection-definition.ts"],
   [
     "collection-geography-request.schema.json",

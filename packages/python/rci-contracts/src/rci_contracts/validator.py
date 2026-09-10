@@ -121,6 +121,8 @@ def _targets(root: Path) -> Iterable[ContractTarget]:
         "report-blueprint.schema.json",
         root / "examples" / "report-blueprint.ground-beef.json",
     )
+    for manifest in sorted((root / "examples").glob("canonical-report-dataset.*.json")):
+        yield ContractTarget("canonical-report-dataset.schema.json", manifest)
     for manifest in sorted((root / "examples").glob("historical-input-manifest.*.json")):
         yield ContractTarget("historical-input-manifest.schema.json", manifest)
     yield ContractTarget(

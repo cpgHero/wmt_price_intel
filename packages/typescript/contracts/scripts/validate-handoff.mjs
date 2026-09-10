@@ -53,6 +53,9 @@ const analysisV2Validator = validator("analysis-result-v2.schema.json");
 const analysisEvidenceValidator = validator("analysis-evidence.schema.json");
 const analysisBriefValidator = validator("analysis-brief.schema.json");
 const canonicalProductValidator = validator("canonical-product.schema.json");
+const canonicalReportDatasetValidator = validator(
+  "canonical-report-dataset.schema.json",
+);
 const productDetailSnapshotValidator = validator(
   "product-detail-snapshot.schema.json",
 );
@@ -248,6 +251,11 @@ await assertValid(
   canonicalProductValidator,
   await loadJson("examples", "canonical-product.ground-beef.json"),
   "canonical product",
+);
+await assertValid(
+  canonicalReportDatasetValidator,
+  await loadJson("examples", "canonical-report-dataset.bananas.json"),
+  "canonical report dataset",
 );
 await assertValid(
   productDetailSnapshotValidator,
@@ -523,6 +531,6 @@ console.log(
     agentPromptFiles.length +
     brandFoundationIndex.foundations.length +
     retailerPackIndex.packs.length +
-    17
+    18
   } normative JSON documents.`,
 );

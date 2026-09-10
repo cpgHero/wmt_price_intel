@@ -157,6 +157,101 @@ def test_price_monitoring_examples_are_contract_valid_and_search_authoritative()
     assert view["source"]["authority"] == "Search"
 
 
+def test_canonical_report_dataset_contract_preserves_reporting_trust_boundaries() -> None:
+    dataset = json.loads(
+        (REPOSITORY_ROOT / "examples/canonical-report-dataset.bananas.json").read_text()
+    )
+
+    validate_instance(
+        REPOSITORY_ROOT,
+        "canonical-report-dataset.schema.json",
+        dataset,
+        label="canonical bananas report dataset example",
+    )
+
+    relationship = dataset["product_relationships"][0]
+    assert relationship["benchmark_product"]["retailer_product_id"] == "44390948"
+    assert relationship["benchmark_product"]["seller_status"] == "qualified"
+    assert dataset["contracts"]["distribution"] == {
+        "version": "1.0.0",
+        "basis": "positive_price_store_search_result",
+        "grain": "retailer_product_id_x_store_id",
+        "deduplication": "distinct_store_id_per_product",
+        "price_rule": "price_gt_zero",
+        "inventory_claim": False,
+        "stock_status_used": False,
+        "sponsorship_used": False,
+        "extrapolation": False,
+    }
+    assert dataset["price_normalization"]["zero_price_sentinel_rule"] == (
+        "zero_regular_or_discounted_price_is_missing"
+    )
+
+
+def test_canonical_report_dataset_rejects_zero_prices_inventory_claims_and_bad_ids() -> None:
+    dataset = json.loads(
+        (REPOSITORY_ROOT / "examples/canonical-report-dataset.bananas.json").read_text()
+    )
+
+    zero_reporting_price = deepcopy(dataset)
+    zero_reporting_price["product_relationships"][0]["benchmark_product"]["price"][
+        "reporting_price"
+    ] = 0
+    with pytest.raises(ContractError):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "canonical-report-dataset.schema.json",
+            zero_reporting_price,
+            label="canonical report dataset with zero reporting price",
+        )
+
+    zero_discounted_price = deepcopy(dataset)
+    zero_discounted_price["product_relationships"][0]["competitor_product"]["price"][
+        "discounted_price"
+    ] = 0
+    with pytest.raises(ContractError):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "canonical-report-dataset.schema.json",
+            zero_discounted_price,
+            label="canonical report dataset with zero discounted price sentinel",
+        )
+
+    inventory_claim = deepcopy(dataset)
+    inventory_claim["contracts"]["distribution"]["inventory_claim"] = True
+    with pytest.raises(ContractError):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "canonical-report-dataset.schema.json",
+            inventory_claim,
+            label="canonical report dataset with inventory claim",
+        )
+
+    numeric_product_id = deepcopy(dataset)
+    numeric_product_id["product_relationships"][0]["benchmark_product"]["retailer_product_id"] = (
+        44390948
+    )
+    with pytest.raises(ContractError):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "canonical-report-dataset.schema.json",
+            numeric_product_id,
+            label="canonical report dataset with numeric product id",
+        )
+
+    unqualified_benchmark_seller = deepcopy(dataset)
+    unqualified_benchmark_seller["product_relationships"][0]["benchmark_product"][
+        "seller_status"
+    ] = "not_qualified"
+    with pytest.raises(ContractError):
+        validate_instance(
+            REPOSITORY_ROOT,
+            "canonical-report-dataset.schema.json",
+            unqualified_benchmark_seller,
+            label="canonical report dataset with unqualified benchmark seller",
+        )
+
+
 def test_distribution_contracts_reject_inventory_fields_and_invalid_store_identity() -> None:
     observation = json.loads(
         (REPOSITORY_ROOT / "examples/price-observation.example.json").read_text()

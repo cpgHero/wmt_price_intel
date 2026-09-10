@@ -3,16 +3,47 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const publicAvailabilityRoutes = [
-  "../app/api/price-monitoring/[analysisId]/route.ts",
-  "../app/api/price-monitoring/[analysisId]/catalog/route.ts",
-  "../app/api/price-monitoring/[analysisId]/map/route.ts",
-  "../app/api/price-monitoring/[analysisId]/architecture-matrix/route.ts",
-  "../app/api/price-monitoring/[analysisId]/evidence.csv/route.ts",
-  "../app/api/analyses/[analysisId]/competitive-decision-quality/route.ts",
-  "../app/api/analyses/[analysisId]/competitive-portfolio-scorecards/route.ts",
-  "../app/api/analyses/[analysisId]/competitive-product-coverage/route.ts",
-  "../app/api/analyses/[analysisId]/competitive-product-leadership/route.ts",
-  "../app/api/analyses/[analysisId]/product-decisions/[decisionId]/evidence/route.ts",
+  { paths: ["../app/api/price-monitoring/[analysisId]/route.ts"] },
+  { paths: ["../app/api/price-monitoring/[analysisId]/catalog/route.ts"] },
+  { paths: ["../app/api/price-monitoring/[analysisId]/map/route.ts"] },
+  {
+    paths: [
+      "../app/api/price-monitoring/[analysisId]/architecture-matrix/route.ts",
+    ],
+  },
+  { paths: ["../app/api/price-monitoring/[analysisId]/evidence.csv/route.ts"] },
+  {
+    paths: [
+      "../app/api/analyses/[analysisId]/competitive-decision-quality/route.ts",
+    ],
+  },
+  {
+    paths: [
+      "../app/api/analyses/[analysisId]/competitive-portfolio-scorecards/route.ts",
+    ],
+  },
+  {
+    paths: [
+      "../app/api/analyses/[analysisId]/competitive-product-coverage/route.ts",
+    ],
+  },
+  {
+    paths: [
+      "../app/api/analyses/[analysisId]/competitive-product-leadership/route.ts",
+    ],
+  },
+  {
+    paths: [
+      "../app/api/analyses/[analysisId]/canonical-report-dataset/route.ts",
+      "./canonical-report-dataset-route.ts",
+    ],
+    minNoStoreMentions: 1,
+  },
+  {
+    paths: [
+      "../app/api/analyses/[analysisId]/product-decisions/[decisionId]/evidence/route.ts",
+    ],
+  },
 ];
 
 const publicAvailabilityClients = [
@@ -25,15 +56,18 @@ const publicAvailabilityClients = [
 
 describe("public availability proxy caching", () => {
   it.each(publicAvailabilityRoutes)(
-    "does not cache successful or quarantined availability responses: %s",
-    (relativePath) => {
-      const source = readFileSync(
-        new URL(relativePath, import.meta.url),
-        "utf8",
-      );
+    "does not cache successful or quarantined availability responses: $paths",
+    ({ paths, minNoStoreMentions = 2 }) => {
+      const source = paths
+        .map((relativePath) =>
+          readFileSync(new URL(relativePath, import.meta.url), "utf8"),
+        )
+        .join("\n");
 
       expect(source).toContain("no-store");
-      expect(source.match(/no-store/g)?.length ?? 0).toBeGreaterThanOrEqual(2);
+      expect(source.match(/no-store/g)?.length ?? 0).toBeGreaterThanOrEqual(
+        minNoStoreMentions,
+      );
       expect(source).not.toContain("stale-while-revalidate");
     },
   );

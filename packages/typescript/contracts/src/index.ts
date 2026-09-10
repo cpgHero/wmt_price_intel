@@ -3,6 +3,7 @@ export type { RetailCompetitiveIntelligenceAnalysisResultV2 } from "./generated/
 export type { RetailCompetitiveIntelligenceAnalysisEvidenceSet } from "./generated/analysis-evidence";
 export type { RetailCompetitiveIntelligenceAnalysisBrief } from "./generated/analysis-brief";
 export type { RetailCompetitiveIntelligenceCanonicalProduct } from "./generated/canonical-product";
+export type { RetailCompetitiveIntelligenceCanonicalReportDataset } from "./generated/canonical-report-dataset";
 export type { RetailCompetitiveIntelligenceCollectionDefinition } from "./generated/collection-definition";
 export type { RetailCompetitiveIntelligenceCollectionGeographyRequest } from "./generated/collection-geography-request";
 export type { RetailCompetitiveIntelligenceCollectionGeographyResolution } from "./generated/collection-geography-resolution";

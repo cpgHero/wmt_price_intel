@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import {
-  applicationNavigation,
+  applicationNavigationForExperience,
   homeNavigationItem,
   navigationItemIsActive,
   type NavigationGroup,
@@ -34,8 +34,9 @@ export function PrimaryNavigation({
   onNavigate,
 }: Readonly<{ onNavigate?: () => void }>) {
   const pathname = usePathname();
+  const navigationGroups = applicationNavigationForExperience();
   const activeGroupId =
-    applicationNavigation.find((group) =>
+    navigationGroups.find((group) =>
       group.items.some((item) => navigationItemIsActive(pathname, item)),
     )?.id ?? "analytics";
   const [openGroups, setOpenGroups] = useState<Set<string>>(
@@ -103,7 +104,7 @@ export function PrimaryNavigation({
         </span>
         <span className={styles.copy}>{homeNavigationItem.label}</span>
       </Link>
-      {applicationNavigation.map((group) => {
+      {navigationGroups.map((group) => {
         const open = openGroups.has(group.id);
         const containsActive = group.id === activeGroupId;
         const childrenId = `navigation-${group.id}`;

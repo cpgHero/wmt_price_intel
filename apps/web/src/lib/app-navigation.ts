@@ -140,6 +140,111 @@ export const applicationNavigation: readonly NavigationGroup[] = [
   },
 ] as const;
 
+export const simplifiedApplicationNavigation: readonly NavigationGroup[] = [
+  {
+    id: "analytics",
+    label: "Analytics",
+    items: [
+      {
+        label: "Reports",
+        description: "Unified product-level price intelligence reports",
+        href: "/analyses",
+        icon: "intelligence",
+        match: "prefix",
+      },
+    ],
+  },
+  {
+    id: "operations",
+    label: "Operations",
+    items: [
+      {
+        label: "Collections",
+        description: "Definitions, runs, and paid collection controls",
+        href: "/collections",
+        icon: "collections",
+        match: "prefix",
+      },
+      {
+        label: "Schedules & Alerts",
+        description: "Recurring work, conditions, and delivery",
+        href: "/automation",
+        icon: "automation",
+        match: "prefix",
+      },
+      {
+        label: "Pipeline Status",
+        description: "Readiness, materialization, and publication blockers",
+        href: "/admin/report-publishing",
+        icon: "quality",
+        match: "prefix",
+      },
+    ],
+  },
+  {
+    id: "administration",
+    label: "Administration",
+    items: [
+      {
+        label: "Match Certification",
+        description:
+          "Single-decision Matching v2 evidence and release gold sets",
+        href: "/admin/matching-v2",
+        icon: "quality",
+        match: "prefix",
+      },
+      {
+        label: "Product Packs",
+        description: "Governed category rules and certification",
+        href: "/admin/product-packs",
+        icon: "product-packs",
+        match: "prefix",
+      },
+      {
+        label: "Brand Governance",
+        description: "Classify and govern observed brands across reports",
+        href: "/workspace/brands",
+        icon: "brands",
+        match: "prefix",
+      },
+      {
+        label: "Study Discovery",
+        description: "Evidence-led category onboarding",
+        href: "/admin/studies",
+        icon: "studies",
+        match: "prefix",
+      },
+      {
+        label: "System Operations",
+        description: "Release, queue, spend, and recovery readiness",
+        href: "/admin/operations",
+        icon: "operations",
+        match: "prefix",
+      },
+      {
+        label: "Platform Docs",
+        description: "Owner and administrator operating guide",
+        href: "/admin/docs",
+        icon: "docs",
+        match: "prefix",
+      },
+    ],
+  },
+] as const;
+
+export function simplifiedNavigationEnabled(
+  environment: Record<string, string | undefined> = process.env,
+): boolean {
+  const flag = environment.NEXT_PUBLIC_RCI_SIMPLIFIED_NAV;
+  return flag === "1" || flag === "true" || flag === "enabled";
+}
+
+export function applicationNavigationForExperience(
+  simplified = simplifiedNavigationEnabled(),
+): readonly NavigationGroup[] {
+  return simplified ? simplifiedApplicationNavigation : applicationNavigation;
+}
+
 export function navigationItemIsActive(
   pathname: string,
   item: NavigationItem,
@@ -148,11 +253,14 @@ export function navigationItemIsActive(
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
-export function activeNavigationItem(pathname: string): NavigationItem | null {
+export function activeNavigationItem(
+  pathname: string,
+  groups: readonly NavigationGroup[] = applicationNavigationForExperience(),
+): NavigationItem | null {
   if (navigationItemIsActive(pathname, homeNavigationItem)) {
     return homeNavigationItem;
   }
-  for (const group of applicationNavigation) {
+  for (const group of groups) {
     const item = group.items.find((candidate) =>
       navigationItemIsActive(pathname, candidate),
     );

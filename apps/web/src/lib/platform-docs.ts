@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 9, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.83",
+  version: "1.3.105",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2933,6 +2933,138 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-09",
+              "Simplified Reports-first navigation model added behind flag",
+              "The app navigation now has a preview-only simplified model enabled by `NEXT_PUBLIC_RCI_SIMPLIFIED_NAV=1`, `true`, or `enabled`.",
+              "The current navigation remains the default. The simplified model makes Reports the only Analytics entry, keeps Collections and Schedules & Alerts in Operations, renames Report Publishing to Pipeline Status, and keeps Match Certification, Product Packs, Brand Governance, Study Discovery, System Operations, and Platform Docs in Administration. Price Intelligence and Data Quality routes are not deleted; they are simply removed from the simplified primary navigation so they can become drilldown/evidence/status surfaces. This changes hidden navigation configuration and tests only; it does not change report data, canonical datasets, materialization, readiness gates, distribution counts, price calculations, default navigation, default report rendering, production publication, matching, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, old-surface deletion, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Canonical dataset integrity guard added before export path",
+              "A shared canonical report integrity checker now verifies summary reconciliation, outcome/sign consistency, positive displayed prices, distribution-contract rules, service-area separation, unique relationships, seller qualification, and nonnegative distribution counts.",
+              "The hidden dataset endpoint fails closed with HTTP 422 when integrity blockers are present, and the Evidence & QA tab surfaces dataset-integrity blockers before export or publication. The checker validates only the already-projected canonical dataset; it does not calculate authoritative metrics or change source data. This changes hidden-preview and future-export safety gates only; it does not change canonical source inputs, source metrics, report materialization, readiness gates, distribution counts, price calculations, default report rendering, production publication, matching, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, old-surface deletion, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Canonical brand-role focus cards added to report preview",
+              "The hidden canonical report preview now summarizes included governed relationships by Walmart brand role: private label, national, regional, and unclassified.",
+              "The cards show factual included-relationship counts, Walmart losses, Walmart wins, and broad-footprint losses. Regional content remains fact-only and does not add illustrative or unsupported narrative. The helper derives navigation counts only from already-included canonical relationships; it does not calculate authoritative prices, distribution counts, seller status, match decisions, readiness, or source metrics. This changes only hidden-preview review UX and source-level coverage; it does not change canonical dataset inputs, default report rendering, production publication, matching, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, old-surface deletion, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Reports library empty-state diagnostics clarified",
+              "The Reports page now distinguishes API-unavailable, no published AnalysisResults returned, and filters hiding loaded reports instead of presenting every case as a generic no-reports state.",
+              "The diagnostic empty state identifies `/api/v1/analyses?limit=200` as the source checked, explains that raw Search evidence is not queried by the library, and points operators to Collections, Report Publishing/materialization, and Data Quality when a collection exists but no report appears. Filter-empty copy now states how many report records loaded and which filters suppressed them. This changes only operator-facing app guidance; it does not change source metrics, report materialization, readiness gates, distribution counts, price calculations, canonical preview data, default report rendering, production publication, matching, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, old-surface deletion, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Canonical product-card delta wording clarified",
+              "The hidden canonical report preview now labels the action-board sort as largest percent gap and adds a plain-English card note that states Walmart's displayed reporting price is above or below the competitor on the displayed basis.",
+              "This reduces buyer-facing ambiguity without changing the underlying canonical dataset, price delta calculation, distribution counts, seller governance, match certification, default report rendering, production publication, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, old-surface deletion, or PDF export. Source-contract coverage now protects the percent-gap label and per-card displayed-basis note.",
+            ],
+            [
+              "2026-09-09",
+              "Canonical product-card outcome labels tied to displayed prices",
+              "The hidden canonical report adapter now derives each product-card win/loss/parity outcome from the displayed benchmark-minus-competitor reporting price delta instead of older lower-share majority fields.",
+              "This prevents the preview from rendering a card whose headline says Walmart wins while the shown normalized price comparison says Walmart is higher, or the reverse. Lower-share fields may remain source context, but they no longer control the individual card label. Regression coverage includes a deliberately contradictory source row and verifies the card outcome, summary counts, and price delta follow the displayed prices. This changes only hidden-preview presentation semantics and validation coverage; it does not change source metrics, distribution counts, stored price calculations, default report rendering, production publication, matching, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, old-surface deletion, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Simplified preview review links added without default cutover",
+              "The Reports library now exposes `Open simplified preview` as a secondary action for AnalysisResult v2 reports while keeping `Open current report` as the primary action; the canonical preview also links back to the current report.",
+              "The affordance removes the need to memorize preview query parameters during app review, but it does not make the simplified preview the default. The preview link uses `?experience=canonical`, and the comparison link uses `?experience=legacy`. Source-contract tests verify v2-only exposure, current-report primary access, preview query wiring, comparison-link wiring, and styling hooks. This changes only hidden-preview discoverability for reviewers; it does not change source metrics, distribution counts, price calculations, default report rendering, production publication, matching, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, old-surface deletion, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Hidden preview source-contract guard added after runtime probe remained blocked",
+              "A focused source-level test now protects the canonical preview's app-first tabs, all-relationship action board, visible trust language, image-first product cards, QA checklist, and no previous-version commentary rule.",
+              "Local runtime/browser validation remained blocked because pnpm did not complete workspace linking within bounded offline install probes, including a hardlink import attempt. The new source-contract guard does not replace browser QA, but it prevents high-risk preview-copy and layout regressions while the runtime gate is unresolved. This changes only hidden preview test coverage and documentation; it does not change source metrics, distribution counts, price calculations, default report rendering, production publication, matching, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, old-surface deletion, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Canonical report staging rollout flag added and unit-tested",
+              "The hidden canonical report preview can now be made the default in a local or staging web process with `RCI_CANONICAL_REPORT_DEFAULT`, while explicit URL flags can still force the current report.",
+              "`RCI_CANONICAL_REPORT_DEFAULT=1`, `true`, or `enabled` enables the canonical preview without changing production code again. `?experience=legacy`, `?experience=current`, `?reportExperience=legacy`, `?reportExperience=current`, `?canonical=0`, and `?canonical=false` force the existing report path for comparison. Focused tests cover default-hidden behavior, query activation, environment activation, and explicit legacy override. This adds a rollout control only; it does not change source metrics, distribution counts, price calculations, production publication, matching, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, old-surface deletion, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Canonical Evidence & QA checklist added to hidden preview",
+              "The hidden report preview now surfaces report readiness, seller governance, price normalization, distribution evidence, match certification, and product-image coverage as explicit pass/warning/blocked checklist items.",
+              "The checklist is derived from canonical dataset readiness, governance, normalization, and QA fields; it does not compute authoritative prices, distributions, seller decisions, or outcomes. Focused tests cover clean pass states, readiness/seller blocking states, and warning states for excluded prices, missing distribution evidence, pending certification, and missing images. This changes only the hidden preview QA presentation; it does not change source metrics, distribution counts, price calculations, default report rendering, production publication, matching, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, old-surface deletion, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Product action-board filtering added to hidden report preview",
+              "The Product Wins & Losses tab now lets reviewers focus the same governed image-card relationships by outcome, brand type, competitor, product text, Walmart footprint, and sort order.",
+              "The default view still includes every canonical product relationship, preserving the requirement to list all wins and losses rather than illustrative examples. The new derived focus helper only sorts and filters already-included relationships; it does not calculate authoritative prices, distribution counts, outcomes, seller status, match decisions, or readiness. Focused tests cover action-priority sorting, broad-distribution filtering, outcome/brand/competitor/search filters, grouped counts, and competitor option generation. This changes only the hidden preview UX; it does not change source metrics, distribution counts, price calculations, default report rendering, production publication, matching, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, old-surface deletion, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Canonical evidence timestamp source tightened and unit-tested",
+              "The canonical report dataset now prefers AnalysisResult v2 source observation timing over report render timing when available.",
+              "The adapter sets `evidence_observed_at` from `analysis.result.source.observed_end`, falls back to `analysis.result.generated_at`, and only then falls back to the Report View `generated_at`. The hidden preview header shows the evidence-through timestamp when it differs from report generation time, and a focused unit test verifies that the dataset can carry both values separately. This improves preview/export trust without changing source metrics, distribution counts, price calculations, default report rendering, production publication, matching, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Canonical dataset endpoint hardened and unit-tested",
+              "The hidden canonical report dataset route now delegates fetch/order/error handling to a testable helper.",
+              "The helper fetches the AnalysisResult first, rejects non-v2 analyses before loading the report view, preserves private no-store headers on success and error responses, and only projects the canonical dataset after the governed report view is available. Focused tests cover upstream analysis errors, non-v2 blocking, report errors, successful projection, generic unavailable errors, and the no-cache guard. This changes only the hidden preview QA route implementation; it does not change default report rendering, production publication, matching, retained evidence, provider calls, AI calls, PDP calls, collection workflows, reprocessing, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Canonical sign convention documented and QA-guarded",
+              "The canonical report dataset now explicitly defines price-delta direction and audits win/loss sign consistency.",
+              "`comparison.price_delta` is benchmark reporting price minus competitor reporting price in the displayed unit basis; negative means Walmart/benchmark is lower and positive means the competitor is lower. `price_delta_percent` uses the same sign direction divided by competitor reporting price. The offline audit blocks buyer-facing contradictions such as `walmart_wins` with a positive delta, and warns if the displayed prices do not reconcile to the delta. This prevents the new preview/PDF path from inheriting ambiguous legacy gap labeling. No default report behavior, publication, matching, retained evidence, provider calls, AI calls, PDP calls, or collection workflows changed.",
+            ],
+            [
+              "2026-09-09",
+              "QA command portability hardened and unit-tested",
+              "The canonical report dataset audit command now resolves schema-validation dependencies from the contracts package and is covered by source-level tests.",
+              "The root audit command searches `packages/typescript/contracts/node_modules` before root dependencies, with an explicit fallback environment variable for degraded worktrees. A focused test verifies the command registration, dependency search path, canonical schema usage, and no-cache route guard coverage. This keeps the QA/export workflow usable in the monorepo without changing default report rendering, publication, matching, retained evidence, provider calls, AI calls, PDP calls, or collection workflows.",
+            ],
+            [
+              "2026-09-09",
+              "Offline QA utility implemented and example-validated; live bananas export pending",
+              "Canonical report datasets can now be audited from a saved JSON file or dataset endpoint without reprocessing.",
+              "The root `reports:audit-canonical` script validates a canonical report dataset against the JSON Schema and writes a Markdown audit covering summary reconciliation, win/loss counts, brand-type mix, exclusion reasons, top Walmart wins/losses by positive-price store footprint, zero-price sentinels, string product IDs, seller governance, distribution evidence, and service-area separation. The bananas example passed with no blockers. The utility is read-only and does not call providers, PDP, AI, matching, publication, or collection workflows.",
+            ],
+            [
+              "2026-09-09",
+              "Hidden read-only API surface added; production validation pending",
+              "The canonical report preview gained a JSON dataset endpoint for QA and future PDF/export wiring.",
+              "The new web BFF route `/api/analyses/{analysisId}/canonical-report-dataset` reads the existing AnalysisResult and report view, applies the canonical report dataset adapter, and returns the same canonical dataset rendered by the hidden preview shell. It does not launch analysis, reprocessing, publication, matching, PDP, provider, or AI work. The preview header links to the endpoint so reviewers can inspect included relationships, excluded relationships, seller governance, price normalization, distribution contracts, and QA counts directly. Default report behavior is unchanged.",
+            ],
+            [
+              "2026-09-09",
+              "Adapter guardrail tightened and unit-tested; production validation pending",
+              "The canonical report dataset adapter now fails closed when either side of a product relationship lacks governed distribution evidence.",
+              "The previous preview implementation already required Walmart benchmark distribution, but could substitute a zero-count distribution object for a missing competitor assortment product. That path is now blocked: missing competitor positive-price Search distribution routes the row to excluded relationships with an explicit reason instead of rendering it as a buyer-facing comparison card. QA counts include both missing benchmark and missing competitor distribution evidence. No default report behavior, publication, matching, retained evidence, provider call, AI call, PDP call, or data deletion changed.",
+            ],
+            [
+              "2026-09-09",
+              "Hidden app preview implemented and unit-tested; production cutover and PDF export pending",
+              "The redesigned app-first report shell now renders behind an explicit canonical/simplified preview query flag.",
+              "The current report remains the default experience. The preview consumes the canonical report dataset adapter and consolidates reporting into Executive Summary, Product Wins & Losses, Distribution & Assortment, Price Architecture, and Evidence & QA. Product wins/losses are rendered as image-first cards for every included relationship rather than mixed illustrative examples and table rows. The preview states the positive-price store Search distribution rule, separates service-area presence, excludes invalid zero-price and seller-unqualified rows through the canonical guardrails, and contains no commentary about previous report versions. No route removal, default UI cutover, PDF export, publication, matching, retained evidence, provider call, AI call, PDP call, or data deletion was made.",
+            ],
+            [
+              "2026-09-09",
+              "Adapter implemented and unit-tested; hidden report shell and production wiring pending",
+              "A read-only app-layer adapter now projects existing report-view evidence into the canonical report dataset contract.",
+              "The adapter maps fully evidenced product decisions into product win/loss relationships and fail-closed routes unsafe rows to excluded relationships. It rejects zero or missing reportable prices, excludes Walmart benchmark products without seller-qualified evidence, preserves retailer product IDs as strings, and carries the positive-price store Search distribution contract into the canonical dataset. This is scaffolding for the app-first redesign only; it does not change production report routes, publication behavior, matching, retained evidence, provider calls, AI calls, data deletion, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Contract added and directly AJV-validated; production adapter and UI cutover pending",
+              "Canonical report dataset contract added for the app-first reporting redesign.",
+              "The new canonical-report-dataset schema defines the governed input that the redesigned app report and later PDF/export should consume. It encodes positive-price store Search distribution, separate service-area presence, zero-price sentinel rejection, seller-qualified benchmark products, explicit readiness blockers, excluded relationship reason codes, and string retailer product IDs. A bananas example fixture, Python and JavaScript contract-validator wiring, and TypeScript contract export scaffolding were added. This does not yet change production report rendering, publication, matching, retained evidence, provider calls, AI calls, or PDF export.",
+            ],
+            [
+              "2026-09-09",
+              "Planning and Phase A audit in progress; UI copy correction implemented and static-reviewed",
+              "Reporting simplification moved to an app-first redesign plan with bananas as the first pilot and milk/eggs as required regressions.",
+              "The active redesign target is one primary report experience with Executive Summary, Product Wins & Losses, Distribution & Assortment, Price Architecture, and Evidence & QA. Price Intelligence remains available but is planned to become product evidence/drilldown support rather than a competing primary report destination. The Price Intelligence architecture context copy now describes distribution as positive-price store Search presence instead of a retailer master source, aligning the UI with the current distribution authority. No route removal, data deletion, raw evidence mutation, provider call, AI call, publication, or PDF export change was made in this step.",
+            ],
             [
               "2026-09-09",
               "Implemented and locally test-verified; four corrected categories active, Eggs and Vitamins publication retry pending",

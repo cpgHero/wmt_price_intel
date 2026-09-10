@@ -1,0 +1,438 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.example.local/rci/canonical-report-dataset.schema.json",
+  "title": "RetailCompetitiveIntelligenceCanonicalReportDataset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "report_id",
+    "analysis_id",
+    "generated_at",
+    "evidence_observed_at",
+    "benchmark_retailer",
+    "competitors",
+    "product_pack",
+    "retailer_packs",
+    "contracts",
+    "readiness",
+    "seller_governance",
+    "price_normalization",
+    "summary",
+    "product_relationships",
+    "excluded_relationships",
+    "qa"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "report_id": { "type": "string", "minLength": 1 },
+    "analysis_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "evidence_observed_at": { "type": "string", "format": "date-time" },
+    "benchmark_retailer": { "$ref": "#/$defs/idName" },
+    "competitors": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/idName" },
+      "uniqueItems": true
+    },
+    "product_pack": { "$ref": "#/$defs/productPack" },
+    "retailer_packs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/retailerPack" }
+    },
+    "contracts": { "$ref": "#/$defs/contracts" },
+    "readiness": { "$ref": "#/$defs/readiness" },
+    "seller_governance": { "$ref": "#/$defs/sellerGovernance" },
+    "price_normalization": { "$ref": "#/$defs/priceNormalization" },
+    "summary": { "$ref": "#/$defs/summary" },
+    "product_relationships": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/productRelationship" }
+    },
+    "excluded_relationships": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/excludedRelationship" }
+    },
+    "qa": { "$ref": "#/$defs/qa" }
+  },
+  "$defs": {
+    "idName": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 }
+      }
+    },
+    "productPack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "name", "version"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "checksum": {
+          "type": ["string", "null"],
+          "pattern": "^[a-f0-9]{64}$"
+        }
+      }
+    },
+    "retailerPack": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retailer_id", "version", "checksum"],
+      "properties": {
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 },
+        "checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "contracts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["distribution", "service_area_presence"],
+      "properties": {
+        "distribution": { "$ref": "#/$defs/distributionContract" },
+        "service_area_presence": { "$ref": "#/$defs/serviceAreaPresenceContract" }
+      }
+    },
+    "distributionContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "basis",
+        "grain",
+        "deduplication",
+        "price_rule",
+        "inventory_claim",
+        "stock_status_used",
+        "sponsorship_used",
+        "extrapolation"
+      ],
+      "properties": {
+        "version": { "const": "1.0.0" },
+        "basis": { "const": "positive_price_store_search_result" },
+        "grain": { "const": "retailer_product_id_x_store_id" },
+        "deduplication": { "const": "distinct_store_id_per_product" },
+        "price_rule": { "const": "price_gt_zero" },
+        "inventory_claim": { "const": false },
+        "stock_status_used": { "const": false },
+        "sponsorship_used": { "const": false },
+        "extrapolation": { "const": false }
+      }
+    },
+    "serviceAreaPresenceContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "basis", "grain", "price_rule", "presented_as_store_count"],
+      "properties": {
+        "version": { "const": "1.0.0" },
+        "basis": { "const": "positive_price_service_area_search_result" },
+        "grain": { "const": "retailer_product_id_x_service_area" },
+        "price_rule": { "const": "price_gt_zero" },
+        "presented_as_store_count": { "const": false }
+      }
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "blocking_reasons", "warnings"],
+      "properties": {
+        "status": { "enum": ["ready", "ready_with_caveats", "blocked"] },
+        "blocking_reasons": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/statusReason" }
+        },
+        "warnings": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/statusReason" }
+        }
+      }
+    },
+    "statusReason": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "next_action": { "type": ["string", "null"] }
+      }
+    },
+    "sellerGovernance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "benchmark_requirement", "unverified_product_count", "excluded_product_count"],
+      "properties": {
+        "status": { "enum": ["passed", "passed_with_unverified_competitors", "blocked"] },
+        "benchmark_requirement": { "const": "qualified_seller_or_not_applicable" },
+        "unverified_product_count": { "type": "integer", "minimum": 0 },
+        "excluded_product_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "priceNormalization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "unit_basis",
+        "zero_price_sentinel_rule",
+        "invalid_price_record_count"
+      ],
+      "properties": {
+        "status": { "enum": ["passed", "passed_with_exclusions", "blocked"] },
+        "unit_basis": { "type": "string", "minLength": 1 },
+        "zero_price_sentinel_rule": { "const": "zero_regular_or_discounted_price_is_missing" },
+        "invalid_price_record_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relationship_count",
+        "walmart_win_count",
+        "competitor_win_count",
+        "parity_count",
+        "unscored_count",
+        "excluded_relationship_count"
+      ],
+      "properties": {
+        "relationship_count": { "type": "integer", "minimum": 0 },
+        "walmart_win_count": { "type": "integer", "minimum": 0 },
+        "competitor_win_count": { "type": "integer", "minimum": 0 },
+        "parity_count": { "type": "integer", "minimum": 0 },
+        "unscored_count": { "type": "integer", "minimum": 0 },
+        "excluded_relationship_count": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "productRelationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relationship_id",
+        "benchmark_product",
+        "competitor_product",
+        "comparison",
+        "evidence_refs"
+      ],
+      "properties": {
+        "relationship_id": { "type": "string", "minLength": 1 },
+        "benchmark_product": { "$ref": "#/$defs/benchmarkProduct" },
+        "competitor_product": { "$ref": "#/$defs/product" },
+        "comparison": { "$ref": "#/$defs/comparison" },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidenceRef" }
+        }
+      }
+    },
+    "excludedRelationship": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "relationship_id",
+        "benchmark_product_id",
+        "competitor_product_id",
+        "competitor_retailer_id",
+        "reason_code",
+        "reason"
+      ],
+      "properties": {
+        "relationship_id": { "type": "string", "minLength": 1 },
+        "benchmark_product_id": { "type": "string", "minLength": 1 },
+        "competitor_product_id": { "type": "string", "minLength": 1 },
+        "competitor_retailer_id": { "type": "string", "minLength": 1 },
+        "reason_code": { "type": "string", "minLength": 1 },
+        "reason": { "type": "string", "minLength": 1 },
+        "evidence_refs": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/evidenceRef" }
+        }
+      }
+    },
+    "benchmarkProduct": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retailer_id",
+        "retailer_product_id",
+        "title",
+        "url",
+        "image_url",
+        "brand",
+        "brand_type",
+        "seller_status",
+        "package",
+        "price",
+        "distribution"
+      ],
+      "properties": {
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "retailer_product_id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "url": { "type": ["string", "null"], "format": "uri" },
+        "image_url": { "type": ["string", "null"], "format": "uri" },
+        "brand": { "type": ["string", "null"] },
+        "brand_type": { "enum": ["private_label", "regional", "national", "unclassified"] },
+        "seller_status": { "enum": ["qualified", "not_applicable"] },
+        "package": { "$ref": "#/$defs/package" },
+        "price": { "$ref": "#/$defs/price" },
+        "distribution": { "$ref": "#/$defs/distribution" }
+      }
+    },
+    "product": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "retailer_id",
+        "retailer_product_id",
+        "title",
+        "url",
+        "image_url",
+        "brand",
+        "brand_type",
+        "seller_status",
+        "package",
+        "price",
+        "distribution"
+      ],
+      "properties": {
+        "retailer_id": { "type": "string", "minLength": 1 },
+        "retailer_product_id": { "type": "string", "minLength": 1 },
+        "title": { "type": "string", "minLength": 1 },
+        "url": { "type": ["string", "null"], "format": "uri" },
+        "image_url": { "type": ["string", "null"], "format": "uri" },
+        "brand": { "type": ["string", "null"] },
+        "brand_type": { "enum": ["private_label", "regional", "national", "unclassified"] },
+        "seller_status": {
+          "enum": ["qualified", "unverified", "not_qualified", "not_applicable"]
+        },
+        "package": { "$ref": "#/$defs/package" },
+        "price": { "$ref": "#/$defs/price" },
+        "distribution": { "$ref": "#/$defs/distribution" }
+      }
+    },
+    "package": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "unit_basis"],
+      "properties": {
+        "label": { "type": "string", "minLength": 1 },
+        "unit_basis": { "type": "string", "minLength": 1 },
+        "quantity": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "unit": { "type": ["string", "null"] }
+      }
+    },
+    "price": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reporting_price", "reporting_price_label", "currency"],
+      "properties": {
+        "reporting_price": { "type": "number", "exclusiveMinimum": 0 },
+        "reporting_price_label": { "type": "string", "minLength": 1 },
+        "package_price": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "normalized_unit_price": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "regular_price": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "discounted_price": { "type": ["number", "null"], "exclusiveMinimum": 0 },
+        "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "physical_store_distribution_count",
+        "service_area_presence_count",
+        "searched_store_count"
+      ],
+      "properties": {
+        "physical_store_distribution_count": { "type": "integer", "minimum": 0 },
+        "service_area_presence_count": { "type": "integer", "minimum": 0 },
+        "searched_store_count": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "comparison": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "comparison_basis",
+        "unit_basis",
+        "price_delta",
+        "price_delta_percent",
+        "outcome",
+        "match_certification"
+      ],
+      "properties": {
+        "comparison_basis": { "type": "string", "minLength": 1 },
+        "unit_basis": { "type": "string", "minLength": 1 },
+        "price_delta": {
+          "type": "number",
+          "description": "Benchmark reporting price minus competitor reporting price in the displayed unit basis. Negative means the benchmark retailer is lower; positive means the competitor is lower."
+        },
+        "price_delta_percent": {
+          "type": "number",
+          "description": "price_delta divided by the competitor reporting price. Negative means the benchmark retailer is lower as a share of the competitor price; positive means the competitor is lower."
+        },
+        "outcome": { "enum": ["walmart_wins", "competitor_wins", "parity", "unscored"] },
+        "match_certification": { "$ref": "#/$defs/matchCertification" }
+      }
+    },
+    "matchCertification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "source"],
+      "properties": {
+        "status": { "enum": ["certified_comparable", "certified_not_comparable", "insufficient_evidence", "pending"] },
+        "source": { "enum": ["matching_v2_gold_set", "manual_review", "legacy_governed", "not_applicable"] }
+      }
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "search_observation",
+            "pdp_snapshot",
+            "match_decision",
+            "product_pack",
+            "retailer_pack",
+            "materialized_document"
+          ]
+        },
+        "id": { "type": "string", "minLength": 1 }
+      }
+    },
+    "qa": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "included_relationship_count",
+        "excluded_relationship_count",
+        "invalid_price_record_count",
+        "unverified_seller_product_count",
+        "products_without_image_count",
+        "products_without_valid_distribution_count",
+        "match_certification_complete",
+        "product_pack_coverage_status",
+        "retailer_coverage_status"
+      ],
+      "properties": {
+        "included_relationship_count": { "type": "integer", "minimum": 0 },
+        "excluded_relationship_count": { "type": "integer", "minimum": 0 },
+        "invalid_price_record_count": { "type": "integer", "minimum": 0 },
+        "unverified_seller_product_count": { "type": "integer", "minimum": 0 },
+        "products_without_image_count": { "type": "integer", "minimum": 0 },
+        "products_without_valid_distribution_count": { "type": "integer", "minimum": 0 },
+        "match_certification_complete": { "type": "boolean" },
+        "product_pack_coverage_status": { "enum": ["passed", "passed_with_exclusions", "blocked"] },
+        "retailer_coverage_status": { "enum": ["passed", "passed_with_exclusions", "blocked"] }
+      }
+    }
+  }
+}

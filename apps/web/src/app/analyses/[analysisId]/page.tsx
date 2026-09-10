@@ -6,6 +6,10 @@ import {
   type AnalysisRecord,
   type AnalysisReportView,
 } from "@/lib/api";
+import {
+  canonicalReportPreviewEnabled,
+  type CanonicalReportPreviewSearchParams,
+} from "@/lib/canonical-report-preview";
 
 import { AnalysisWorkspace } from "./workspace";
 
@@ -13,10 +17,12 @@ export const dynamic = "force-dynamic";
 
 export default async function AnalysisPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ analysisId: string }>;
+  searchParams: Promise<CanonicalReportPreviewSearchParams>;
 }) {
-  const { analysisId } = await params;
+  const [{ analysisId }, query] = await Promise.all([params, searchParams]);
   const response = await getApi<AnalysisRecord>(
     `/api/v1/analyses/${encodeURIComponent(analysisId)}`,
     30_000,
@@ -53,6 +59,7 @@ export default async function AnalysisPage({
       <AnalysisWorkspace
         analysis={response.data}
         reportView={reportResponse?.data ?? null}
+        canonicalPreview={canonicalReportPreviewEnabled(query)}
       />
     </main>
   );
