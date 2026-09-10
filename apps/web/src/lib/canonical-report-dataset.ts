@@ -17,6 +17,7 @@ type CanonicalCompetitorProduct =
 type CanonicalOutcome =
   CanonicalDataset["product_relationships"][number]["comparison"]["outcome"];
 type ExcludedRelationship = CanonicalDataset["excluded_relationships"][number];
+type ReportableProductDecision = ProductDecision | ProductMatchCandidate;
 
 const DISTRIBUTION_CONTRACT: CanonicalDataset["contracts"]["distribution"] = {
   version: "1.0.0",
@@ -120,7 +121,7 @@ function scorecardIndex(reportView: AnalysisReportView) {
 
 function scorecardForDecision(
   scorecards: Map<string, RetailerScorecard>,
-  decision: ProductDecision,
+  decision: ReportableProductDecision,
 ) {
   return (
     scorecards.get(
@@ -259,7 +260,7 @@ function outcomeFromDisplayedPriceDelta(priceDelta: number): CanonicalOutcome {
 }
 
 function excluded(
-  decision: ProductDecision,
+  decision: ReportableProductDecision,
   reasonCode: string,
   reason: string,
 ): ExcludedRelationship {
@@ -285,7 +286,7 @@ function canonicalRelationship(
   products: Map<string, AssortmentProduct>,
   scorecards: Map<string, RetailerScorecard>,
   candidates: ReturnType<typeof candidateIndex>,
-  decision: ProductDecision,
+  decision: ReportableProductDecision,
 ): {
   relationship: CanonicalDataset["product_relationships"][number] | null;
   excluded?: ExcludedRelationship;
@@ -300,7 +301,7 @@ function canonicalRelationship(
       ),
     };
   }
-  if (decision.matches <= 0) {
+  if ((decision.matches ?? 0) <= 0) {
     return {
       relationship: null,
       excluded: excluded(
@@ -487,6 +488,76 @@ function canonicalRelationship(
   };
 }
 
+function profileRank(reportView: AnalysisReportView) {
+  return new Map(
+    reportView.comparison_bases.map((basis, index) => [
+      basis.profile_id,
+      basis.scorecard_role === "preferred" ? -1 : index,
+    ]),
+  );
+}
+
+function reportableCandidateFallback(
+  reportView: AnalysisReportView,
+): ProductMatchCandidate[] {
+  if ((reportView.product_decisions ?? []).length > 0) {
+    return [];
+  }
+  // Some governed matching-v2 publications carry product-level decision evidence
+  // only in match_candidates. Treat those rows as reportable only after the same
+  // relationship, QA, positive-price, seller, and distribution guardrails are
+  // applied below; do not use unmatched or zero-price candidate rows.
+  const ranks = profileRank(reportView);
+  const admitted = (reportView.match_candidates ?? []).filter(
+    (candidate) =>
+      (candidate.relationship_status === "suggested" ||
+        candidate.relationship_status === "confirmed") &&
+      (candidate.qa_status ?? "ready") === "ready" &&
+      (candidate.matches ?? 0) > 0 &&
+      finitePositive(candidate.median_benchmark_price) !== null &&
+      finitePositive(candidate.median_competitor_price) !== null,
+  );
+  const selected = new Map<string, ProductMatchCandidate>();
+  for (const candidate of admitted) {
+    const relationshipId = textValue(candidate.relationship_id);
+    const key =
+      relationshipId ??
+      [
+        identityToken(candidate.competitor),
+        candidate.benchmark_product_id,
+        candidate.competitor_product_id,
+      ].join("::");
+    const current = selected.get(key);
+    if (!current) {
+      selected.set(key, candidate);
+      continue;
+    }
+    const candidateRank = ranks.get(candidate.profile_id ?? "") ?? 9999;
+    const currentRank = ranks.get(current.profile_id ?? "") ?? 9999;
+    if (
+      candidateRank < currentRank ||
+      (candidateRank === currentRank &&
+        (candidate.matches ?? 0) > (current.matches ?? 0))
+    ) {
+      selected.set(key, candidate);
+    }
+  }
+  return [...selected.values()].sort(
+    (left, right) =>
+      (ranks.get(left.profile_id ?? "") ?? 9999) -
+        (ranks.get(right.profile_id ?? "") ?? 9999) ||
+      identityToken(left.competitor).localeCompare(
+        identityToken(right.competitor),
+      ) ||
+      left.benchmark_product_name.localeCompare(right.benchmark_product_name) ||
+      String(
+        left.competitor_product_name ?? left.competitor_product_id,
+      ).localeCompare(
+        String(right.competitor_product_name ?? right.competitor_product_id),
+      ),
+  );
+}
+
 export function canonicalReportDatasetFromReportView(
   analysis: AnalysisRecord,
   reportView: AnalysisReportView,
@@ -496,7 +567,11 @@ export function canonicalReportDatasetFromReportView(
   const candidates = candidateIndex(reportView);
   const relationships: CanonicalDataset["product_relationships"] = [];
   const excludedRelationships: ExcludedRelationship[] = [];
-  for (const decision of reportView.product_decisions ?? []) {
+  const sourceRows =
+    (reportView.product_decisions ?? []).length > 0
+      ? (reportView.product_decisions ?? [])
+      : reportableCandidateFallback(reportView);
+  for (const decision of sourceRows) {
     const projected = canonicalRelationship(
       analysis,
       reportView,
