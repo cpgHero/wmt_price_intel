@@ -153,7 +153,7 @@ Status:
 - Initial read-only adapter implemented in `apps/web/src/lib/canonical-report-dataset.ts`.
 - Adapter tightened so missing competitor distribution evidence routes to `excluded_relationships` instead of rendering as a zero-distribution buyer-facing relationship.
 - Canonical `price_delta` and `price_delta_percent` sign conventions documented in the schema and TypeScript contract comments.
-- Hidden app preview shell implemented in `apps/web/src/app/analyses/[analysisId]/canonical-report-workspace.tsx`.
-- Preview gate implemented in `apps/web/src/lib/canonical-report-preview.ts`.
-- The current report remains the default. Visit an analysis with `?experience=canonical`, `?experience=simplified`, `?reportExperience=canonical`, `?reportExperience=simplified`, `?canonical=1`, or `?canonical=true` to render the preview.
-- Next work should compare the preview output against the current bananas report before replacing any active UI.
+- Canonical app report shell implemented in `apps/web/src/app/analyses/[analysisId]/canonical-report-workspace.tsx`.
+- Report experience gate implemented in `apps/web/src/lib/canonical-report-experience.ts`.
+- As of Phase 13.93, the canonical report is the default for AnalysisResult v2 report workspaces. Visit an analysis with `?experience=legacy`, `?experience=current`, `?reportExperience=legacy`, `?reportExperience=current`, `?canonical=0`, or `?canonical=false` to render the legacy workspace for audit comparison.
+- Next work should validate the default canonical report output against bananas, milk, and eggs production reports before removing legacy workspace code.

@@ -164,7 +164,7 @@ export function CanonicalReportWorkspace({
     <>
       <header className="workspace-header report-header canonical-report-header">
         <div>
-          <p className="eyebrow">Simplified report preview</p>
+          <p className="eyebrow">Product-level report</p>
           <h1>{dataset.product_pack.name}</h1>
           <p className="report-deck">
             Product-level price intelligence built from governed relationships,
@@ -182,7 +182,7 @@ export function CanonicalReportWorkspace({
             <span>No inventory claims</span>
             <span>Zero prices treated as missing</span>
             <span>Seller governed</span>
-            <span>Preview only</span>
+            <span>Canonical dataset</span>
           </div>
         </div>
         <div className="workspace-status">
@@ -194,7 +194,7 @@ export function CanonicalReportWorkspace({
             className="canonical-dataset-link"
             href={`/analyses/${encodeURIComponent(analysis.analysis_id)}?experience=legacy`}
           >
-            Current report
+            Legacy workspace
           </Link>
           <Link
             className="canonical-dataset-link"
@@ -268,7 +268,7 @@ function ExecutiveSummary({
           <div>
             <h2>What matters now</h2>
             <p>
-              This preview prioritizes product-level decisions over rollups. A
+              This report prioritizes product-level decisions over rollups. A
               product is included only when its comparison price is positive,
               seller governance passes, and distribution evidence is valid.
             </p>

@@ -3211,10 +3211,6 @@ a.product-highlight:hover {
   gap: 0.55rem;
   justify-content: flex-end;
 }
-.report-library-actions .canonical-preview-action {
-  border-color: color-mix(in srgb, var(--green) 36%, var(--line));
-  color: var(--green);
-}
 .canonical-metric-grid {
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
 }

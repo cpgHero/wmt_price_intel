@@ -52,7 +52,9 @@ Explicit URL overrides still force the current report when needed for side-by-si
 - `?canonical=0`
 - `?canonical=false`
 
-The reports library exposes `Open current report` as the primary action and `Open simplified preview` as a secondary action for AnalysisResult v2 reports only. The simplified preview header includes a `Current report` comparison link.
+Original rollout behavior: the reports library exposed `Open current report` as the primary action and `Open simplified preview` as a secondary action for AnalysisResult v2 reports only. The simplified preview header included a `Current report` comparison link.
+
+Phase 13.93 supersedes this rollout posture. The canonical report is now the default AnalysisResult v2 workspace, the library exposes a single `Open report` action, and the old workspace is available only through the explicit legacy query flags listed above.
 
 The reports library empty state identifies whether the API was unavailable or whether no published AnalysisResults were returned, names the source endpoint checked, and links operators to Collections, Report Publishing/materialization, and Data Quality for follow-up.
 

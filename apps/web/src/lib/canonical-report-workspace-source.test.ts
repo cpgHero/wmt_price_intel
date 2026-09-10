@@ -65,7 +65,7 @@ describe("canonical report workspace source contract", () => {
     expect(workspaceSource).toContain("Zero prices treated as missing");
     expect(workspaceSource).toContain("Seller governed");
     expect(workspaceSource).toContain("Evidence through");
-    expect(workspaceSource).toContain("Current report");
+    expect(workspaceSource).toContain("Legacy workspace");
     expect(workspaceSource).toContain("price greater than zero");
     expect(workspaceSource).toContain("not an in-stock indicator");
     expect(lower).toContain("service-area presence");
@@ -93,12 +93,14 @@ describe("canonical report workspace source contract", () => {
     expect(stylesSource).toContain("article.blocked");
   });
 
-  it("does not reintroduce report-version commentary into the preview copy", () => {
+  it("does not reintroduce report-version commentary into the canonical report copy", () => {
     const lower = workspaceSource.toLocaleLowerCase("en-US");
 
     expect(lower).not.toContain("previous version");
     expect(lower).not.toContain("prior version");
     expect(lower).not.toContain("changes versus");
     expect(lower).not.toContain("changed from");
+    expect(lower).not.toContain("preview only");
+    expect(lower).not.toContain("simplified report preview");
   });
 });

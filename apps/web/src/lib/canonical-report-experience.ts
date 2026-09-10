@@ -1,6 +1,6 @@
 type QueryValue = string | string[] | undefined;
 
-export type CanonicalReportPreviewSearchParams = Record<string, QueryValue>;
+export type CanonicalReportExperienceSearchParams = Record<string, QueryValue>;
 
 function firstValue(value: QueryValue) {
   return Array.isArray(value) ? value[0] : value;
@@ -10,16 +10,16 @@ function normalizedFlag(value: QueryValue) {
   return firstValue(value)?.trim().toLocaleLowerCase("en-US") ?? null;
 }
 
-function environmentDefaultEnabled(
+function environmentDefaultDisabled(
   environment: Readonly<Record<string, string | undefined>>,
 ) {
   const flag =
     environment.RCI_CANONICAL_REPORT_DEFAULT?.trim().toLocaleLowerCase("en-US");
-  return flag === "1" || flag === "true" || flag === "enabled";
+  return flag === "0" || flag === "false" || flag === "disabled";
 }
 
-export function canonicalReportPreviewEnabled(
-  searchParams: CanonicalReportPreviewSearchParams | null | undefined,
+export function canonicalReportExperienceEnabled(
+  searchParams: CanonicalReportExperienceSearchParams | null | undefined,
   environment: Readonly<Record<string, string | undefined>> = process.env,
 ) {
   const experience = normalizedFlag(searchParams?.experience);
@@ -35,13 +35,15 @@ export function canonicalReportPreviewEnabled(
   ) {
     return false;
   }
-  return (
+  if (
     experience === "canonical" ||
     experience === "simplified" ||
     reportExperience === "canonical" ||
     reportExperience === "simplified" ||
     canonical === "1" ||
-    canonical === "true" ||
-    environmentDefaultEnabled(environment)
-  );
+    canonical === "true"
+  ) {
+    return true;
+  }
+  return !environmentDefaultDisabled(environment);
 }

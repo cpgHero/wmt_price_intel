@@ -7,9 +7,9 @@ import {
   type AnalysisReportView,
 } from "@/lib/api";
 import {
-  canonicalReportPreviewEnabled,
-  type CanonicalReportPreviewSearchParams,
-} from "@/lib/canonical-report-preview";
+  canonicalReportExperienceEnabled,
+  type CanonicalReportExperienceSearchParams,
+} from "@/lib/canonical-report-experience";
 
 import { AnalysisWorkspace } from "./workspace";
 
@@ -20,7 +20,7 @@ export default async function AnalysisPage({
   searchParams,
 }: {
   params: Promise<{ analysisId: string }>;
-  searchParams: Promise<CanonicalReportPreviewSearchParams>;
+  searchParams: Promise<CanonicalReportExperienceSearchParams>;
 }) {
   const [{ analysisId }, query] = await Promise.all([params, searchParams]);
   const response = await getApi<AnalysisRecord>(
@@ -59,7 +59,7 @@ export default async function AnalysisPage({
       <AnalysisWorkspace
         analysis={response.data}
         reportView={reportResponse?.data ?? null}
-        canonicalPreview={canonicalReportPreviewEnabled(query)}
+        canonicalReport={canonicalReportExperienceEnabled(query)}
       />
     </main>
   );

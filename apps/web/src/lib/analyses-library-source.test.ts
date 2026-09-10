@@ -22,29 +22,26 @@ const stylesSource = readFileSync(
 const analysesPageText = analysesPageSource.replace(/\s+/g, " ");
 
 describe("analyses library canonical preview source contract", () => {
-  it("keeps the current report as the primary library action", () => {
-    expect(analysesPageSource).toContain("Open current report");
+  it("keeps the canonical report as the primary library action", () => {
+    expect(analysesPageSource).toContain("Open report");
     expect(analysesPageSource).toContain(
       "href={`/analyses/${encodeURIComponent(summary.analysis.analysis_id)}`}",
     );
   });
 
-  it("exposes the simplified preview only for AnalysisResult v2 cards", () => {
-    expect(analysesPageSource).toContain(
-      'summary.analysis.schema_version === "2.0.0"',
-    );
-    expect(analysesPageSource).toContain("Open simplified preview");
-    expect(analysesPageSource).toContain("?experience=canonical");
+  it("does not expose a separate simplified preview action in the library", () => {
+    expect(analysesPageSource).not.toContain("Open simplified preview");
+    expect(analysesPageSource).not.toContain("?experience=canonical");
   });
 
-  it("keeps a current-report comparison link inside the canonical preview", () => {
-    expect(canonicalWorkspaceSource).toContain("Current report");
+  it("keeps a legacy comparison link inside the canonical report", () => {
+    expect(canonicalWorkspaceSource).toContain("Legacy workspace");
     expect(canonicalWorkspaceSource).toContain("?experience=legacy");
   });
 
-  it("styles the preview action without making it the only visible action", () => {
+  it("keeps report card actions grouped without a separate preview action", () => {
     expect(stylesSource).toContain(".report-library-actions");
-    expect(stylesSource).toContain(".canonical-preview-action");
+    expect(stylesSource).not.toContain(".canonical-preview-action");
   });
 
   it("explains empty report-library states with actionable diagnostics", () => {
