@@ -16,7 +16,11 @@ import pytest
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from rci_analytics import PriceMonitoringFilters, ProductPackLoader
+from rci_analytics import (
+    PriceMonitoringFilters,
+    ProductPackLoader,
+    ProductPriceObservation,
+)
 from rci_api.analyses import require_public_analysis
 from rci_api.main import create_app
 from rci_api.price_monitoring import (
@@ -893,83 +897,46 @@ async def test_price_monitoring_map_projects_observed_and_not_observed_store_poi
     service = object.__new__(PriceMonitoringService)
     service._map_cache = {}
     service._root = Path(__file__).resolve().parents[3]
+    service._retailer_names = {"walmart_us": "Walmart (US)"}
 
-    async def prepare(
-        _service: PriceMonitoringService,
-        analysis_id: str,
-        retailer_id: str,
-    ) -> object:
-        assert analysis_id == "analysis-1"
-        assert retailer_id == "walmart_us"
-        return object()
+    class Analyses:
+        async def get(self, analysis_id: str) -> SimpleNamespace:
+            assert analysis_id == "analysis-1"
+            return SimpleNamespace(
+                collection_run_id="run-1",
+                result={
+                    "benchmark_retailer": "walmart_us",
+                    "competitors": ["aldi_us"],
+                },
+            )
 
-    def project(
-        _service: PriceMonitoringService,
-        prepared: object,
-        filters: PriceMonitoringFilters,
-        **limits: object,
-    ) -> dict[str, object]:
-        assert prepared is not None
-        assert filters.product_id == "123"
-        assert limits == {"location_limit": None, "product_location_limit": 0}
-        return {
-            "retailer": {"id": "walmart_us", "name": "Walmart (US)"},
-            "products": [
+    class Repository:
+        async def location_context(
+            self, collection_run_id: str, retailer_id: str
+        ) -> tuple[dict[object, object], dict[tuple[str, str], dict[str, object]], int]:
+            assert (collection_run_id, retailer_id) == ("run-1", "walmart_us")
+            return (
+                {},
                 {
-                    "product_id": "123",
-                    "name": "Product 123",
-                    "distribution_store_count": 2,
-                    "service_area_presence_count": 0,
-                    "price_stats": {"observation_median": 5.0},
-                    "search_price_stats": {"observation_median": 5.0},
-                }
-            ],
-            "summary": {
-                "distribution_store_count": 2,
-                "service_area_presence_count": 0,
-            },
-            "location_display": {"total": 2},
-            "locations": [
-                {
-                    "scope_key": "store:1",
-                    "kind": "store",
-                    "store_number": "1",
-                    "store_name": "Store One",
-                    "zipcode": "72712",
-                    "city": "Bentonville",
-                    "state": "AR",
-                    "country": "USA",
-                    "latitude": 36.37,
-                    "longitude": -94.21,
-                    "median_price": 4.5,
-                    "search_median_price": 4.5,
-                    "search_observed": True,
-                    "is_sponsored": False,
-                },
-                {
-                    "scope_key": "store:2",
-                    "kind": "store",
-                    "store_number": "2",
-                    "store_name": "Store Two",
-                    "zipcode": "72756",
-                    "city": "Rogers",
-                    "state": "AR",
-                    "country": "USA",
-                    "latitude": 36.33,
-                    "longitude": -94.12,
-                    "median_price": None,
-                    "search_median_price": 5.5,
-                    "search_observed": True,
-                    "is_sponsored": True,
-                },
-            ],
-            "distribution_gaps": {
-                "location_display": {"total": 1},
-                "locations": [
-                    {
-                        "scope_key": "store:3",
-                        "kind": "store",
-                        "store_number": "3",
+                    ("walmart_us", "1"): {
+                        "store_name": "Store One",
+                        "zipcode": "72712",
+                        "city": "Bentonville",
+                        "state": "AR",
+                        "country": "USA",
+                        "latitude": 36.37,
+                        "longitude": -94.21,
+                    },
+                    ("walmart_us", "2"): {
+                        "store_name": "Store Two",
+                        "zipcode": "72756",
+                        "city": "Rogers",
+                        "state": "AR",
+                        "country": "USA",
+                        "latitude": 36.33,
+                        "longitude": -94.12,
+                    },
+                    ("walmart_us", "3"): {
                         "store_name": "Store Three",
                         "zipcode": "72764",
                         "city": "Springdale",
@@ -977,13 +944,83 @@ async def test_price_monitoring_map_projects_observed_and_not_observed_store_poi
                         "country": "USA",
                         "latitude": 36.18,
                         "longitude": -94.13,
-                    }
-                ],
-            },
+                    },
+                },
+                3,
+            )
+
+    async def product_observations_for_products(
+        _service: PriceMonitoringService,
+        analysis_id: str,
+        *,
+        retailer_id: str,
+        product_ids: list[str],
+        comparison_metric: str,
+    ) -> dict[str, tuple[ProductPriceObservation, ...]]:
+        assert (analysis_id, retailer_id) == ("analysis-1", "walmart_us")
+        assert product_ids == ["123"]
+        assert comparison_metric == "package_price"
+        return {
+            "123": (
+                ProductPriceObservation(
+                    retailer_id="walmart_us",
+                    retailer_name="Walmart (US)",
+                    product_id="123",
+                    product_name="Product 123",
+                    image_url=None,
+                    scope_key="walmart_us|store|1",
+                    location_kind="store",
+                    store_number="1",
+                    store_name="Store One",
+                    zipcode="72712",
+                    city="Bentonville",
+                    state="AR",
+                    country="USA",
+                    latitude=36.37,
+                    longitude=-94.21,
+                    package_price=4.5,
+                    comparison_value=4.5,
+                    observed_at="2026-08-07T06:00:00Z",
+                    is_sponsored=False,
+                ),
+                ProductPriceObservation(
+                    retailer_id="walmart_us",
+                    retailer_name="Walmart (US)",
+                    product_id="123",
+                    product_name="Product 123",
+                    image_url=None,
+                    scope_key="walmart_us|store|2",
+                    location_kind="store",
+                    store_number="2",
+                    store_name="Store Two",
+                    zipcode="72756",
+                    city="Rogers",
+                    state="AR",
+                    country="USA",
+                    latitude=36.33,
+                    longitude=-94.12,
+                    package_price=5.5,
+                    comparison_value=5.5,
+                    observed_at="2026-08-07T06:00:00Z",
+                    is_sponsored=True,
+                ),
+            )
         }
 
+    async def prepare(
+        _service: PriceMonitoringService,
+        _analysis_id: str,
+        _retailer_id: str,
+    ) -> object:
+        raise AssertionError("map_view must not build the full retailer catalog")
+
+    service._analyses = Analyses()
+    service._repository = Repository()
     service._prepare = MethodType(prepare, service)  # type: ignore[method-assign]
-    service._project = MethodType(project, service)  # type: ignore[method-assign]
+    service.product_observations_for_products = MethodType(  # type: ignore[method-assign]
+        product_observations_for_products,
+        service,
+    )
     result = await service.map_view(
         "analysis-1",
         PriceMonitoringFilters(retailer_id="walmart_us", product_id="123"),
