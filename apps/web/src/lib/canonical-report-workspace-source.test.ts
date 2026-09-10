@@ -30,17 +30,31 @@ describe("canonical report workspace source contract", () => {
     expect(workspaceSource).toContain("All Walmart wins");
     expect(workspaceSource).toContain("These are all included");
     expect(workspaceSource).toContain("Search products");
+    expect(workspaceSource).toContain("RelationshipFilterDrawer");
+    expect(workspaceSource).toContain("Walmart brand");
     expect(workspaceSource).toContain("Walmart brand type");
+    expect(workspaceSource).toContain("Competitor brand");
+    expect(workspaceSource).toContain("Retailer");
+    expect(workspaceSource).toContain("Category");
+    expect(workspaceSource).toContain("Subcategory");
+    expect(workspaceSource).toContain("State");
+    expect(workspaceSource).toContain("Available in store evidence drawer");
     expect(workspaceSource).toContain("Walmart footprint");
     expect(workspaceSource).toContain("Action priority");
+    expect(stylesSource).toContain(".canonical-filter-drawer");
+    expect(stylesSource).toContain(".canonical-filter-summary-row");
   });
 
-  it("labels percent-gap sorting and displayed-basis price deltas plainly", () => {
+  it("labels percent-gap sorting and normalized price deltas plainly", () => {
     expect(workspaceSource).toContain("Largest percent gap");
     expect(workspaceSource).toContain(
-      "Walmart reporting price is ${deltaLabel} on the displayed basis.",
+      "Walmart comparison value is ${deltaLabel} on the normalized/reporting basis",
     );
+    expect(workspaceSource).toContain("Normalized comparison:");
+    expect(workspaceSource).toContain("Pack/shelf price was not supplied");
+    expect(workspaceSource).toContain("canonicalRelationshipPriceBasis");
     expect(stylesSource).toContain(".canonical-product-card-footer small");
+    expect(stylesSource).toContain(".canonical-price-note");
   });
 
   it("keeps private-label, national, regional, and unclassified review factual", () => {
@@ -58,7 +72,8 @@ describe("canonical report workspace source contract", () => {
 
   it("keeps Executive Summary, Distribution, and Price Architecture distinct from the card board", () => {
     expect(workspaceSource).toContain("Complete Walmart loss action list");
-    expect(workspaceSource).toContain("Complete Walmart win action list");
+    expect(workspaceSource).toContain("setOutcomeMode");
+    expect(workspaceSource).toContain("Use the toggle to switch");
     expect(workspaceSource).toContain("ExecutivePriorityTable");
     expect(workspaceSource).toContain("Product footprint table");
     expect(workspaceSource).toContain("ProductFootprintTable");
@@ -71,6 +86,7 @@ describe("canonical report workspace source contract", () => {
     expect(workspaceSource).not.toContain("slice(0, 8)");
     expect(workspaceSource).not.toContain("slice(0, 25)");
     expect(stylesSource).toContain(".canonical-insight-table");
+    expect(stylesSource).toContain(".canonical-executive-toggle");
   });
 
   it("connects distribution to exact product location evidence instead of stock claims", () => {
@@ -83,6 +99,11 @@ describe("canonical report workspace source contract", () => {
     expect(workspaceSource).toContain("Mapped preview");
     expect(workspaceSource).toContain("Store list drawer");
     expect(workspaceSource).toContain("StoreEvidenceDrawer");
+    expect(workspaceSource).toContain("stateOptionsFromPoints");
+    expect(workspaceSource).toContain("state_filter");
+    expect(workspaceSource).toContain(
+      "visible_observed_distribution_store_count",
+    );
     expect(workspaceSource).toContain("/api/price-monitoring/");
     expect(workspaceSource).toContain('target.product, "full"');
     expect(workspaceSource).toContain("Download evidence CSV");

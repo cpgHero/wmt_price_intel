@@ -4,7 +4,12 @@ import {
   BROAD_WALMART_DISTRIBUTION_THRESHOLD,
   DEFAULT_CANONICAL_RELATIONSHIP_FILTERS,
   type CanonicalProductRelationship,
+  canonicalBenchmarkBrandOptions,
+  canonicalComparisonBasisOptions,
+  canonicalCompetitorBrandOptions,
   canonicalCompetitorOptions,
+  canonicalRelationshipPriceBasis,
+  canonicalUnitBasisOptions,
   filterCanonicalRelationships,
   groupCanonicalRelationshipsByOutcome,
   relationshipSearchText,
@@ -17,10 +22,18 @@ function relationship(overrides: {
   outcome: CanonicalProductRelationship["comparison"]["outcome"];
   brandType?: CanonicalProductRelationship["benchmark_product"]["brand_type"];
   competitor?: string;
+  brand?: string;
+  competitorBrand?: string;
+  comparisonBasis?: string;
   distribution?: number;
+  packagePrice?: number | null;
   priceDeltaPercent?: number;
+  unitBasis?: string;
 }): CanonicalProductRelationship {
   const competitor = overrides.competitor ?? "aldi_us";
+  const packagePrice =
+    overrides.packagePrice === undefined ? 1 : overrides.packagePrice;
+  const unitBasis = overrides.unitBasis ?? "package";
   return {
     relationship_id: overrides.id,
     benchmark_product: {
@@ -29,18 +42,18 @@ function relationship(overrides: {
       title: overrides.title,
       url: null,
       image_url: null,
-      brand: "Great Value",
+      brand: overrides.brand ?? "Great Value",
       brand_type: overrides.brandType ?? "private_label",
       seller_status: "qualified",
       package: {
-        label: "package",
-        unit_basis: "package",
+        label: unitBasis,
+        unit_basis: unitBasis,
       },
       price: {
         reporting_price: 1,
-        reporting_price_label: "$1.00/package",
-        package_price: 1,
-        normalized_unit_price: null,
+        reporting_price_label: `$1.00/${unitBasis}`,
+        package_price: packagePrice,
+        normalized_unit_price: packagePrice === null ? 1 : null,
         regular_price: null,
         discounted_price: null,
         currency: "USD",
@@ -57,18 +70,18 @@ function relationship(overrides: {
       title: `${overrides.title} competitor`,
       url: null,
       image_url: null,
-      brand: "Competitor brand",
+      brand: overrides.competitorBrand ?? "Competitor brand",
       brand_type: "private_label",
       seller_status: "not_applicable",
       package: {
-        label: "package",
-        unit_basis: "package",
+        label: unitBasis,
+        unit_basis: unitBasis,
       },
       price: {
         reporting_price: 1.1,
-        reporting_price_label: "$1.10/package",
-        package_price: 1.1,
-        normalized_unit_price: null,
+        reporting_price_label: `$1.10/${unitBasis}`,
+        package_price: packagePrice === null ? null : 1.1,
+        normalized_unit_price: packagePrice === null ? 1.1 : null,
         regular_price: null,
         discounted_price: null,
         currency: "USD",
@@ -80,8 +93,8 @@ function relationship(overrides: {
       },
     },
     comparison: {
-      comparison_basis: "spec_equivalent",
-      unit_basis: "package",
+      comparison_basis: overrides.comparisonBasis ?? "spec_equivalent",
+      unit_basis: unitBasis,
       price_delta: -0.1,
       price_delta_percent: overrides.priceDeltaPercent ?? -0.1,
       outcome: overrides.outcome,
@@ -141,13 +154,18 @@ describe("canonical report relationship focus helpers", () => {
     ]);
   });
 
-  it("filters by outcome, brand type, competitor, distribution, and search text", () => {
+  it("filters by outcome, brand type, brand, retailer, basis, distribution, and search text", () => {
     const filtered = filterCanonicalRelationships(rows, {
       ...DEFAULT_CANONICAL_RELATIONSHIP_FILTERS,
       query: "limited",
       outcome: "competitor_wins",
       brandType: "national",
+      benchmarkBrand: "Great Value",
+      competitorBrand: "Competitor brand",
       competitorRetailerId: "target_us",
+      comparisonBasis: "spec_equivalent",
+      unitBasis: "package",
+      priceBasis: "package_price",
       minimumWalmartDistribution: 200,
     });
 
@@ -186,10 +204,44 @@ describe("canonical report relationship focus helpers", () => {
     expect(relationshipSearchText(rows[2]!)).toContain("national");
     expect(relationshipSearchText(rows[2]!)).toContain("limited walmart loss");
     expect(relationshipSearchText(rows[2]!)).toContain("competitor_wins");
+    expect(relationshipSearchText(rows[2]!)).toContain("package");
   });
 
   it("returns stable sorted competitor options", () => {
     expect(canonicalCompetitorOptions(rows)).toEqual(["aldi_us", "target_us"]);
+  });
+
+  it("returns stable sorted brand and basis options", () => {
+    const mixedRows = [
+      ...rows,
+      relationship({
+        id: "normalized-unit",
+        title: "Normalized Unit",
+        outcome: "walmart_wins",
+        brand: "Organic Valley",
+        competitorBrand: "Simply Nature",
+        comparisonBasis: "all_brand",
+        packagePrice: null,
+        unitBasis: "gallon",
+      }),
+    ];
+
+    expect(canonicalBenchmarkBrandOptions(mixedRows)).toEqual([
+      "Great Value",
+      "Organic Valley",
+    ]);
+    expect(canonicalCompetitorBrandOptions(mixedRows)).toEqual([
+      "Competitor brand",
+      "Simply Nature",
+    ]);
+    expect(canonicalComparisonBasisOptions(mixedRows)).toEqual([
+      "all_brand",
+      "spec_equivalent",
+    ]);
+    expect(canonicalUnitBasisOptions(mixedRows)).toEqual(["gallon", "package"]);
+    expect(canonicalRelationshipPriceBasis(mixedRows.at(-1)!)).toBe(
+      "comparison_unit_price",
+    );
   });
 
   it("summarizes included relationships by Walmart brand role", () => {
