@@ -3929,6 +3929,25 @@ a.canonical-product-tile:hover {
   line-height: 1.4;
   margin-top: 0.45rem;
 }
+.canonical-product-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.7rem;
+}
+.canonical-product-card-actions button {
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 35%, transparent);
+  border-radius: 999px;
+  color: var(--green);
+  cursor: pointer;
+  font-size: 0.68rem;
+  font-weight: 800;
+  padding: 0.38rem 0.62rem;
+}
+.canonical-product-card-actions button:hover {
+  background: color-mix(in srgb, var(--green) 18%, transparent);
+}
 @media (max-width: 720px) {
   .canonical-filter-summary-row {
     grid-template-columns: 1fr;

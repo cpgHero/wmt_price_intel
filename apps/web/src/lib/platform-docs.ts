@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.114",
+  version: "1.3.115",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2937,6 +2937,12 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "2026-09-10",
               "Implemented in code; CI, merge, and production verification pending",
+              "Image-first canonical report cards now retain exact-product store evidence drawer access.",
+              "Each Product Wins & Losses image card exposes Walmart and competitor store-list actions that open the same source-backed store evidence drawer used by executive/table views. The drawer keeps state filtering, report-footprint share metadata, searched-row audit metadata, and CSV, Excel-compatible, and JSON downloads. This is a UI affordance and evidence-access change only; it does not change source data, matching-v2 certification, report calculations, price normalization, seller rules, distribution definitions, provider collection, PDP calls, AI calls, report replay, PDF export, or historical artifacts.",
+            ],
+            [
+              "2026-09-10",
+              "Merged, CI-passed, and production-verified",
               "Canonical report filters, executive toggles, and price labels now separate source-backed fields from unavailable dimensions.",
               "Executive Summary shows one comprehensive action list at a time through a wins/losses toggle. Product Wins & Losses replaces the crowded inline controls with a filter drawer for source-backed relationship fields: search, outcome, Walmart brand, Walmart brand type, competitor retailer, competitor brand, Product Pack category, comparison basis, unit basis, price basis, Walmart footprint, and sort. The drawer explicitly marks subcategory and global state as unavailable in the current canonical relationship dataset rather than inventing them; exact-product maps and store-evidence drawers add state filtering from loaded store rows and include state_filter plus visible filtered row counts in JSON exports. Price tables and image cards label normalized unit values as normalized comparison values and state when pack/shelf price is not supplied. This is a UI/report workflow, labeling, and export-metadata change only; it does not change source data, matching-v2 certification, report calculations, price normalization, seller rules, distribution definitions, provider collection, PDP calls, AI calls, report replay, PDF export, or historical artifacts.",
             ],

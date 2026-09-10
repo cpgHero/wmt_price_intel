@@ -2,7 +2,7 @@
 
 Date: 2026-09-10
 
-Status: implemented in code; CI, merge, and production verification pending.
+Status: filter and price-label changes merged, CI-passed, and production-verified; image-card store-list actions implemented in follow-up code with CI, merge, and production verification pending.
 
 ## Purpose
 
@@ -25,6 +25,7 @@ The canonical report needs fast, source-backed filtering and clearer price prese
   - Walmart footprint tier
   - sort
 - Product Wins & Losses shows one comprehensive image-card section at a time through Losses / Wins / Parity controls.
+- Each image card exposes Walmart and competitor store-list actions that open the exact-product evidence drawer with state filtering and CSV, Excel-compatible, and JSON downloads.
 - Global subcategory and global state are not invented when absent from the canonical relationship dataset.
 - Exact-product maps and store-evidence drawers expose a state filter after store rows are loaded from the product-scoped map API.
 - Store-evidence JSON exports include the active `state_filter` and visible filtered row counts.
