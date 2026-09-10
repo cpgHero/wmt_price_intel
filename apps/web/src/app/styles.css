@@ -3193,9 +3193,11 @@ a.product-highlight:hover {
     linear-gradient(118deg, #111614, #17251f 56%, #24340f);
 }
 .canonical-dataset-link {
+  background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 999px;
   color: var(--green);
+  cursor: pointer;
   font-size: 0.62rem;
   font-weight: 850;
   padding: 0.35rem 0.55rem;
@@ -3404,16 +3406,20 @@ a.product-highlight:hover {
   flex-wrap: wrap;
   gap: 0.4rem;
 }
-.canonical-table-actions a {
+.canonical-table-actions a,
+.canonical-table-actions button {
+  background: transparent;
   border: 1px solid var(--soft-line);
   border-radius: 999px;
   color: var(--green);
+  cursor: pointer;
   font-size: 0.62rem;
   font-weight: 850;
   padding: 0.25rem 0.48rem;
   text-decoration: none;
 }
-.canonical-table-actions a:hover {
+.canonical-table-actions a:hover,
+.canonical-table-actions button:hover {
   background: color-mix(in srgb, var(--green) 10%, transparent);
 }
 .canonical-location-actions {
@@ -3461,7 +3467,7 @@ a.product-highlight:hover {
   border-radius: 14px;
   display: grid;
   gap: 0.85rem;
-  grid-template-columns: 54px minmax(0, 1fr);
+  grid-template-columns: 54px minmax(0, 1fr) auto;
   padding: 0.85rem;
 }
 .canonical-location-product span {
@@ -3585,6 +3591,52 @@ a.product-highlight:hover {
 }
 .canonical-map-legend .price-higher::before {
   background: var(--amber);
+}
+.canonical-store-drawer {
+  max-width: 960px;
+  width: min(960px, 96vw);
+}
+.canonical-store-drawer .pm-product-identity {
+  min-width: 0;
+}
+.canonical-store-drawer-metrics {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.canonical-drawer-export-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: flex-end;
+}
+.canonical-drawer-export-actions .canonical-dataset-link {
+  background: transparent;
+  cursor: pointer;
+}
+.canonical-drawer-export-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+.canonical-store-drawer-summary {
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+  padding: 0.7rem 0.85rem;
+}
+.canonical-store-drawer-summary span {
+  color: var(--muted);
+  display: block;
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+.canonical-store-drawer-table {
+  max-height: calc(100vh - 360px);
+}
+.canonical-store-drawer .canonical-insight-table {
+  min-width: 760px;
 }
 .canonical-gap-cell {
   gap: 0.2rem;
@@ -3800,6 +3852,12 @@ a.canonical-product-tile:hover {
   }
   .canonical-map-card {
     grid-template-columns: 1fr;
+  }
+  .canonical-location-product {
+    grid-template-columns: 54px minmax(0, 1fr);
+  }
+  .canonical-location-product .canonical-dataset-link {
+    grid-column: 1 / -1;
   }
   .canonical-location-actions {
     justify-content: flex-start;

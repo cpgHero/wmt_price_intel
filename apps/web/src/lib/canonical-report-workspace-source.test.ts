@@ -57,7 +57,8 @@ describe("canonical report workspace source contract", () => {
   });
 
   it("keeps Executive Summary, Distribution, and Price Architecture distinct from the card board", () => {
-    expect(workspaceSource).toContain("Highest-priority losses");
+    expect(workspaceSource).toContain("Complete Walmart loss action list");
+    expect(workspaceSource).toContain("Complete Walmart win action list");
     expect(workspaceSource).toContain("ExecutivePriorityTable");
     expect(workspaceSource).toContain("Product footprint table");
     expect(workspaceSource).toContain("ProductFootprintTable");
@@ -67,6 +68,8 @@ describe("canonical report workspace source contract", () => {
     expect(workspaceSource).not.toContain(
       "Top Walmart wins by product footprint",
     );
+    expect(workspaceSource).not.toContain("slice(0, 8)");
+    expect(workspaceSource).not.toContain("slice(0, 25)");
     expect(stylesSource).toContain(".canonical-insight-table");
   });
 
@@ -77,14 +80,26 @@ describe("canonical report workspace source contract", () => {
     expect(workspaceSource).toContain("ProductLocationEvidencePanel");
     expect(workspaceSource).toContain("ExactProductMap");
     expect(workspaceSource).toContain("MappedLocationTable");
-    expect(workspaceSource).toContain("Mapped store sample");
+    expect(workspaceSource).toContain("Mapped preview");
+    expect(workspaceSource).toContain("Store list drawer");
+    expect(workspaceSource).toContain("StoreEvidenceDrawer");
     expect(workspaceSource).toContain("/api/price-monitoring/");
+    expect(workspaceSource).toContain('target.product, "full"');
     expect(workspaceSource).toContain("Download evidence CSV");
+    expect(workspaceSource).toContain("Excel");
+    expect(workspaceSource).toContain("JSON");
     expect(workspaceSource).toContain("distribution_store_count");
     expect(workspaceSource).toContain("service_area_presence_count");
+    expect(workspaceSource).toContain("searched_store_count");
+    expect(workspaceSource).toContain("distributionShareLabel");
     expect(compact).toContain("not inventory or in-stock status");
+    expect(compact).toContain(
+      "This is distribution evidence, not an in-stock claim.",
+    );
     expect(stylesSource).toContain(".canonical-map-card");
     expect(stylesSource).toContain(".canonical-map-point-layer");
+    expect(stylesSource).toContain(".canonical-store-drawer");
+    expect(stylesSource).toContain(".canonical-drawer-export-actions");
   });
 
   it("keeps trust language visible in the hidden preview", () => {
