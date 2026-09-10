@@ -144,7 +144,7 @@ function candidateIndex(reportView: AnalysisReportView) {
 
 function candidateForDecision(
   candidates: ReturnType<typeof candidateIndex>,
-  decision: ProductDecision,
+  decision: ReportableProductDecision,
 ) {
   if (decision.relationship_id) {
     const byId = candidates.byRelationshipId.get(
