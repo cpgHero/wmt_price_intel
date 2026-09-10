@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.108",
+  version: "1.3.109",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2936,7 +2936,7 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-10",
-              "Implemented in code; CI, merge, and production deployment pending",
+              "Production verified on Railway web deployment ff22d777-a00d-4ea1-a8ef-bd8a0adb248b",
               "Canonical report tabs were redesigned so simplified navigation does not collapse into repeated product cards.",
               "The app keeps image-first cards only in Product Wins & Losses. Executive Summary now uses an executive triage table, Distribution & Assortment deduplicates to exact Walmart product IDs and loads source-backed product location maps plus CSV evidence links, Price Architecture uses reporting-price ladder tables, and Evidence & QA remains the guardrail surface. This is a presentation and drill-down workflow change only; it does not change source data, matching-v2 certification, report calculations, price normalization, seller rules, distribution definitions, provider collection, PDP calls, AI calls, report replay, PDF export, or historical artifacts.",
             ],
