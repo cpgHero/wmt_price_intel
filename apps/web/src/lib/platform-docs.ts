@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.106",
+  version: "1.3.107",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2935,9 +2935,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-10",
-              "Implemented in PR #11; deployment verification pending",
+              "Merged, deployed, and production-verified; seller-governance warning follow-up implemented",
               "Canonical report datasets can use governed candidate evidence when product decisions are absent.",
-              "Production checks found that active Milk and Egg publications had matching-v2 certified comparable relationships plus governed, QA-ready, positive-price match-candidate rows, but zero `product_decisions`. The canonical dataset adapter now preserves `product_decisions` as the primary source when present; otherwise it admits only suggested or confirmed ready candidates with positive matched observations and positive displayed benchmark/competitor median prices. Duplicate candidate rows are deduped by governed relationship or product pair and prefer the Product Pack's preferred comparison basis. The existing seller, price, distribution, certification, and fail-closed readiness guardrails still run after this fallback. This changes only canonical report projection from already-published report-view evidence; it does not change Product Pack rules, matching-v2 certification, immutable AnalysisResults, publication rows, price calculations, distribution calculations, seller rules, provider collection, PDP calls, AI calls, materialization, PDF export, or historical artifacts.",
+              "Production checks found that active Milk and Egg publications had matching-v2 certified comparable relationships plus governed, QA-ready, positive-price match-candidate rows, but zero `product_decisions`. The canonical dataset adapter now preserves `product_decisions` as the primary source when present; otherwise it admits only suggested or confirmed ready candidates with positive matched observations and positive displayed benchmark/competitor median prices. Duplicate candidate rows are deduped by governed relationship or product pair and prefer the Product Pack's preferred comparison basis. PR #11 passed main CI, merged as ac85ab3, deployed to Railway production as 81a554bd-ad18-4a77-9fd4-1a81fadca721, and production checks verified milk is ready with 764 relationships, eggs is ready with 112 relationships, and bananas remains ready with 5 relationships. A follow-up corrected seller-governance status semantics so excluded seller-unqualified rows produce a warning when valid included relationships remain, while all-seller-excluded datasets still block. The existing seller, price, distribution, certification, and fail-closed readiness guardrails still run after this fallback. This changes only canonical report projection and QA status labeling from already-published report-view evidence; it does not change Product Pack rules, matching-v2 certification, immutable AnalysisResults, publication rows, price calculations, distribution calculations, seller rules, provider collection, PDP calls, AI calls, materialization, PDF export, or historical artifacts.",
             ],
             [
               "2026-09-10",

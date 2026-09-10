@@ -607,6 +607,12 @@ export function canonicalReportDatasetFromReportView(
   const unverifiedSellerProductCount = excludedRelationships.filter(
     (row) => row.reason_code === "benchmark_seller_not_qualified",
   ).length;
+  const sellerGovernanceStatus: CanonicalDataset["seller_governance"]["status"] =
+    unverifiedSellerProductCount === 0
+      ? "passed"
+      : relationships.length
+        ? "passed_with_unverified_competitors"
+        : "blocked";
   const productsWithoutImageCount = relationships.reduce<number>(
     (count: number, relationship) =>
       count +
@@ -679,7 +685,7 @@ export function canonicalReportDatasetFromReportView(
       warnings: readinessWarnings,
     },
     seller_governance: {
-      status: unverifiedSellerProductCount ? "blocked" : "passed",
+      status: sellerGovernanceStatus,
       benchmark_requirement: "qualified_seller_or_not_applicable",
       unverified_product_count: unverifiedSellerProductCount,
       excluded_product_count: unverifiedSellerProductCount,
