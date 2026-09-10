@@ -2935,9 +2935,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-10",
-              "Implemented locally; release CI, deployment, and production acceptance pending",
+              "Merged, deployed, and production-verified",
               "Canonical report workspace is now the default AnalysisResult v2 report experience.",
-              "The Reports library opens the canonical five-tab report directly and no longer presents a separate simplified-preview action. The canonical report header no longer labels itself as a preview, and the old workspace remains available only through explicit legacy query flags for audit comparison. This changes report workspace routing and explanatory UI copy only; it does not change source data, report calculations, distribution rules, publication gates, matching, provider calls, PDP calls, AI calls, reprocessing, PDF export, or historical artifacts.",
+              "The Reports library opens the canonical five-tab report directly and no longer presents a separate simplified-preview action. The canonical report header no longer labels itself as a preview, and the old workspace remains available only through explicit legacy query flags for audit comparison. PR #7 passed main CI, merged as 502cce5, deployed to Railway production, and the deployed Reports library plus default report route were verified against production. This changes report workspace routing and explanatory UI copy only; it does not change source data, report calculations, distribution rules, publication gates, matching, provider calls, PDP calls, AI calls, reprocessing, PDF export, or historical artifacts.",
             ],
             [
               "2026-09-10",

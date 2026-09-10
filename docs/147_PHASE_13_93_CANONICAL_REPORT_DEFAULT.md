@@ -2,6 +2,8 @@
 
 Date: 2026-09-10
 
+Release status: merged in PR #7 as `502cce5`, passed main CI, deployed to Railway production, and production-verified on 2026-09-10.
+
 Parent plan: `docs/139_PHASE_13_85_REPORTING_SIMPLIFICATION_AND_APP_FIRST_REDESIGN.md`
 
 ## Objective
@@ -32,3 +34,10 @@ This phase does not change report calculations, prices, distribution rules, matc
 - Explicit legacy query flags still render the old workspace.
 - Reports library no longer presents separate current/simplified actions.
 - Source-contract tests protect the canonical five-tab structure, product-card trust language, image-first relationship cards, Evidence & QA checklist, and absence of preview/version-change commentary.
+
+## Production verification
+
+- Railway web deployment `3c29157c-c8d4-4174-8ec8-a9a8e6d9137c` completed successfully from commit `502cce5b5755b5698e18847be60717c599c63d64`.
+- `https://web-production-ee2a4.up.railway.app/health/ready` returned ready with API dependency OK.
+- The production Reports library exposed five report links, showed the single `Open report` action, and did not show `Open simplified preview`.
+- The production default milk report route rendered canonical report markers including `Product-level report`, `Canonical dataset`, and `Legacy workspace`.
