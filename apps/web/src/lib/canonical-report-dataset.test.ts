@@ -285,6 +285,63 @@ describe("canonical report dataset adapter", () => {
     });
   });
 
+  it("projects governed candidate evidence when product decisions are missing", () => {
+    const view = reportView();
+    view.product_decisions = [];
+    view.comparison_bases = [
+      {
+        availability_policy: "search_presence",
+        comparison_metric: "package_price",
+        geography: "exact_zip",
+        label: "Specification equivalent",
+        package_basis: "exact_package",
+        population_basis: "relationship_resolved_products",
+        price_unit: "USD/package",
+        profile_id: "spec_equivalent",
+        radius_miles: null,
+        scorecard_role: "preferred",
+      },
+      {
+        availability_policy: "search_presence",
+        comparison_metric: "package_price",
+        geography: "exact_zip",
+        label: "Fallback equivalent",
+        package_basis: "exact_package",
+        population_basis: "relationship_resolved_products",
+        price_unit: "USD/package",
+        profile_id: "fallback_equivalent",
+        radius_miles: null,
+        scorecard_role: "fallback",
+      },
+    ];
+    view.match_candidates = [
+      {
+        ...view.match_candidates![0]!,
+        id: "candidate-fallback",
+        profile_id: "fallback_equivalent",
+        median_benchmark_price: 0.31,
+        median_competitor_price: 0.29,
+        median_gap: 0.02,
+      },
+      view.match_candidates![0]!,
+    ];
+
+    const dataset = canonicalReportDatasetFromReportView(analysis(), view);
+
+    expect(dataset.product_relationships).toHaveLength(1);
+    expect(dataset.summary).toMatchObject({
+      relationship_count: 1,
+      walmart_win_count: 1,
+      competitor_win_count: 0,
+      parity_count: 0,
+    });
+    expect(dataset.product_relationships[0]?.comparison).toMatchObject({
+      comparison_basis: "spec_equivalent",
+      price_delta: -0.07,
+    });
+    expect(dataset.readiness.status).toBe("ready");
+  });
+
   it("uses source observed_end as the canonical evidence timestamp when available", () => {
     const dataset = canonicalReportDatasetFromReportView(
       analysis({

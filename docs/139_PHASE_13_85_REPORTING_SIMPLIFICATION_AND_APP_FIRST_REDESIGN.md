@@ -548,3 +548,10 @@ Start Phase A immediately in the active development repo. The first concrete imp
 - Added a read-only app-layer adapter that projects current report-view evidence into the canonical report dataset and excludes unsafe/incomplete product relationships.
 - Corrected misleading Price Intelligence UI copy from retailer-master location source to positive-price store Search distribution source.
 - No route removal, raw evidence mutation, database deletion, provider call, AI call, report publication, or PDF export behavior change has been made.
+
+### 2026-09-10
+
+- Phase 13.94 made empty canonical report datasets fail closed instead of presenting as buyer-ready.
+- Production checks then showed milk and eggs had matching-v2 certified relationships and governed candidate rows, but empty `product_decisions`.
+- Phase 13.95 adds a narrow canonical report adapter fallback: when `product_decisions` is empty, use governed, QA-ready, positive-price `match_candidates`, deduped by relationship/pair and ranked by preferred Product Pack comparison basis.
+- No Product Pack rules, matching certification, immutable analysis results, prices, distribution counts, seller rules, provider collection, PDP calls, AI calls, report publication records, or PDF export behavior are changed by this fallback.
