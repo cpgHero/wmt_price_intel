@@ -16,7 +16,7 @@ const stylesSource = readFileSync(
 );
 
 describe("canonical report workspace source contract", () => {
-  it("keeps the simplified report organized around the five app-first tabs", () => {
+  it("keeps the app report organized around the five app-first tabs", () => {
     expect(workspaceSource).toContain("Executive Summary");
     expect(workspaceSource).toContain("Product Wins & Losses");
     expect(workspaceSource).toContain("Distribution & Assortment");
@@ -54,6 +54,37 @@ describe("canonical report workspace source contract", () => {
     );
     expect(workspaceSource).toContain("broad-footprint");
     expect(stylesSource).toContain(".canonical-brand-role-grid");
+  });
+
+  it("keeps Executive Summary, Distribution, and Price Architecture distinct from the card board", () => {
+    expect(workspaceSource).toContain("Highest-priority losses");
+    expect(workspaceSource).toContain("ExecutivePriorityTable");
+    expect(workspaceSource).toContain("Product footprint table");
+    expect(workspaceSource).toContain("ProductFootprintTable");
+    expect(workspaceSource).toContain("Price ladder");
+    expect(workspaceSource).toContain("PriceArchitectureTable");
+    expect(workspaceSource).not.toContain("Product footprint cards");
+    expect(workspaceSource).not.toContain(
+      "Top Walmart wins by product footprint",
+    );
+    expect(stylesSource).toContain(".canonical-insight-table");
+  });
+
+  it("connects distribution to exact product location evidence instead of stock claims", () => {
+    const compact = workspaceSource.replace(/\s+/g, " ");
+
+    expect(workspaceSource).toContain("Exact-product map");
+    expect(workspaceSource).toContain("ProductLocationEvidencePanel");
+    expect(workspaceSource).toContain("ExactProductMap");
+    expect(workspaceSource).toContain("MappedLocationTable");
+    expect(workspaceSource).toContain("Mapped store sample");
+    expect(workspaceSource).toContain("/api/price-monitoring/");
+    expect(workspaceSource).toContain("Download evidence CSV");
+    expect(workspaceSource).toContain("distribution_store_count");
+    expect(workspaceSource).toContain("service_area_presence_count");
+    expect(compact).toContain("not inventory or in-stock status");
+    expect(stylesSource).toContain(".canonical-map-card");
+    expect(stylesSource).toContain(".canonical-map-point-layer");
   });
 
   it("keeps trust language visible in the hidden preview", () => {

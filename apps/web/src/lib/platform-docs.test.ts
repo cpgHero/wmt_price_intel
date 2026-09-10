@@ -21,7 +21,7 @@ describe("platform owner and administrator documentation", () => {
   it("provides a unique maintained guide in every documentation group", () => {
     const ids = platformDocumentation.guides.map((guide) => guide.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(platformDocumentation.version).toBe("1.3.107");
+    expect(platformDocumentation.version).toBe("1.3.108");
     expect(platformDocumentation.lastVerified).toBeTruthy();
 
     for (const group of platformDocGroups) {
@@ -226,7 +226,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.107");
+    expect(platformDocumentation.version).toBe("1.3.108");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -267,6 +267,13 @@ describe("platform owner and administrator documentation", () => {
     );
     expect(guides["analytics-reporting"]).toContain(
       "service-area presence is calculated and labeled separately",
+    );
+    expect(guides["analytics-reporting"]).toContain("five distinct app tabs");
+    expect(guides["analytics-reporting"]).toContain(
+      "loads source-backed product location maps",
+    );
+    expect(guides["analytics-reporting"]).toContain(
+      "rather than drawing inferred geography",
     );
     expect(guides["analytics-reporting"]).toContain(
       "never extrapolates to unobserved stores",
@@ -311,6 +318,12 @@ describe("platform owner and administrator documentation", () => {
     );
     expect(guides["change-orders"]).toContain(
       "new immutable replay generation with zero collection, provider, or ai calls",
+    );
+    expect(guides["change-orders"]).toContain(
+      "canonical report tabs were redesigned",
+    );
+    expect(guides["change-orders"]).toContain(
+      "does not change source data, matching-v2 certification, report calculations",
     );
   });
 });

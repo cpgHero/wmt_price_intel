@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.107",
+  version: "1.3.108",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -792,6 +792,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "PDP evidence may fill a missing Product Pack attribute at read-model projection time, but never changes Search-listed price, query context, sponsorship, or observed distribution. Derived unit price is recomputed only from explicit package evidence. Written singular/plural units are equivalent; day supply is converted to count only when the PDP also explicitly directs exactly one unit daily. Dosage quantities and multi-unit daily regimens are not package counts.",
             "Default competitive portfolios are persisted per immutable analysis, comparison profile, and 1/3/5-mile radius. Retailer selection filters one materialized all-retailer document; state and city combinations remain on-demand. Rebuilding these read models does not call MetricsCart or OpenAI.",
             "Price Intelligence Home reads one publication-time materialized catalog per configured retailer. Search, brand, brand type, seller, and pagination are applied by the API, and the browser receives 40 rows at a time. Opening a product loads its complete product-location, map, price-distribution, and PDP evidence lazily. Catalog materialization uses retained evidence and makes no MetricsCart or OpenAI call.",
+            "The canonical product report uses five distinct app tabs: Executive Summary for triage, Product Wins & Losses for the image-first relationship action board, Distribution & Assortment for deduplicated Walmart product footprints plus exact-product location evidence, Price Architecture for table-based reporting price ladders, and Evidence & QA for guardrails and exclusions. Distribution & Assortment loads source-backed product location maps and evidence downloads through the price-monitoring product view; if map evidence is unavailable, the report must say so rather than drawing inferred geography.",
             "Report Walmart-lower, competitor-lower, parity, and clear-leader rates separately. A narrow Walmart lead is Walmart-lower but not a clear leader; labels must not substitute one measure for the other.",
             "Distinguish no governed relationship, no positive-price Search observation, a location not searched, a Search non-observation, and a measured zero. These states are not interchangeable and must never share an unlabeled 0.",
             "A Matching v2 replay is decision-ready only when certified labels, final insufficient-evidence exclusions, and pending counts reconcile to the queue; no candidate lacks a final human outcome; the AnalysisResult validation is ready; and every configured retailer has reported evidence or an explicit limitation. Exhaustive checksum-governed certification with zero comparable relationships is a valid `no_governed_relationships` limitation only when selection is complete, pending review is zero, every retailer count reconciles, and the scorecards carry that explicit evidence state; it never publishes a zero-valued price outcome. A final insufficient-evidence case is an explicit nonblocking limitation, not a match and not unfinished work.",
@@ -2933,6 +2934,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-10",
+              "Implemented in code; CI, merge, and production deployment pending",
+              "Canonical report tabs were redesigned so simplified navigation does not collapse into repeated product cards.",
+              "The app keeps image-first cards only in Product Wins & Losses. Executive Summary now uses an executive triage table, Distribution & Assortment deduplicates to exact Walmart product IDs and loads source-backed product location maps plus CSV evidence links, Price Architecture uses reporting-price ladder tables, and Evidence & QA remains the guardrail surface. This is a presentation and drill-down workflow change only; it does not change source data, matching-v2 certification, report calculations, price normalization, seller rules, distribution definitions, provider collection, PDP calls, AI calls, report replay, PDF export, or historical artifacts.",
+            ],
             [
               "2026-09-10",
               "Merged, deployed, and production-verified; seller-governance warning follow-up implemented",
