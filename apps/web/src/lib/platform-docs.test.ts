@@ -21,7 +21,7 @@ describe("platform owner and administrator documentation", () => {
   it("provides a unique maintained guide in every documentation group", () => {
     const ids = platformDocumentation.guides.map((guide) => guide.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(platformDocumentation.version).toBe("1.3.112");
+    expect(platformDocumentation.version).toBe("1.3.113");
     expect(platformDocumentation.lastVerified).toBeTruthy();
 
     for (const group of platformDocGroups) {
@@ -226,7 +226,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.112");
+    expect(platformDocumentation.version).toBe("1.3.113");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -335,13 +335,37 @@ describe("platform owner and administrator documentation", () => {
       "instead of rebuilding the full retailer catalog",
     );
     expect(guides["analytics-reporting"]).toContain(
-      "store-share percentage are auditable",
+      "report-footprint share metadata",
     );
     expect(guides["analytics-reporting"]).toContain(
       "store-evidence drawers through the price-monitoring product view",
     );
     expect(guides["change-orders"]).toContain(
       "does not change source data, matching-v2 certification, report calculations",
+    );
+    expect(guides["analytics-reporting"]).toContain(
+      "retailer's report footprint denominator",
+    );
+    expect(guides["analytics-reporting"]).toContain(
+      "not total chain stores, inventory, or a sampled returned-row count",
+    );
+    expect(guides["analytics-reporting"]).toContain(
+      "broad distribution is a visible metric rather than a hidden filter",
+    );
+    expect(guides["analytics-reporting"]).toContain(
+      "searched-row audit-share metadata",
+    );
+    expect(guides["change-orders"]).toContain(
+      "business footprint share from searched-row audit share",
+    );
+    expect(guides["change-orders"]).toContain(
+      "largest observed positive-price store footprint for that retailer",
+    );
+    expect(guides["change-orders"]).toContain(
+      "not total chain stores, inventory, or a sampled returned-row count",
+    );
+    expect(guides["change-orders"]).toContain(
+      "broad distribution as a metric, not a hidden filter",
     );
   });
 });
