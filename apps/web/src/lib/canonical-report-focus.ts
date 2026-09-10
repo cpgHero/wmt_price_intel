@@ -24,6 +24,7 @@ export interface CanonicalRelationshipFilters {
   competitorBrand: string | "all";
   competitorRetailerId: string | "all";
   comparisonBasis: string | "all";
+  state: string | "all";
   unitBasis: string | "all";
   priceBasis: CanonicalPriceBasis | "all";
   minimumWalmartDistribution: number;
@@ -39,6 +40,7 @@ export const DEFAULT_CANONICAL_RELATIONSHIP_FILTERS: CanonicalRelationshipFilter
     competitorBrand: "all",
     competitorRetailerId: "all",
     comparisonBasis: "all",
+    state: "all",
     unitBasis: "all",
     priceBasis: "all",
     minimumWalmartDistribution: 0,

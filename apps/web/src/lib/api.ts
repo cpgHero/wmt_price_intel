@@ -901,6 +901,7 @@ export async function postApi<T>(path: string): Promise<ApiResult<T>> {
 export async function postApiJson<T>(
   path: string,
   body?: JsonObject,
+  timeoutMs = 15_000,
 ): Promise<ApiResult<T>> {
   const { apiInternalUrl } = loadServerConfig();
   try {
@@ -909,7 +910,7 @@ export async function postApiJson<T>(
       headers: body ? { "content-type": "application/json" } : undefined,
       body: body ? JSON.stringify(body) : undefined,
       cache: "no-store",
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) {
       let detail = `API returned ${response.status}`;

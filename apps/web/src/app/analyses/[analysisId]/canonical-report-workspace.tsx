@@ -50,6 +50,28 @@ type ProductEvidenceTarget = {
   retailerLabel: string;
   roleLabel: string;
 };
+type ProductStateCoverageResponse = {
+  schema_version: string;
+  analysis_id: string;
+  definition: string;
+  state_options: Array<{
+    state: string;
+    product_count: number;
+    distribution_store_count: number;
+  }>;
+  products: Array<{
+    retailer_id: string;
+    product_id: string;
+    distribution_store_count: number;
+    states: Array<{ state: string; distribution_store_count: number }>;
+  }>;
+};
+type ProductStateCoverageState = {
+  data: ProductStateCoverageResponse | null;
+  error: string | null;
+  requestKey: string;
+  status: "idle" | "loading" | "ready" | "error";
+};
 type StateFeature = {
   id?: string | number;
   geometry: { type: string; coordinates: unknown };
@@ -218,6 +240,57 @@ function mapEvidenceHref(
 
 function productHref(url: string | null) {
   return url && /^https?:\/\//i.test(url) ? url : null;
+}
+
+function productStateCoverageKey(product: ReportProduct) {
+  return `${product.retailer_id}::${product.retailer_product_id}`;
+}
+
+function relationshipProducts(relationships: ProductRelationship[]) {
+  return Array.from(
+    new Map(
+      relationships.flatMap((relationship) =>
+        [relationship.benchmark_product, relationship.competitor_product].map(
+          (product) => [
+            productStateCoverageKey(product),
+            {
+              retailer_id: product.retailer_id,
+              product_id: product.retailer_product_id,
+            },
+          ],
+        ),
+      ),
+    ).values(),
+  );
+}
+
+function stateCoverageProductIndex(
+  coverage: ProductStateCoverageResponse | null,
+) {
+  const index = new Map<string, Set<string>>();
+  for (const product of coverage?.products ?? []) {
+    index.set(
+      `${product.retailer_id}::${product.product_id}`,
+      new Set(product.states.map((state) => state.state)),
+    );
+  }
+  return index;
+}
+
+function relationshipHasStateCoverage(
+  relationship: ProductRelationship,
+  state: string,
+  coverageIndex: Map<string, Set<string>>,
+) {
+  return (
+    coverageIndex
+      .get(productStateCoverageKey(relationship.benchmark_product))
+      ?.has(state) ||
+    coverageIndex
+      .get(productStateCoverageKey(relationship.competitor_product))
+      ?.has(state) ||
+    false
+  );
 }
 
 function byDistributionThenTitle(
@@ -979,10 +1052,112 @@ function ProductWinsLosses({
     () => canonicalUnitBasisOptions(dataset.product_relationships),
     [dataset.product_relationships],
   );
-  const filteredRelationships = useMemo(
-    () => filterCanonicalRelationships(dataset.product_relationships, filters),
-    [dataset.product_relationships, filters],
+  const [stateCoverage, setStateCoverage] = useState<ProductStateCoverageState>(
+    { data: null, error: null, requestKey: "", status: "idle" },
   );
+  const stateCoverageRequestProducts = useMemo(
+    () => relationshipProducts(dataset.product_relationships),
+    [dataset.product_relationships],
+  );
+  const stateCoverageRequestKey = useMemo(
+    () =>
+      JSON.stringify({
+        analysis_id: dataset.analysis_id,
+        products: stateCoverageRequestProducts,
+      }),
+    [dataset.analysis_id, stateCoverageRequestProducts],
+  );
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(
+      `/api/price-monitoring/${encodeURIComponent(dataset.analysis_id)}/state-coverage`,
+      {
+        body: JSON.stringify({ products: stateCoverageRequestProducts }),
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        method: "POST",
+        signal: controller.signal,
+      },
+    )
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`State coverage returned ${response.status}`);
+        }
+        const data = (await response.json()) as ProductStateCoverageResponse;
+        setStateCoverage({
+          data,
+          error: null,
+          requestKey: stateCoverageRequestKey,
+          status: "ready",
+        });
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === "AbortError")
+          return;
+        setStateCoverage({
+          data: null,
+          error:
+            reason instanceof Error
+              ? reason.message
+              : "State coverage could not be loaded.",
+          requestKey: stateCoverageRequestKey,
+          status: "error",
+        });
+      });
+    return () => controller.abort();
+  }, [
+    dataset.analysis_id,
+    stateCoverageRequestKey,
+    stateCoverageRequestProducts,
+  ]);
+  const displayedStateCoverage =
+    stateCoverage.requestKey === stateCoverageRequestKey
+      ? stateCoverage
+      : {
+          data: null,
+          error: null,
+          requestKey: stateCoverageRequestKey,
+          status: "loading" as const,
+        };
+  const stateCoverageIndex = useMemo(
+    () => stateCoverageProductIndex(displayedStateCoverage.data),
+    [displayedStateCoverage.data],
+  );
+  const stateOptions = useMemo(
+    () =>
+      (displayedStateCoverage.data?.state_options ?? []).map(
+        (row) => row.state,
+      ),
+    [displayedStateCoverage.data],
+  );
+  const selectedStateMissing =
+    filters.state !== "all" &&
+    displayedStateCoverage.status === "ready" &&
+    !stateOptions.includes(filters.state);
+  const activeStateFilter = selectedStateMissing ? "all" : filters.state;
+  const drawerFilters = useMemo(
+    () => ({ ...filters, state: activeStateFilter }),
+    [activeStateFilter, filters],
+  );
+  const filteredRelationships = useMemo(() => {
+    const base = filterCanonicalRelationships(
+      dataset.product_relationships,
+      filters,
+    );
+    if (activeStateFilter === "all") return base;
+    return base.filter((relationship) =>
+      relationshipHasStateCoverage(
+        relationship,
+        activeStateFilter,
+        stateCoverageIndex,
+      ),
+    );
+  }, [
+    activeStateFilter,
+    dataset.product_relationships,
+    filters,
+    stateCoverageIndex,
+  ]);
   const groups = useMemo(
     () => groupCanonicalRelationshipsByOutcome(filteredRelationships),
     [filteredRelationships],
@@ -993,6 +1168,15 @@ function ProductWinsLosses({
     setFilters((current) => ({ ...current, ...patch }));
   };
   const resetFilters = () => setFilters(DEFAULT_CANONICAL_RELATIONSHIP_FILTERS);
+  const stateCoverageStatusLabel =
+    displayedStateCoverage.status === "loading"
+      ? "Loading state coverage…"
+      : displayedStateCoverage.status === "error"
+        ? `State coverage unavailable: ${displayedStateCoverage.error}`
+        : "State filter is source-backed by positive-price exact-product Search distribution.";
+  const stateCoverageDefinition =
+    displayedStateCoverage.data?.definition ??
+    "Positive-price exact-product Search distribution by state; not inventory or in-stock status.";
   const activeFilterCount = [
     filters.query.trim(),
     filters.outcome !== "all",
@@ -1001,6 +1185,7 @@ function ProductWinsLosses({
     filters.competitorBrand !== "all",
     filters.competitorRetailerId !== "all",
     filters.comparisonBasis !== "all",
+    activeStateFilter !== "all",
     filters.unitBasis !== "all",
     filters.priceBasis !== "all",
     filters.minimumWalmartDistribution > 0,
@@ -1095,8 +1280,7 @@ function ProductWinsLosses({
           relationships · {groups.walmartLosses.length.toLocaleString()} losses
           · {groups.walmartWins.length.toLocaleString()} wins ·{" "}
           {groups.parity.length.toLocaleString()} parity/unscored. Category:{" "}
-          {dataset.product_pack.name}. Store-state filtering is available in the
-          exact product location drawers where state evidence exists.
+          {dataset.product_pack.name}. {stateCoverageStatusLabel}
         </p>
       </section>
       <RelationshipSection
@@ -1113,10 +1297,13 @@ function ProductWinsLosses({
           comparisonBasisOptions={comparisonBasisOptions}
           competitorBrandOptions={competitorBrandOptions}
           competitorOptions={competitorOptions}
-          filters={filters}
+          filters={drawerFilters}
           onClose={() => setFilterDrawerOpen(false)}
           onReset={resetFilters}
           onUpdate={updateFilters}
+          stateCoverageDefinition={stateCoverageDefinition}
+          stateCoverageStatus={displayedStateCoverage.status}
+          stateOptions={stateOptions}
           unitBasisOptions={unitBasisOptions}
         />
       ) : null}
@@ -1134,6 +1321,9 @@ function RelationshipFilterDrawer({
   onClose,
   onReset,
   onUpdate,
+  stateCoverageDefinition,
+  stateCoverageStatus,
+  stateOptions,
   unitBasisOptions,
 }: Readonly<{
   benchmarkBrandOptions: string[];
@@ -1145,6 +1335,9 @@ function RelationshipFilterDrawer({
   onClose: () => void;
   onReset: () => void;
   onUpdate: (patch: Partial<CanonicalRelationshipFilters>) => void;
+  stateCoverageDefinition: string;
+  stateCoverageStatus: ProductStateCoverageState["status"];
+  stateOptions: string[];
   unitBasisOptions: string[];
 }>) {
   return (
@@ -1166,8 +1359,10 @@ function RelationshipFilterDrawer({
             <h2>Focus product relationships</h2>
             <small>
               Filters use fields already present in the canonical relationship
-              dataset. State is applied inside exact-product store evidence
-              drawers after location rows load.
+              dataset plus compact source-backed state coverage. Selecting a
+              state filters to relationships where either product has
+              positive-price Search distribution in that state; it does not make
+              the displayed price gap state-specific.
             </small>
           </div>
           <button aria-label="Close filters" onClick={onClose} type="button">
@@ -1285,11 +1480,23 @@ function RelationshipFilterDrawer({
           </label>
           <label>
             <span>State</span>
-            <input
-              readOnly
-              value="Available in store evidence drawer"
-              aria-label="State filter available in store evidence drawer"
-            />
+            <select
+              disabled={stateCoverageStatus !== "ready" || !stateOptions.length}
+              value={filters.state}
+              onChange={(event) => onUpdate({ state: event.target.value })}
+            >
+              <option value="all">
+                {stateCoverageStatus === "loading"
+                  ? "Loading states…"
+                  : "All states"}
+              </option>
+              {stateOptions.map((state) => (
+                <option key={state} value={state}>
+                  {state}
+                </option>
+              ))}
+            </select>
+            <small>{stateCoverageDefinition}</small>
           </label>
           <label>
             <span>Comparison basis</span>

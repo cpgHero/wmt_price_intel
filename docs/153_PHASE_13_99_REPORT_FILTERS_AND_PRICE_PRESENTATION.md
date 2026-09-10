@@ -2,7 +2,7 @@
 
 Date: 2026-09-10
 
-Status: filter and price-label changes merged, CI-passed, and production-verified; image-card store-list actions implemented in follow-up code with CI, merge, and production verification pending.
+Status: filter and price-label changes merged, CI-passed, and production-verified; image-card store-list actions merged, CI-passed, and production-verified; compact report-level state filter implemented in follow-up code with CI, merge, and production verification pending.
 
 ## Purpose
 
@@ -20,13 +20,15 @@ The canonical report needs fast, source-backed filtering and clearer price prese
   - competitor brand
   - Product Pack category
   - comparison basis
+  - state distribution footprint
   - unit basis
   - price basis
   - Walmart footprint tier
   - sort
 - Product Wins & Losses shows one comprehensive image-card section at a time through Losses / Wins / Parity controls.
 - Each image card exposes Walmart and competitor store-list actions that open the exact-product evidence drawer with state filtering and CSV, Excel-compatible, and JSON downloads.
-- Global subcategory and global state are not invented when absent from the canonical relationship dataset.
+- The report-level State filter uses compact source-backed product state coverage derived from exact-product positive-price Search observations. Selecting a state keeps relationships where either product has observed store distribution in that state; it does not make the displayed price gap state-specific.
+- Global subcategory is not invented when absent from the canonical relationship dataset.
 - Exact-product maps and store-evidence drawers expose a state filter after store rows are loaded from the product-scoped map API.
 - Store-evidence JSON exports include the active `state_filter` and visible filtered row counts.
 - Price tables and image cards distinguish source-backed package price from normalized comparison value. When package price is absent, the UI states that pack/shelf price is not supplied in the report dataset.

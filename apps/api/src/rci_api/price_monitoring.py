@@ -1688,6 +1688,100 @@ class PriceMonitoringService:
             self._product_observation_cache[cache_key] = grouped
             return grouped
 
+    async def state_coverage(
+        self,
+        analysis_id: str,
+        products: list[dict[str, str]],
+    ) -> dict[str, Any]:
+        """Return compact exact-product positive-price state coverage.
+
+        This is intentionally much smaller than the map/store-list payload:
+        report pages need state membership and counts to filter relationships,
+        while detailed store rows remain behind the exact-product drawer.
+        """
+
+        analysis = await self._analyses.get(analysis_id)
+        result = analysis.result
+        benchmark = str(result["benchmark_retailer"])
+        retailer_options = {benchmark, *(str(value) for value in result["competitors"])}
+        grouped_product_ids: dict[str, set[str]] = defaultdict(set)
+        for product in products:
+            retailer_id = str(product.get("retailer_id") or "").strip()
+            product_id = str(product.get("product_id") or "").strip()
+            if not retailer_id or not product_id:
+                continue
+            if retailer_id not in retailer_options:
+                raise ValueError(f"retailer {retailer_id!r} is not in this analysis")
+            grouped_product_ids[retailer_id].add(product_id)
+
+        grouped_observations = await asyncio.gather(
+            *(
+                self.product_observations_for_products(
+                    analysis_id,
+                    retailer_id=retailer_id,
+                    product_ids=sorted(product_ids),
+                    comparison_metric="package_price",
+                )
+                for retailer_id, product_ids in sorted(grouped_product_ids.items())
+            )
+        )
+
+        product_rows: list[dict[str, Any]] = []
+        state_product_counts: dict[str, int] = defaultdict(int)
+        state_store_counts: dict[str, int] = defaultdict(int)
+        for (retailer_id, product_ids), observations_by_product in zip(
+            sorted(grouped_product_ids.items()),
+            grouped_observations,
+            strict=True,
+        ):
+            for product_id in sorted(product_ids):
+                rows = observations_by_product.get(product_id, ())
+                stores_by_state: dict[str, set[str]] = defaultdict(set)
+                for row in rows:
+                    state = (row.state or "").strip().upper()
+                    if not state or row.location_kind != "store":
+                        continue
+                    stores_by_state[state].add(row.scope_key)
+                state_rows: list[dict[str, Any]] = []
+                distribution_store_count = 0
+                for state, store_keys in sorted(stores_by_state.items()):
+                    state_store_count = len(store_keys)
+                    state_rows.append(
+                        {
+                            "state": state,
+                            "distribution_store_count": state_store_count,
+                        }
+                    )
+                    state_product_counts[state] += 1
+                    state_store_counts[state] += state_store_count
+                    distribution_store_count += state_store_count
+                product_rows.append(
+                    {
+                        "retailer_id": retailer_id,
+                        "product_id": product_id,
+                        "distribution_store_count": distribution_store_count,
+                        "states": state_rows,
+                    }
+                )
+
+        return {
+            "schema_version": "1.0.0",
+            "analysis_id": analysis_id,
+            "definition": (
+                "Positive-price exact-product Search distribution by state; "
+                "not inventory or in-stock status."
+            ),
+            "state_options": [
+                {
+                    "state": state,
+                    "product_count": state_product_counts[state],
+                    "distribution_store_count": state_store_counts[state],
+                }
+                for state in sorted(state_product_counts)
+            ],
+            "products": product_rows,
+        }
+
     async def evidence_csv(
         self,
         analysis_id: str,
@@ -2239,6 +2333,51 @@ async def price_monitoring_map(
             ),
             detail=detail,
         )
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/analyses/{analysis_id}/price-monitoring/state-coverage")
+async def price_monitoring_state_coverage(
+    request: Request,
+    analysis_id: str,
+    service: ServiceDependency,
+    _public_analysis: PublicAnalysisDependency,
+) -> dict[str, Any]:
+    body = await request.json()
+    raw_products = body.get("products") if isinstance(body, dict) else None
+    if not isinstance(raw_products, list):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="products must be a list",
+        )
+    if len(raw_products) > 1_000:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="state coverage is limited to 1,000 products per request",
+        )
+    products = [
+        {
+            "retailer_id": str(row.get("retailer_id") or ""),
+            "product_id": str(row.get("product_id") or ""),
+        }
+        for row in raw_products
+        if isinstance(row, dict)
+    ]
+    try:
+        return await service.state_coverage(analysis_id, products)
     except AnalysisNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except LookupError as exc:
