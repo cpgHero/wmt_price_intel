@@ -2935,9 +2935,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-10",
-              "Implemented locally; release CI, deployment, and production acceptance pending",
+              "Merged, deployed, and production-verified",
               "Canonical report datasets now fail closed when no product-level relationships are reportable.",
-              "A canonical buyer-facing report with zero included product relationships is marked blocked with reason `no_reportable_product_relationships` and a retained-evidence rebuild next action. The Evidence & QA readiness card now displays next actions for blocked readiness reasons, and the canonical dataset audit command treats blocked readiness or zero reportable relationships as a failed audit. This changes readiness and QA presentation only; it does not invent relationships, change prices, change distribution rules, change seller rules, call providers, call PDP, call AI, recollect data, reprocess data, publish reports, export PDFs, or delete artifacts.",
+              "A canonical buyer-facing report with zero included product relationships is marked blocked with reason `no_reportable_product_relationships` and a retained-evidence rebuild next action. The Evidence & QA readiness card now displays next actions for blocked readiness reasons, and the canonical dataset audit command treats blocked readiness or zero reportable relationships as a failed audit. PR #9 passed main CI, merged as 5f0aee8, deployed to Railway production, and production checks verified milk and eggs now block zero-relationship canonical datasets while bananas remains ready with five relationships. This changes readiness and QA presentation only; it does not invent relationships, change prices, change distribution rules, change seller rules, call providers, call PDP, call AI, recollect data, reprocess data, publish reports, export PDFs, or delete artifacts.",
             ],
             [
               "2026-09-10",
