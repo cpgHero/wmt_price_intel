@@ -393,6 +393,7 @@ export interface ProductDecision {
     "suggested" | "confirmed" | "rejected" | "ambiguous" | "unavailable";
   profile_id?: string | null;
   comparison_metric?: string | null;
+  match_basis?: "exact_package" | "normalized_unit" | string | null;
   qa_status?: "ready" | "review_required" | "suppressed";
   suppression_reasons?: string[];
   priority: "attention" | "protect" | "parity";
@@ -418,6 +419,7 @@ export interface ProductDecision {
   plain_insight: string;
   comparison_grain?: string | null;
   evidence_available?: boolean;
+  match_attributes?: Record<string, unknown>;
   evidence_summary?: {
     matched_zip_markets?: number;
     benchmark_store_observations?: number;

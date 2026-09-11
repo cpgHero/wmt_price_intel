@@ -143,6 +143,7 @@ function reportView(): AnalysisReportView {
         relationship_status: "confirmed",
         profile_id: "spec_equivalent",
         comparison_metric: "package_price",
+        match_basis: "exact_package",
         qa_status: "ready",
         priority: "protect",
         benchmark_product_id: "44390948",
@@ -282,6 +283,78 @@ describe("canonical report dataset adapter", () => {
     expect(dataset.product_relationships[0]?.comparison).toMatchObject({
       outcome: "walmart_wins",
       price_delta: -0.07,
+    });
+  });
+
+  it("preserves governed fluid package facts for normalized gallon comparisons", () => {
+    const view = reportView();
+    view.product_decisions = [];
+    view.retailer_scorecards[0] = {
+      ...view.retailer_scorecards[0]!,
+      comparison_metric: "price_per_gallon",
+      price_unit: "USD/gallon",
+      package_basis: "normalized_unit",
+      benchmark_median: 12.52,
+      competitor_median: 8.3,
+      median_gap: 4.22,
+    };
+    view.comparison_bases = [
+      {
+        availability_policy: "search_presence",
+        comparison_metric: "price_per_gallon",
+        geography: "exact_zip",
+        label: "Specification equivalent",
+        package_basis: "normalized_unit",
+        population_basis: "relationship_resolved_products",
+        price_unit: "USD/gallon",
+        profile_id: "spec_equivalent",
+        radius_miles: null,
+        scorecard_role: "preferred",
+      },
+    ];
+    view.match_candidates = [
+      {
+        ...view.match_candidates![0]!,
+        comparison_metric: "price_per_gallon",
+        match_basis: "normalized_unit",
+        median_benchmark_price: 12.52,
+        median_competitor_price: 8.3,
+        median_gap: 4.22,
+        match_attributes: { volume_oz: 64, organic: true, fat_type: "Whole" },
+      },
+    ];
+
+    const dataset = canonicalReportDatasetFromReportView(analysis(), view);
+
+    expect(dataset.product_relationships).toHaveLength(1);
+    expect(dataset.product_relationships[0]?.benchmark_product.package).toEqual(
+      {
+        label: "64 fl oz",
+        unit_basis: "gallon",
+        quantity: 64,
+        unit: "fl oz",
+      },
+    );
+    expect(
+      dataset.product_relationships[0]?.competitor_product.package,
+    ).toEqual({
+      label: "64 fl oz",
+      unit_basis: "gallon",
+      quantity: 64,
+      unit: "fl oz",
+    });
+    expect(
+      dataset.product_relationships[0]?.benchmark_product.price,
+    ).toMatchObject({
+      reporting_price: 12.52,
+      package_price: null,
+      normalized_unit_price: 12.52,
+      reporting_price_label: "$12.52/gallon",
+    });
+    expect(dataset.product_relationships[0]?.comparison).toMatchObject({
+      unit_basis: "gallon",
+      price_delta: 4.219999999999999,
+      outcome: "competitor_wins",
     });
   });
 
