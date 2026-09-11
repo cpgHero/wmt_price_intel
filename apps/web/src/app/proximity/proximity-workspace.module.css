@@ -1788,8 +1788,26 @@
     grid-template-columns: 1fr;
   }
 
+  .kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .explorer {
+    grid-template-areas:
+      "map"
+      "controls";
+  }
+
   .sidebar {
-    max-height: 34rem;
+    grid-area: controls;
+  }
+
+  .mapSection {
+    grid-area: map;
+  }
+
+  .sidebar {
+    max-height: none;
   }
 
   .tableSummary {
@@ -1804,8 +1822,10 @@
     flex-wrap: wrap;
   }
 
-  .kpis {
-    grid-template-columns: 1fr;
+  .mapArea,
+  .mapSvg,
+  .mapEmpty {
+    min-height: 26rem;
   }
 
   .detailPanel {
@@ -1815,6 +1835,12 @@
   }
 
   .tableSummary {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 520px) {
+  .kpis {
     grid-template-columns: 1fr;
   }
 }
