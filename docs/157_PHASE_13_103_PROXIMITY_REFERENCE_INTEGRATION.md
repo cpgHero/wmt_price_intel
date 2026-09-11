@@ -18,7 +18,7 @@ The Proximity page was rebuilt to carry more of the supplied CPGHero proximity-e
 - Added real drag, wheel, keyboard, fit, zoom, and fullscreen controls to the SVG map.
 - Added hover tooltips, selected-relationship save action, and peer context for the same nearest competitor site.
 - Moved the complete evidence table into a bottom drawer with CSV, Excel-compatible CSV, JSON, and GeoJSON downloads.
-- Added current-map SVG export for downstream analysis, design review, and future app features.
+- Added current-map SVG and PNG export for downstream analysis, design review, and future app features.
 - Added method and usage modals that state what the proximity data represents and does not represent.
 
 ## Non-goals and trust boundaries

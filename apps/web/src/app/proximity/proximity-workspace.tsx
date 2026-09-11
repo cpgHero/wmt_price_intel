@@ -21,6 +21,27 @@ type SortMode = "nearest" | "farthest" | "state" | "store";
 type ThemeMode = "light" | "dark";
 type MapStyle = "insight" | "outline";
 type ModalKind = "method" | "shortlist" | "notes" | null;
+const SVG_EXPORT_STYLE_PROPERTIES = [
+  "background-color",
+  "color",
+  "display",
+  "fill",
+  "fill-opacity",
+  "font-family",
+  "font-size",
+  "font-weight",
+  "letter-spacing",
+  "line-height",
+  "opacity",
+  "stroke",
+  "stroke-dasharray",
+  "stroke-linecap",
+  "stroke-linejoin",
+  "stroke-opacity",
+  "stroke-width",
+  "text-anchor",
+  "visibility",
+] as const;
 
 type Topology = {
   arcs: number[][][];
@@ -149,7 +170,10 @@ function csvCell(value: unknown) {
 }
 
 function download(filename: string, type: string, body: string) {
-  const blob = new Blob([body], { type });
+  downloadBlob(filename, new Blob([body], { type }));
+}
+
+function downloadBlob(filename: string, blob: Blob) {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
@@ -256,6 +280,27 @@ function downloadGeoJson(
       2,
     ),
   );
+}
+
+function serializeSvgForExport(svg: SVGSVGElement) {
+  const clone = svg.cloneNode(true) as SVGSVGElement;
+  const sourceElements = [svg, ...Array.from(svg.querySelectorAll("*"))];
+  const clonedElements = [clone, ...Array.from(clone.querySelectorAll("*"))];
+
+  sourceElements.forEach((sourceElement, index) => {
+    const clonedElement = clonedElements[index];
+    if (!(clonedElement instanceof SVGElement)) return;
+    const computed = window.getComputedStyle(sourceElement);
+    SVG_EXPORT_STYLE_PROPERTIES.forEach((property) => {
+      const value = computed.getPropertyValue(property);
+      if (value) {
+        clonedElement.style.setProperty(property, value);
+      }
+    });
+  });
+
+  clone.setAttribute("xmlns", "http://www.w3.org/2000/svg");
+  return new XMLSerializer().serializeToString(clone);
 }
 
 function mercator(longitude: number, latitude: number) {
@@ -845,8 +890,47 @@ export function ProximityWorkspace({
 
   function exportSvg() {
     if (!svgRef.current) return;
-    const serialized = new XMLSerializer().serializeToString(svgRef.current);
+    const serialized = serializeSvgForExport(svgRef.current);
     download("proximity-map.svg", "image/svg+xml;charset=utf-8", serialized);
+  }
+
+  function exportPng() {
+    const svg = svgRef.current;
+    if (!svg) return;
+
+    const serialized = serializeSvgForExport(svg);
+    const sourceUrl = URL.createObjectURL(
+      new Blob([serialized], { type: "image/svg+xml;charset=utf-8" }),
+    );
+    const image = new Image();
+    image.onload = () => {
+      const bounds = svg.getBoundingClientRect();
+      const scale = Math.max(1, window.devicePixelRatio || 1);
+      const width = Math.max(1, Math.round(bounds.width * scale));
+      const height = Math.max(1, Math.round(bounds.height * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const context = canvas.getContext("2d");
+
+      if (!context) {
+        URL.revokeObjectURL(sourceUrl);
+        return;
+      }
+
+      context.fillStyle =
+        window.getComputedStyle(svg).backgroundColor || "#f8fafc";
+      context.fillRect(0, 0, width, height);
+      context.drawImage(image, 0, 0, width, height);
+      URL.revokeObjectURL(sourceUrl);
+      canvas.toBlob((blob) => {
+        if (blob) {
+          downloadBlob("proximity-map.png", blob);
+        }
+      }, "image/png");
+    };
+    image.onerror = () => URL.revokeObjectURL(sourceUrl);
+    image.src = sourceUrl;
   }
 
   return (
@@ -946,6 +1030,15 @@ export function ProximityWorkspace({
                   type="button"
                 >
                   Current map · SVG
+                </button>
+                <button
+                  onClick={() => {
+                    exportPng();
+                    setShowExportMenu(false);
+                  }}
+                  type="button"
+                >
+                  Current map · PNG
                 </button>
               </div>
             ) : null}
