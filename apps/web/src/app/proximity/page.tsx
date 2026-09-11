@@ -31,13 +31,21 @@ function normalizeRadius(radius: string | undefined) {
 function defaultCompetitor(retailers: LocationRetailer[], country: string) {
   const benchmark = walmartRetailerId(country);
   return (
-    retailers.find(
-      (retailer) =>
-        retailer.country === country &&
-        retailer.id !== benchmark &&
-        !retailer.id.startsWith("walmart_") &&
-        retailer.location_count > 0,
-    )?.id ?? null
+    retailers
+      .filter(
+        (retailer) =>
+          retailer.country === country &&
+          retailer.id !== benchmark &&
+          !retailer.id.startsWith("walmart_") &&
+          retailer.location_count > 0,
+      )
+      .sort(
+        (left, right) =>
+          Number(right.active) - Number(left.active) ||
+          Number(right.catalogued) - Number(left.catalogued) ||
+          right.location_count - left.location_count ||
+          left.display_name.localeCompare(right.display_name),
+      )[0]?.id ?? null
   );
 }
 
@@ -68,17 +76,6 @@ export default async function ProximityPage({
 
   return (
     <main>
-      <header className="page-header compact">
-        <div>
-          <p className="eyebrow">Analytics</p>
-          <h1>Proximity</h1>
-        </div>
-        <p>
-          Compare Walmart US or CA against one selected retailer using the
-          location master. The page maps nearest-store relationships, radius
-          coverage, and downloadable store-pair evidence.
-        </p>
-      </header>
       {retailersResponse.error ? (
         <EmptyState
           eyebrow="Location API unavailable"
