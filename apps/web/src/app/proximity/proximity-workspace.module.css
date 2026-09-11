@@ -87,6 +87,7 @@
 .dark .mapInsightPanel,
 .dark .zoomControl,
 .dark .detailPanel,
+.dark .mapFooter,
 .dark .baseSelect,
 .dark .iconButton {
   background: rgba(16, 27, 36, 0.94);
@@ -401,7 +402,7 @@
   display: grid;
   flex: 1;
   gap: 0.85rem;
-  grid-template-columns: 20.5rem minmax(0, 1fr);
+  grid-template-columns: 19.5rem minmax(0, 1fr);
   min-height: 0;
   padding: 0 1.55rem 1.25rem;
 }
@@ -598,6 +599,119 @@
 .layerGrid button[aria-pressed="true"] i {
   background: var(--accent);
   opacity: 1;
+}
+
+.coveragePanel {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  gap: 0.72rem;
+  padding: 0.85rem 0.9rem;
+}
+
+.coveragePanel p {
+  color: var(--sub);
+  font-size: 0.72rem;
+  line-height: 1.42;
+  margin: -0.25rem 0 0;
+}
+
+.coverageRows {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.coverageRow {
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 0.72rem;
+  color: var(--sub);
+  display: grid;
+  gap: 0.34rem;
+  overflow: hidden;
+  padding: 0.62rem 0.66rem 0.7rem;
+  position: relative;
+  text-align: left;
+}
+
+.coverageRow::after {
+  background: var(--line);
+  border-radius: 999px;
+  bottom: 0.38rem;
+  content: "";
+  height: 0.22rem;
+  left: 0.66rem;
+  opacity: 0.7;
+  position: absolute;
+  right: 0.66rem;
+}
+
+.coverageRow span {
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 860;
+}
+
+.coverageRow strong {
+  color: var(--ink);
+  font-size: 1.3rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.05em;
+  line-height: 0.95;
+}
+
+.coverageRow small {
+  font-size: 0.66rem;
+  line-height: 1.3;
+  padding-bottom: 0.15rem;
+}
+
+.coverageRow i {
+  background: linear-gradient(90deg, var(--accent), #65dfbf);
+  border-radius: 999px;
+  bottom: 0.38rem;
+  box-shadow: 0 0 0 1px rgba(8, 125, 114, 0.08);
+  display: block;
+  height: 0.22rem;
+  left: 0.66rem;
+  max-width: calc(100% - 1.32rem);
+  min-width: 0.24rem;
+  position: absolute;
+  z-index: 1;
+}
+
+.coverageRow:hover,
+.coverageRow[aria-pressed="true"] {
+  background: var(--accent-bg);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+}
+
+.coverageCallout {
+  background: linear-gradient(135deg, var(--accent-bg), var(--surface));
+  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line));
+  border-radius: 0.78rem;
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.75rem;
+}
+
+.coverageCallout span {
+  color: var(--accent);
+  font-size: 0.64rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.coverageCallout strong {
+  color: var(--ink);
+  font-size: 0.94rem;
+  line-height: 1.25;
+}
+
+.coverageCallout small {
+  color: var(--sub);
+  font-size: 0.68rem;
+  line-height: 1.35;
 }
 
 .bandStack {
@@ -802,6 +916,19 @@
   padding: 0;
 }
 
+.primarySideAction {
+  background: var(--accent) !important;
+  border: 1px solid var(--accent) !important;
+  border-radius: 0.58rem !important;
+  color: white !important;
+  min-height: 2rem;
+  padding: 0.45rem 0.68rem !important;
+}
+
+.dark .primarySideAction {
+  color: #062018 !important;
+}
+
 .mapSection {
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 38%), #dce8ef;
@@ -815,7 +942,7 @@
 
 .mapArea {
   height: 100%;
-  min-height: 31rem;
+  min-height: clamp(32rem, 58dvh, 46rem);
   overflow: hidden;
   position: relative;
 }
@@ -857,7 +984,7 @@
   cursor: grab;
   display: block;
   height: 100%;
-  min-height: 31rem;
+  min-height: clamp(32rem, 58dvh, 46rem);
   outline: none;
   position: relative;
   touch-action: none;
@@ -875,6 +1002,22 @@
 
 .dark .outlineMap .water {
   fill: #0d1720;
+}
+
+.dark .landMass {
+  fill: #101b24;
+  opacity: 0.8;
+  stroke: rgba(207, 224, 234, 0.16);
+}
+
+.dark .stateLayer path {
+  fill: rgba(17, 32, 43, 0.72);
+  stroke: rgba(207, 224, 234, 0.18);
+}
+
+.dark .gridLabel,
+.dark .mapLabel {
+  fill: #8ca1ae;
 }
 
 .outlineMap .mapVignette,
@@ -1404,7 +1547,8 @@
 }
 
 .drawerBackdrop {
-  background: rgba(14, 25, 35, 0.28);
+  background: rgba(14, 25, 35, 0.42);
+  backdrop-filter: blur(5px);
   inset: 0;
   position: fixed;
   z-index: 50;
@@ -1427,20 +1571,19 @@
 
 .tableDrawer {
   background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 0.9rem 0.9rem 0 0;
-  bottom: 0;
-  box-shadow: 0 -24px 80px rgba(15, 23, 42, 0.16);
+  border-left: 1px solid var(--line);
+  border-radius: 0;
+  box-shadow: -24px 0 80px rgba(15, 23, 42, 0.2);
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  left: 1.55rem;
-  max-height: min(62dvh, 36rem);
+  gap: 0.85rem;
+  height: 100%;
+  margin-left: auto;
+  max-height: none;
+  max-width: min(96vw, 64rem);
   overflow: hidden;
-  padding: 0.95rem;
-  position: absolute;
-  right: 1.55rem;
-  z-index: 45;
+  padding: 1rem;
+  width: min(96vw, 64rem);
 }
 
 .drawerHead {
@@ -1492,6 +1635,39 @@
   color: color-mix(in srgb, var(--accent) 72%, #182b3a);
   font-size: 0.76rem;
   line-height: 1.35;
+}
+
+.tableSummary {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.tableSummary article {
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 0.72rem;
+  display: grid;
+  gap: 0.2rem;
+  min-height: 4.4rem;
+  padding: 0.68rem 0.72rem;
+}
+
+.tableSummary span {
+  color: var(--sub);
+  font-size: 0.64rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  line-height: 1.25;
+  text-transform: uppercase;
+}
+
+.tableSummary strong {
+  color: var(--ink);
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.04em;
+  line-height: 1;
 }
 
 .checkRow {
@@ -1560,7 +1736,7 @@
   border: 1px solid var(--line);
   border-radius: 0.8rem;
   flex: 1;
-  min-height: 20rem;
+  min-height: 0;
   overflow: auto;
 }
 
@@ -1615,6 +1791,10 @@
   .sidebar {
     max-height: 34rem;
   }
+
+  .tableSummary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 720px) {
@@ -1632,5 +1812,9 @@
     bottom: 5.5rem;
     left: 0.85rem;
     width: auto;
+  }
+
+  .tableSummary {
+    grid-template-columns: 1fr;
   }
 }
