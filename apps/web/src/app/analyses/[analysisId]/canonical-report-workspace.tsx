@@ -44,6 +44,7 @@ type BrandType = ProductRelationship["benchmark_product"]["brand_type"];
 type PriceMonitoringMapPoint = PriceMonitoringMap["points"][number];
 type ExecutiveOutcomeMode = "losses" | "wins";
 type RelationshipSectionMode = "losses" | "wins" | "parity";
+const RELATIONSHIP_CARD_PAGE_SIZE = 24;
 type ProductEvidenceTarget = {
   product: ReportProduct;
   reportFootprintCount?: number | null;
@@ -3110,6 +3111,33 @@ function RelationshipSection({
 }>) {
   const [selectedEvidenceTarget, setSelectedEvidenceTarget] =
     useState<ProductEvidenceTarget | null>(null);
+  const [pagination, setPagination] = useState<{
+    pageIndex: number;
+    relationships: ProductRelationship[];
+  }>({ pageIndex: 0, relationships });
+  const totalPages = Math.max(
+    1,
+    Math.ceil(relationships.length / RELATIONSHIP_CARD_PAGE_SIZE),
+  );
+  const currentPageIndex =
+    pagination.relationships === relationships ? pagination.pageIndex : 0;
+  const safePageIndex = Math.min(currentPageIndex, totalPages - 1);
+  const pageStart = safePageIndex * RELATIONSHIP_CARD_PAGE_SIZE;
+  const pageEnd = Math.min(
+    relationships.length,
+    pageStart + RELATIONSHIP_CARD_PAGE_SIZE,
+  );
+  const visibleRelationships = relationships.slice(pageStart, pageEnd);
+  const updatePageIndex = (nextPageIndex: number): void => {
+    setPagination({ pageIndex: nextPageIndex, relationships });
+  };
+  const previousPage = (): void => {
+    updatePageIndex(Math.max(0, safePageIndex - 1));
+  };
+  const nextPage = (): void => {
+    updatePageIndex(Math.min(totalPages - 1, safePageIndex + 1));
+  };
+
   return (
     <>
       <section className="workspace-section">
@@ -3120,16 +3148,80 @@ function RelationshipSection({
           </div>
         </header>
         {relationships.length ? (
-          <div className="canonical-product-grid">
-            {relationships.map((relationship) => (
-              <RelationshipCard
-                key={relationship.relationship_id}
-                onSelectEvidenceTarget={setSelectedEvidenceTarget}
-                relationship={relationship}
-                retailerFootprints={retailerFootprints}
-              />
-            ))}
-          </div>
+          <>
+            <div className="canonical-card-pagination">
+              <p>
+                Showing cards {(pageStart + 1).toLocaleString()}–
+                {pageEnd.toLocaleString()} of{" "}
+                {relationships.length.toLocaleString()}. The list is
+                comprehensive; pagination keeps the board fast and avoids
+                rendering hundreds of image cards at once.
+              </p>
+              <div>
+                <button
+                  type="button"
+                  className="text-link"
+                  disabled={safePageIndex === 0}
+                  onClick={previousPage}
+                >
+                  Previous
+                </button>
+                <span>
+                  Page {(safePageIndex + 1).toLocaleString()} of{" "}
+                  {totalPages.toLocaleString()}
+                </span>
+                <button
+                  type="button"
+                  className="text-link"
+                  disabled={safePageIndex >= totalPages - 1}
+                  onClick={nextPage}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+            <div className="canonical-product-grid">
+              {visibleRelationships.map((relationship) => (
+                <RelationshipCard
+                  key={relationship.relationship_id}
+                  onSelectEvidenceTarget={setSelectedEvidenceTarget}
+                  relationship={relationship}
+                  retailerFootprints={retailerFootprints}
+                />
+              ))}
+            </div>
+            {totalPages > 1 ? (
+              <div className="canonical-card-pagination bottom">
+                <p>
+                  Use filters or quick search to narrow this comprehensive
+                  relationship set; use Next for the next{" "}
+                  {RELATIONSHIP_CARD_PAGE_SIZE.toLocaleString()} cards.
+                </p>
+                <div>
+                  <button
+                    type="button"
+                    className="text-link"
+                    disabled={safePageIndex === 0}
+                    onClick={previousPage}
+                  >
+                    Previous
+                  </button>
+                  <span>
+                    Page {(safePageIndex + 1).toLocaleString()} of{" "}
+                    {totalPages.toLocaleString()}
+                  </span>
+                  <button
+                    type="button"
+                    className="text-link"
+                    disabled={safePageIndex >= totalPages - 1}
+                    onClick={nextPage}
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </>
         ) : (
           <p className="empty-note">
             No included relationships in this section.
