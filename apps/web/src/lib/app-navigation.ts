@@ -53,6 +53,13 @@ export const applicationNavigation: readonly NavigationGroup[] = [
         icon: "intelligence",
         match: "prefix",
       },
+      {
+        label: "Proximity",
+        description: "Walmart-to-retailer store network distance explorer",
+        href: "/proximity",
+        icon: "intelligence",
+        match: "prefix",
+      },
     ],
   },
   {
@@ -149,6 +156,13 @@ export const simplifiedApplicationNavigation: readonly NavigationGroup[] = [
         label: "Reports",
         description: "Unified product-level price intelligence reports",
         href: "/analyses",
+        icon: "intelligence",
+        match: "prefix",
+      },
+      {
+        label: "Proximity",
+        description: "Walmart-to-retailer store network distance explorer",
+        href: "/proximity",
         icon: "intelligence",
         match: "prefix",
       },

@@ -13,6 +13,7 @@ from rci_locations.models import (
     LocationEligibilityState,
     LocationRecord,
     LocationSearchResult,
+    ProximityResult,
     RetailerAlias,
     RetailerCount,
     RetailerDefinition,
@@ -70,6 +71,14 @@ class LocationReadRepository(Protocol):
         limit: int,
         offset: int,
     ) -> list[LocationSearchResult]: ...
+
+    async def nearest_retailer_proximity(
+        self,
+        *,
+        benchmark_retailer_id: str,
+        competitor_retailer_id: str,
+        country: str,
+    ) -> ProximityResult: ...
 
     async def list_imports(self, limit: int = 20) -> list[ImportState]: ...
 

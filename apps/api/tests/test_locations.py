@@ -8,7 +8,7 @@ from rci_api.locations import get_location_repository
 from rci_api.main import create_app
 from rci_locations import InMemoryLocationRepository, RetailerCatalog
 from rci_locations.importer import transform_row
-from rci_locations.models import ImportSummary
+from rci_locations.models import ImportSummary, LocationRecord, RetailerDefinition
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -96,3 +96,114 @@ async def test_location_counts_search_and_import_status_apis() -> None:
         latest = await client.get("/api/v1/admin/location-imports/latest")
         assert latest.status_code == 200
         assert latest.json()["id"] == imports.json()[0]["id"]
+
+
+def _location(
+    retailer_id: str,
+    store_number: str,
+    *,
+    latitude: float,
+    longitude: float,
+    state: str = "AR",
+    eligible: bool = True,
+) -> LocationRecord:
+    return LocationRecord(
+        retailer_id=retailer_id,
+        provider=retailer_id,
+        provider_location_id=f"provider-{store_number}",
+        store_number=store_number,
+        store_name=f"{retailer_id} {store_number}",
+        raw_zipcode="72712",
+        zipcode="72712",
+        street="1 Main Street",
+        address="1 Main Street",
+        city="Bentonville",
+        state=state,
+        county="Benton",
+        country="USA",
+        latitude=latitude,
+        longitude=longitude,
+        status="active",
+        collection_eligible=eligible,
+        collection_eligibility_reason=None if eligible else "retired",
+        source_created_at=None,
+        source_row_id=store_number,
+        raw_row={},
+    )
+
+
+async def test_retailer_proximity_pairs_walmart_to_one_selected_competitor() -> None:
+    repository = InMemoryLocationRepository()
+    await repository.upsert_retailers(
+        [
+            RetailerDefinition("walmart_us", "Walmart (US)", "USA", True, True),
+            RetailerDefinition("costco_us", "Costco", "USA", True, True),
+            RetailerDefinition("target_us", "Target", "USA", True, True),
+        ],
+        [],
+    )
+    import_id = await repository.begin_import("locations.csv", "b" * 64)
+    await repository.upsert_locations(
+        import_id,
+        [
+            _location("walmart_us", "100", latitude=36.3729, longitude=-94.2088),
+            _location("walmart_us", "200", latitude=36.0104, longitude=-94.1599),
+            _location("costco_us", "c-near", latitude=36.3716, longitude=-94.2035),
+            _location("costco_us", "c-far", latitude=34.7465, longitude=-92.2896),
+            _location("target_us", "t-ignored", latitude=36.11, longitude=-94.15),
+            _location(
+                "costco_us",
+                "c-unmappable",
+                latitude=34.7465,
+                longitude=-92.2896,
+                eligible=False,
+            ),
+        ],
+    )
+    app = create_app()
+    app.dependency_overrides[get_location_repository] = lambda: repository
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.get(
+            "/api/v1/proximity",
+            params={
+                "country": "US",
+                "competitor_retailer_id": "costco_us",
+                "selected_radius_miles": "5",
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["schema_version"] == "1.0.0-retailer-proximity"
+    assert body["benchmark"]["id"] == "walmart_us"
+    assert body["competitor"]["id"] == "costco_us"
+    assert body["summary"]["paired_locations"] == 2
+    assert body["summary"]["competitor_mappable_locations"] == 2
+    assert body["summary"]["within_selected_radius"] == 1
+    assert {pair["competitor"]["store_number"] for pair in body["pairs"]} == {"c-near"}
+    assert "not drive time" in body["distance_methodology"]
+
+
+async def test_retailer_proximity_requires_a_distinct_competitor() -> None:
+    repository = InMemoryLocationRepository()
+    await repository.upsert_retailers(
+        [RetailerDefinition("walmart_us", "Walmart (US)", "USA", True, True)],
+        [],
+    )
+    app = create_app()
+    app.dependency_overrides[get_location_repository] = lambda: repository
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.get(
+            "/api/v1/proximity",
+            params={"country": "USA", "competitor_retailer_id": "walmart_us"},
+        )
+
+    assert response.status_code == 422
