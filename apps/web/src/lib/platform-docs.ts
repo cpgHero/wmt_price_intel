@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.119",
+  version: "1.3.120",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2935,6 +2935,12 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
             [
+              "2026-09-11",
+              "Implemented in code; CI, merge, deployment, and production verification pending",
+              "Canonical report price display now prefers safe package-equivalent values for normalized fluid-ounce products.",
+              "When a product lacks source package price but carries a governed fluid package size and a gallon-normalized reporting value, the app computes a display-only package-equivalent primary value such as the 64 oz equivalent and moves the gallon-normalized value into secondary audit context. Product tables and image cards scale the visible dollar gap to the same package-equivalent basis when both products share that display basis, while preserving the governed normalized gap in the explanatory note. This avoids presenting values like $12.52/gal as if they were shelf/package prices. This is a UI presentation change only; it does not change source evidence, matching-v2 certification, report calculations, stored normalized prices, seller rules, distribution definitions, provider collection, PDP calls, AI calls, report replay, PDF export, or historical artifacts.",
+            ],
+            [
               "2026-09-10",
               "Merged, CI-passed, deployed, and production-verified",
               "Product Wins & Losses now pages the comprehensive image-card board for faster rendering.",
@@ -2972,7 +2978,7 @@ export const platformDocumentation: PlatformDocumentation = {
             ],
             [
               "2026-09-10",
-              "Implemented in code; CI, merge, and production verification pending",
+              "Merged, CI-passed, and production-verified",
               "Exact-product store evidence drawers now use a product-scoped map fast path.",
               "The `/price-monitoring/map` read model preserves the same report drawer response contract, including observed distribution store rows, searched-not-observed location rows, store-share denominator inputs, service-area separation, and the no-inventory-claim distribution definition. It now reads selected product Search observations plus the eligible searched-location set instead of rebuilding the full retailer catalog, with a regression test that fails if the map route invokes full catalog preparation. This changes only API latency and drawer evidence availability; it does not change collection, matching, price normalization, seller rules, report calculations, PDF export, provider calls, PDP calls, AI calls, or historical artifacts.",
             ],
