@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.118",
+  version: "1.3.119",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2936,9 +2936,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-10",
-              "Implemented in code; CI, merge, and production verification pending",
+              "Merged, CI-passed, deployed, and production-verified",
               "Product Wins & Losses now pages the comprehensive image-card board for faster rendering.",
-              "The Product Wins & Losses tab keeps comprehensive win/loss/parity relationship coverage but renders 24 image cards per page with explicit Showing and Page controls. This reduces main-thread and accessibility-tree load while preserving source-backed filters, store-list evidence drawers, and complete card access. This is a UI performance and navigation change only; it does not change source data, matching-v2 certification, report calculations, price normalization, seller rules, distribution definitions, provider collection, PDP calls, AI calls, report replay, PDF export, or historical artifacts.",
+              "The Product Wins & Losses tab keeps comprehensive win/loss/parity relationship coverage but renders 24 image cards per page with explicit Showing and Page controls. Live Milk validation confirmed Page 1 shows cards 1–24 of 486, Page 2 shows cards 25–48 of 486, state coverage remains ready, and the 24 visible cards retain store-list evidence actions. This reduces main-thread and accessibility-tree load while preserving source-backed filters, store-list evidence drawers, and complete card access. This is a UI performance and navigation change only; it does not change source data, matching-v2 certification, report calculations, price normalization, seller rules, distribution definitions, provider collection, PDP calls, AI calls, report replay, PDF export, or historical artifacts.",
             ],
             [
               "2026-09-10",
