@@ -2948,25 +2948,25 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-11",
-              "Implemented in code; CI, merge, and production verification pending",
+              "Merged, CI-passed, deployed, and production-verified",
               "Proximity map receives a second visual and informational polish pass.",
               "The Proximity page now renders source-controlled US state geometry beneath Walmart and competitor locations, adds a stronger spatial canvas treatment, highlights the selected nearest-store relationship, adds visible 1/3/5/10-mile distance-band counts in the side rail, and adds an in-map covered-versus-gap insight card with the furthest visible Walmart relationship. This is a UI and information-design enhancement only. It uses the same location-master proximity API, nearest-location pairing, Haversine straight-line distance, filters, table drawer, and downloads. It does not introduce a third-party street basemap provider, does not change location rows, coordinates, retailer eligibility, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
             ],
             [
               "2026-09-11",
-              "Implemented in code; CI, merge, and production verification pending",
+              "Merged, CI-passed, deployed, and production-verified",
               "Proximity analytics redesigned as a map-first explorer.",
               "The Proximity page now follows the supplied CPGHero proximity-explorer design direction with a full-screen analytical shell, branded top bar, focused KPI strip, left control/list rail, large coordinate map stage, floating map controls and legend, selected-pair detail panel, filter drawer, and comprehensive downloadable location table. The default competitor selection now prioritizes active/catalogued retailers with the largest location footprints instead of the first alphabetical retailer. The backend nearest-location calculation now uses a deterministic spatial grid to reduce brute-force all-pairs scanning while preserving exact Haversine nearest-location selection through a bounded refinement pass. The underlying evidence remains the location master: Walmart US or Walmart CA compared with exactly one selected competitor using nearest mappable eligible locations and Haversine straight-line distance. This is a Proximity UI, navigation, default-selection, and performance improvement only; it does not change source location rows, coordinates, retailer eligibility, distance math, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
             ],
             [
               "2026-09-11",
-              "Implemented in code; CI, merge, and production verification pending",
+              "Merged, CI-passed, deployed, and production-verified",
               "Location read queries now type optional bind parameters for production Postgres.",
               "The Postgres location repository now declares SQLAlchemy types for optional retailer, country, ZIP, search, limit, and offset bind parameters used by location-list reads. This fixes the production psycopg ambiguous-parameter failure observed on `/api/v1/retailers?country=USA`, which the Proximity page uses to populate the retailer selector. This is a query-binding reliability fix only; it does not change location rows, coordinates, retailer eligibility, proximity distance math, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
             ],
             [
               "2026-09-11",
-              "Implemented in code; CI, merge, and production verification pending",
+              "Merged, CI-passed, deployed, and production-verified",
               "Analytics adds a Proximity page for Walmart-to-retailer location-network distance.",
               "The Proximity page fixes Walmart US or Walmart CA as the benchmark and compares it with exactly one selected competitor retailer from the location master. The API computes nearest selected-competitor locations using eligible rows with non-null coordinates and Haversine straight-line distance, then the app exposes source-backed radius KPIs, state/search filters, a map, a comprehensive location table drawer, and CSV, Excel-compatible CSV, and JSON downloads from the same filtered row set. This is a location-master analytics and UX change only; it does not change product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
             ],
