@@ -52,6 +52,9 @@ describe("canonical report workspace source contract", () => {
     expect(workspaceSource).toContain(
       "Walmart comparison value is ${deltaLabel} on the normalized/reporting basis",
     );
+    expect(workspaceSource).toContain("Package-equivalent");
+    expect(workspaceSource).toContain("normalizedPackageEquivalent");
+    expect(workspaceSource).toContain("Walmart display value is ${deltaLabel}");
     expect(workspaceSource).toContain("Normalized comparison:");
     expect(workspaceSource).toContain("Pack/shelf price was not supplied");
     expect(workspaceSource).toContain("canonicalRelationshipPriceBasis");

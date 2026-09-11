@@ -4,7 +4,7 @@ Date: 2026-09-10
 
 ## Status
 
-Implemented in code. CI, merge, deployment, and production verification are pending.
+Merged, CI-passed, and production-verified.
 
 ## Context
 

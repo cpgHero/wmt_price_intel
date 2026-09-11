@@ -143,6 +143,76 @@ function priceBasisLabel(priceBasis: CanonicalPriceBasis) {
   return "Normalized comparison value";
 }
 
+function packageFluidOunces(product: ReportProduct): number | null {
+  const packageQuantity = product.package.quantity;
+  if (
+    typeof packageQuantity !== "number" ||
+    !Number.isFinite(packageQuantity) ||
+    packageQuantity <= 0
+  ) {
+    return null;
+  }
+  const packageUnit = [
+    product.package.unit,
+    product.package.unit_basis,
+    product.package.label,
+  ]
+    .filter((value): value is string => Boolean(value))
+    .join(" ")
+    .toLocaleLowerCase("en-US");
+  if (
+    packageUnit.includes("fl oz") ||
+    packageUnit.includes("fluid oz") ||
+    packageUnit.includes("fluid ounce")
+  ) {
+    return packageQuantity;
+  }
+  if (/\bgal(?:lon)?s?\b/.test(packageUnit)) {
+    return packageQuantity * 128;
+  }
+  if (/\bqt\b|\bquart/.test(packageUnit)) {
+    return packageQuantity * 32;
+  }
+  if (/\bpt\b|\bpint/.test(packageUnit)) {
+    return packageQuantity * 16;
+  }
+  const labelQuantity = product.package.label.match(
+    /(\d+(?:\.\d+)?)\s*(?:fl\.?\s*oz|fluid\s*oz|fluid\s*ounces|oz)\b/i,
+  );
+  if (!labelQuantity) return null;
+  const fluidOunces = Number(labelQuantity[1]);
+  return Number.isFinite(fluidOunces) && fluidOunces > 0 ? fluidOunces : null;
+}
+
+function normalizedPackageEquivalent(product: ReportProduct) {
+  if (
+    !product.price.reporting_price_label
+      .toLocaleLowerCase("en-US")
+      .match(/\/\s*(?:gal|gallon|gallons)\b/)
+  ) {
+    return null;
+  }
+  const fluidOunces = packageFluidOunces(product);
+  const normalizedPrice =
+    typeof product.price.normalized_unit_price === "number" &&
+    Number.isFinite(product.price.normalized_unit_price)
+      ? product.price.normalized_unit_price
+      : product.price.reporting_price;
+  if (
+    fluidOunces === null ||
+    !Number.isFinite(normalizedPrice) ||
+    normalizedPrice <= 0
+  ) {
+    return null;
+  }
+  const packageLabel = product.package.label.trim() || `${fluidOunces} fl oz`;
+  return {
+    label: packageLabel,
+    unitKey: `fluid-ounce-package:${fluidOunces}`,
+    value: normalizedPrice * (fluidOunces / 128),
+  };
+}
+
 function priceDisplay(product: ReportProduct) {
   const packagePrice = product.price.package_price;
   if (
@@ -150,17 +220,66 @@ function priceDisplay(product: ReportProduct) {
     Number.isFinite(packagePrice) &&
     packagePrice > 0
   ) {
+    const fluidOunces = packageFluidOunces(product);
+    const comparisonUnitKey =
+      fluidOunces === null
+        ? `package:${product.package.label}`
+        : `fluid-ounce-package:${fluidOunces}`;
     return {
+      comparisonUnitKey,
+      comparisonUnitLabel: product.package.label,
+      comparisonValue: packagePrice,
       primary: formatCurrency(packagePrice),
       secondary: product.price.normalized_unit_price
         ? `Normalized comparison: ${product.price.reporting_price_label}`
         : "Source-backed package price",
     };
   }
+  const packageEquivalent = normalizedPackageEquivalent(product);
+  if (packageEquivalent) {
+    return {
+      comparisonUnitKey: packageEquivalent.unitKey,
+      comparisonUnitLabel: `${packageEquivalent.label} equivalent`,
+      comparisonValue: packageEquivalent.value,
+      primary: `Package-equivalent ${formatCurrency(packageEquivalent.value)}`,
+      secondary: `Derived from normalized ${product.price.reporting_price_label} for ${packageEquivalent.label}; source shelf/package price not supplied.`,
+    };
+  }
   return {
+    comparisonUnitKey: `normalized:${product.price.reporting_price_label}`,
+    comparisonUnitLabel: "normalized reporting basis",
+    comparisonValue: product.price.reporting_price,
     primary: `Normalized comparison: ${product.price.reporting_price_label}`,
     secondary:
       "Pack/shelf price was not supplied in this report dataset; do not read as shelf price.",
+  };
+}
+
+function relationshipDisplayDelta(relationship: ProductRelationship) {
+  const benchmarkPrice = priceDisplay(relationship.benchmark_product);
+  const competitorPrice = priceDisplay(relationship.competitor_product);
+  if (benchmarkPrice.comparisonUnitKey === competitorPrice.comparisonUnitKey) {
+    const displayDelta =
+      benchmarkPrice.comparisonValue - competitorPrice.comparisonValue;
+    const deltaLabel =
+      displayDelta >= 0
+        ? `${formatCurrency(displayDelta)} above competitor`
+        : `${formatCurrency(Math.abs(displayDelta))} below competitor`;
+    return {
+      explanation: `Walmart display value is ${deltaLabel} per ${benchmarkPrice.comparisonUnitLabel}. The governed normalized gap is ${formatSignedCurrency(relationship.comparison.price_delta)} on ${relationship.comparison.unit_basis}.`,
+      label: deltaLabel,
+      signedValue: formatSignedCurrency(displayDelta),
+    };
+  }
+  const delta = relationship.comparison.price_delta;
+  const deltaLabel =
+    delta >= 0
+      ? `${formatCurrency(delta)} above competitor`
+      : `${formatCurrency(Math.abs(delta))} below competitor`;
+  return {
+    explanation: `Walmart comparison value is ${deltaLabel} on the normalized/reporting basis; it is not a shelf/package price unless a source-backed package price is shown.`,
+    label: deltaLabel,
+    signedValue: formatSignedCurrency(delta),
   };
 }
 
@@ -931,7 +1050,7 @@ function ExecutivePriorityTable({
                 </td>
                 <td>
                   <strong>
-                    {formatSignedCurrency(relationship.comparison.price_delta)}
+                    {relationshipDisplayDelta(relationship).signedValue}
                   </strong>
                   <span>
                     {formatPercent(
@@ -1839,9 +1958,7 @@ function ProductFootprintTable({
                     <>
                       <strong>
                         Loss{" "}
-                        {formatSignedCurrency(
-                          row.largestLoss.comparison.price_delta,
-                        )}
+                        {relationshipDisplayDelta(row.largestLoss).signedValue}
                       </strong>
                       <span>
                         vs.{" "}
@@ -1860,9 +1977,7 @@ function ProductFootprintTable({
                     <>
                       <strong>
                         Win{" "}
-                        {formatSignedCurrency(
-                          row.strongestWin.comparison.price_delta,
-                        )}
+                        {relationshipDisplayDelta(row.strongestWin).signedValue}
                       </strong>
                       <span>
                         vs.{" "}
@@ -2948,7 +3063,7 @@ function PriceArchitectureTable({
               <td>
                 <span className="canonical-gap-cell">
                   <strong>
-                    {formatSignedCurrency(relationship.comparison.price_delta)}
+                    {relationshipDisplayDelta(relationship).signedValue}
                   </strong>
                   <span>
                     {formatPercent(
@@ -3250,12 +3365,7 @@ function RelationshipCard({
 }>) {
   const benchmarkHref = productHref(relationship.benchmark_product.url);
   const competitorHref = productHref(relationship.competitor_product.url);
-  const delta = relationship.comparison.price_delta;
-  const deltaLabel =
-    delta >= 0
-      ? `${formatCurrency(delta)} above competitor`
-      : `${formatCurrency(Math.abs(delta))} below competitor`;
-  const deltaExplanation = `Walmart comparison value is ${deltaLabel} on the normalized/reporting basis; it is not a shelf/package price unless a source-backed package price is shown.`;
+  const deltaDisplay = relationshipDisplayDelta(relationship);
   return (
     <article
       className={`canonical-product-card ${relationship.comparison.outcome}`}
@@ -3293,7 +3403,7 @@ function RelationshipCard({
       </div>
       <div className="canonical-product-card-footer">
         <span>{outcomeLabels[relationship.comparison.outcome]}</span>
-        <strong>{deltaLabel}</strong>
+        <strong>{deltaDisplay.label}</strong>
         <p>
           {formatPercent(Math.abs(relationship.comparison.price_delta_percent))}{" "}
           gap · {displayLabel(relationship.benchmark_product.brand_type)} ·{" "}
@@ -3302,7 +3412,7 @@ function RelationshipCard({
             " ",
           )}
         </p>
-        <small>{deltaExplanation}</small>
+        <small>{deltaDisplay.explanation}</small>
         <div className="canonical-product-card-actions">
           <button
             type="button"
