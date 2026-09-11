@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.122",
+  version: "1.3.123",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2936,9 +2936,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-11",
-              "Implemented; awaiting CI/deployment",
+              "Merged, CI-passed, deployed, and production-verified",
               "Executive Summary now uses the comprehensive image-card action board and shared report filters.",
-              "The Executive Summary uses the same source-backed relationship browser as Product Wins & Losses: quick search, filter drawer, Losses/Wins toggle, compact state coverage, action-priority sorting, and paginated product-image cards. Every visible executive card includes product IDs, package-aware price presentation, direct Walmart and competitor map links, and store-list drawer access with CSV, Excel-compatible, and JSON exports. This is a UI/navigation and evidence-access change only; it does not change source evidence, matching-v2 certification, report calculations, stored normalized prices, seller rules, distribution definitions, provider collection, PDP calls, AI calls, report replay, PDF export, or historical artifacts.",
+              "The Executive Summary uses the same source-backed relationship browser as Product Wins & Losses: quick search, filter drawer, Losses/Wins toggle, compact state coverage, action-priority sorting, and paginated product-image cards. Every visible executive card includes product IDs, package-aware price presentation, direct Walmart and competitor map links, and store-list drawer access with CSV, Excel-compatible, and JSON exports. Production smoke testing on Fresh Fluid Milk confirmed the Executive action board, 486-loss comprehensive paginated card list, map links, store-list actions, package-equivalent values, and filter drawer controls rendered on Railway production. This is a UI/navigation and evidence-access change only; it does not change source evidence, matching-v2 certification, report calculations, stored normalized prices, seller rules, distribution definitions, provider collection, PDP calls, AI calls, report replay, PDF export, or historical artifacts.",
             ],
             [
               "2026-09-11",

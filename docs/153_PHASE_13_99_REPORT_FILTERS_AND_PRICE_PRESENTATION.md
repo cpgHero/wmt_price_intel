@@ -2,7 +2,7 @@
 
 Date: 2026-09-10
 
-Status: filter and price-label changes merged, CI-passed, and production-verified; image-card store-list actions merged, CI-passed, and production-verified; compact report-level state filter merged, CI-passed, deployed, and production-verified after direct state-index optimization; image-card pagination merged, CI-passed, deployed, and production-verified; package-equivalent price display merged, CI-passed, deployed, and production-verified after the follow-up package-fact projection fix; executive action-board upgrade implemented and awaiting CI/deployment.
+Status: filter and price-label changes merged, CI-passed, and production-verified; image-card store-list actions merged, CI-passed, and production-verified; compact report-level state filter merged, CI-passed, deployed, and production-verified after direct state-index optimization; image-card pagination merged, CI-passed, deployed, and production-verified; package-equivalent price display merged, CI-passed, deployed, and production-verified after the follow-up package-fact projection fix; executive action-board upgrade merged, CI-passed, deployed, and production-verified.
 
 ## Purpose
 
@@ -13,6 +13,7 @@ The canonical report needs fast, source-backed filtering and clearer price prese
 - Executive Summary shows one comprehensive action list at a time with a Losses / Wins toggle.
 - Executive Summary uses the same source-backed filter drawer, quick search, state coverage, and comprehensive paginated image-card board as Product Wins & Losses, so the VP-facing landing view no longer falls back to table-only relationship rows.
 - Executive Summary image cards expose product IDs plus direct Walmart and competitor map links and store-list drawer actions for every visible relationship.
+- Production smoke testing on Fresh Fluid Milk verified the Executive Summary shows the Executive action board, Losses/Wins toggle, 486-loss comprehensive paginated card list, product IDs, package-equivalent pricing, direct map links, store-list actions, and the filter drawer with brand, retailer, state, category, subcategory, comparison-basis, unit-basis, price-basis, footprint, and sort controls.
 - Product Wins & Losses uses a filter drawer for source-backed relationship fields:
   - search text
   - outcome
