@@ -80,6 +80,23 @@ function textValue(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function positiveNumericValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+  return null;
+}
+
 function maybeUrl(value: unknown) {
   return textValue(value);
 }
@@ -208,6 +225,20 @@ function reportingPriceLabel(price: number, unitBasis: string) {
   return `$${price.toFixed(2)}${unitBasis ? `/${unitBasis}` : ""}`;
 }
 
+function unitBasisFromPriceUnitOrMetric(
+  priceUnit?: string | null,
+  comparisonMetric?: string | null,
+) {
+  const explicitUnit = textValue(priceUnit);
+  if (explicitUnit) return explicitUnit.replace(/^USD\//, "");
+  const metric = textValue(comparisonMetric);
+  if (!metric) return "reported unit";
+  if (metric === "package_price") return "package";
+  if (metric === "normalized_unit_price") return "unit";
+  const perUnit = metric.match(/^price_per_(.+)$/);
+  return perUnit ? perUnit[1]!.replace(/_/g, " ") : metric;
+}
+
 function canonicalPrice(
   price: unknown,
   unitBasis: string,
@@ -233,7 +264,34 @@ function canonicalPrice(
 function packageSummary(
   unitBasis: string,
   scorecard: RetailerScorecard | null,
+  sourceRow: ReportableProductDecision | null,
 ) {
+  const attributes = objectValue(recordValue(sourceRow, "match_attributes"));
+  const volumeOunces =
+    positiveNumericValue(attributes?.volume_oz) ??
+    positiveNumericValue(attributes?.volume_fl_oz) ??
+    positiveNumericValue(attributes?.package_volume_oz) ??
+    positiveNumericValue(attributes?.package_fluid_ounces) ??
+    positiveNumericValue(attributes?.fluid_ounces);
+  if (volumeOunces !== null) {
+    return {
+      label: `${Number.isInteger(volumeOunces) ? volumeOunces : volumeOunces.toFixed(2)} fl oz`,
+      unit_basis: unitBasis,
+      quantity: volumeOunces,
+      unit: "fl oz",
+    };
+  }
+  const weightOunces =
+    positiveNumericValue(attributes?.package_weight_oz) ??
+    positiveNumericValue(attributes?.weight_oz);
+  if (weightOunces !== null) {
+    return {
+      label: `${Number.isInteger(weightOunces) ? weightOunces : weightOunces.toFixed(2)} oz`,
+      unit_basis: unitBasis,
+      quantity: weightOunces,
+      unit: "oz",
+    };
+  }
   return {
     label: scorecard?.package_basis ?? "reported comparison basis",
     unit_basis: unitBasis,
@@ -370,9 +428,10 @@ function canonicalRelationship(
   }
   const comparisonMetric =
     decision.comparison_metric ?? scorecard?.comparison_metric ?? null;
-  const unitBasis = String(
-    scorecard?.price_unit ?? comparisonMetric ?? "reported unit",
-  ).replace(/^USD\//, "");
+  const unitBasis = unitBasisFromPriceUnitOrMetric(
+    scorecard?.price_unit,
+    comparisonMetric,
+  );
   const benchmarkPrice = canonicalPrice(
     decision.median_benchmark_price,
     unitBasis,
@@ -427,7 +486,7 @@ function canonicalRelationship(
           null,
         brand_type: benchmarkAssortment?.brand_type ?? "unclassified",
         seller_status: benchmarkSeller,
-        package: packageSummary(unitBasis, scorecard),
+        package: packageSummary(unitBasis, scorecard, candidate ?? decision),
         price: benchmarkPrice,
         distribution: benchmarkDistribution,
       },
@@ -460,7 +519,7 @@ function canonicalRelationship(
             candidate ?? decision,
             competitorRetailerId,
           ) ?? "not_applicable",
-        package: packageSummary(unitBasis, scorecard),
+        package: packageSummary(unitBasis, scorecard, candidate ?? decision),
         price: competitorPrice,
         distribution: competitorDistribution,
       },

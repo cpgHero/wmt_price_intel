@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.120",
+  version: "1.3.121",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2936,7 +2936,13 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-11",
-              "Implemented in code; CI, merge, deployment, and production verification pending",
+              "Follow-up implemented in code; CI, merge, deployment, and production verification pending",
+              "Canonical report dataset now preserves source-backed package facts from governed match attributes.",
+              "The canonical dataset projection carries explicit fluid-ounce and ounce package measures from Matching v2 `match_attributes` into each product package object, such as `volume_oz: 64` becoming `64 fl oz`. This gives the package-equivalent price display trustworthy inputs for normalized gallon comparisons and prevents live reports from falling back to primary normalized `$12.52/gallon` text when package-size evidence is already present. If no source-backed package measure exists, the prior missing-package caveat remains. This is a dataset projection and presentation-input change only; it does not change source evidence, matching-v2 certification, report calculations, stored normalized prices, seller rules, distribution definitions, provider collection, PDP calls, AI calls, report replay, PDF export, or historical artifacts.",
+            ],
+            [
+              "2026-09-11",
+              "Merged, CI-passed, deployed, and live smoke-test found missing package-size projection",
               "Canonical report price display now prefers safe package-equivalent values for normalized fluid-ounce products.",
               "When a product lacks source package price but carries a governed fluid package size and a gallon-normalized reporting value, the app computes a display-only package-equivalent primary value such as the 64 oz equivalent and moves the gallon-normalized value into secondary audit context. Product tables and image cards scale the visible dollar gap to the same package-equivalent basis when both products share that display basis, while preserving the governed normalized gap in the explanatory note. This avoids presenting values like $12.52/gal as if they were shelf/package prices. This is a UI presentation change only; it does not change source evidence, matching-v2 certification, report calculations, stored normalized prices, seller rules, distribution definitions, provider collection, PDP calls, AI calls, report replay, PDF export, or historical artifacts.",
             ],

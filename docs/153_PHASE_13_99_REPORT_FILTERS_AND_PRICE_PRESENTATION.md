@@ -2,7 +2,7 @@
 
 Date: 2026-09-10
 
-Status: filter and price-label changes merged, CI-passed, and production-verified; image-card store-list actions merged, CI-passed, and production-verified; compact report-level state filter merged, CI-passed, deployed, and production-verified after direct state-index optimization; image-card pagination merged, CI-passed, deployed, and production-verified; package-equivalent price display implemented in code with CI, merge, deployment, and production verification pending.
+Status: filter and price-label changes merged, CI-passed, and production-verified; image-card store-list actions merged, CI-passed, and production-verified; compact report-level state filter merged, CI-passed, deployed, and production-verified after direct state-index optimization; image-card pagination merged, CI-passed, deployed, and production-verified; package-equivalent price display merged, CI-passed, deployed, and live smoke-tested with a follow-up package-fact projection fix implemented in code with CI, merge, deployment, and production verification pending.
 
 ## Purpose
 
@@ -35,6 +35,7 @@ The canonical report needs fast, source-backed filtering and clearer price prese
 - Store-evidence JSON exports include the active `state_filter` and visible filtered row counts.
 - Price tables and image cards distinguish source-backed package price from normalized comparison value. When package price is absent, the UI states that pack/shelf price is not supplied in the report dataset.
 - When source package price is absent but a governed fluid package size and gallon-normalized value are available, price tables and image cards display a package-equivalent primary value and move the gallon-normalized value into secondary audit context.
+- The canonical report dataset preserves explicit package measures from governed Matching v2 `match_attributes`, including `volume_oz` as a fluid-ounce package quantity, so the package-equivalent display uses source-backed package facts rather than product-title inference.
 
 ## Non-goals
 
