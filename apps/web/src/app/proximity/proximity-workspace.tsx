@@ -103,6 +103,20 @@ function googleMapsUrl(latitude: number, longitude: number) {
   return `https://www.google.com/maps/search/?api=1&query=${latitude},${longitude}`;
 }
 
+function initialTheme(): ThemeMode {
+  if (typeof window === "undefined") return "light";
+  const proximityTheme = window.localStorage.getItem("proximity-theme");
+  if (proximityTheme === "dark" || proximityTheme === "light") {
+    return proximityTheme;
+  }
+  const appTheme = window.localStorage.getItem("rci-theme");
+  if (appTheme === "dark" || appTheme === "light") return appTheme;
+  if (document.documentElement.dataset.theme === "dark") return "dark";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
 function walmartRetailerId(country: string) {
   return country === "CANADA" ? "walmart_ca" : "walmart_us";
 }
@@ -516,7 +530,7 @@ export function ProximityWorkspace({
   const [showCompetitors, setShowCompetitors] = useState(true);
   const [showClusters, setShowClusters] = useState(false);
   const [onlySaved, setOnlySaved] = useState(false);
-  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [theme, setTheme] = useState<ThemeMode>(() => initialTheme());
   const [mapStyle, setMapStyle] = useState<MapStyle>("insight");
   const [mapZoom, setMapZoom] = useState(1);
   const [mapOffset, setMapOffset] = useState({ x: 0, y: 0 });
@@ -639,16 +653,12 @@ export function ProximityWorkspace({
     }
   }
 
-  const filteredPairs = useMemo(() => {
+  const scopedPairs = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return (view?.pairs ?? [])
       .filter((pair) => {
         if (onlySaved && !savedKeys.has(pairKey(pair))) return false;
         if (stateFilter !== "all" && pair.benchmark.state !== stateFilter) {
-          return false;
-        }
-        if (relation === "within" && pair.distance_miles > radius) return false;
-        if (relation === "outside" && pair.distance_miles <= radius) {
           return false;
         }
         if (!normalizedQuery) return true;
@@ -689,16 +699,19 @@ export function ProximityWorkspace({
         }
         return left.distance_miles - right.distance_miles;
       });
-  }, [
-    onlySaved,
-    query,
-    radius,
-    relation,
-    savedKeys,
-    sort,
-    stateFilter,
-    view?.pairs,
-  ]);
+  }, [onlySaved, query, savedKeys, sort, stateFilter, view?.pairs]);
+
+  const filteredPairs = useMemo(
+    () =>
+      scopedPairs.filter((pair) => {
+        if (relation === "within" && pair.distance_miles > radius) return false;
+        if (relation === "outside" && pair.distance_miles <= radius) {
+          return false;
+        }
+        return true;
+      }),
+    [radius, relation, scopedPairs],
+  );
 
   const selectedPair =
     filteredPairs.find((pair) => pair.benchmark.id === selectedKey) ??
@@ -718,21 +731,22 @@ export function ProximityWorkspace({
     (pair) => pair.distance_miles <= radius,
   ).length;
   const filteredOutside = Math.max(0, filteredPairs.length - filteredWithin);
-  const visibleMedian = median(
-    filteredPairs.map((pair) => pair.distance_miles),
-  );
-  const visibleWithin1 = filteredPairs.filter(
-    (pair) => pair.distance_miles <= 1,
-  ).length;
-  const visibleWithin3 = filteredPairs.filter(
-    (pair) => pair.distance_miles <= 3,
-  ).length;
-  const visibleWithin5 = filteredPairs.filter(
-    (pair) => pair.distance_miles <= 5,
-  ).length;
-  const visibleWithin10 = filteredPairs.filter(
-    (pair) => pair.distance_miles <= 10,
-  ).length;
+  const scopeMedian = median(scopedPairs.map((pair) => pair.distance_miles));
+  const coverageBands = RADIUS_OPTIONS.map((option) => {
+    const within = scopedPairs.filter(
+      (pair) => pair.distance_miles <= option,
+    ).length;
+    const outside = Math.max(0, scopedPairs.length - within);
+    return {
+      label: `≤${option} mi`,
+      miles: option,
+      outside,
+      share: scopedPairs.length ? within / scopedPairs.length : null,
+      within,
+    };
+  });
+  const selectedCoverage =
+    coverageBands.find((band) => band.miles === radius) ?? coverageBands.at(-1);
   const furthestVisiblePair = filteredPairs.reduce<ProximityPair | null>(
     (current, pair) =>
       current === null || pair.distance_miles > current.distance_miles
@@ -1096,11 +1110,11 @@ export function ProximityWorkspace({
       <section className={styles.kpis} aria-label="Proximity summary">
         <article className={styles.kpi}>
           <div>
-            <span>Visible Walmart locations</span>
-            <strong>{count(filteredPairs.length)}</strong>
+            <span>Walmart locations in scope</span>
+            <strong>{count(scopedPairs.length)}</strong>
             <small>
               {view
-                ? `${count(view.summary.paired_locations)} total paired in this comparison`
+                ? `${count(filteredPairs.length)} currently shown after relationship filters`
                 : "No comparison loaded"}
             </small>
           </div>
@@ -1108,22 +1122,32 @@ export function ProximityWorkspace({
         </article>
         <article className={styles.kpi}>
           <div>
-            <span>Within {radius} miles</span>
-            <strong>{count(filteredWithin)}</strong>
-            <small>{percent(visibleShare)} of visible Walmart locations</small>
+            <span>Have competitor ≤ {radius} miles</span>
+            <strong>{percent(selectedCoverage?.share ?? visibleShare)}</strong>
+            <small>
+              {count(selectedCoverage?.within ?? filteredWithin)} of{" "}
+              {count(scopedPairs.length)} Walmart locations in scope
+            </small>
           </div>
           <b className={`${styles.kpiIcon} ${styles.green}`}>≤</b>
         </article>
         <article className={styles.kpi}>
           <div>
-            <span>Median nearest distance</span>
-            <strong>{miles(visibleMedian)}</strong>
+            <span>No competitor ≤ {radius} miles</span>
+            <strong>
+              {count(selectedCoverage?.outside ?? filteredOutside)}
+            </strong>
             <small>
-              Average full-network distance:{" "}
-              {miles(view?.summary.nearest_distance_average_miles ?? null)}
+              {percent(
+                scopedPairs.length
+                  ? (selectedCoverage?.outside ?? filteredOutside) /
+                      scopedPairs.length
+                  : null,
+              )}{" "}
+              of Walmart locations in scope
             </small>
           </div>
-          <b className={`${styles.kpiIcon} ${styles.green}`}>mi</b>
+          <b className={`${styles.kpiIcon} ${styles.red}`}>gap</b>
         </article>
         <article className={styles.kpi}>
           <div>
@@ -1271,120 +1295,68 @@ export function ProximityWorkspace({
             </div>
           </div>
 
-          <div className={styles.bandStack} aria-label="Visible distance bands">
-            {[
-              ["≤1 mi", visibleWithin1],
-              ["≤3 mi", visibleWithin3],
-              ["≤5 mi", visibleWithin5],
-              ["≤10 mi", visibleWithin10],
-            ].map(([label, value]) => (
-              <div className={styles.bandRow} key={label}>
-                <span>{label}</span>
-                <strong>{count(Number(value))}</strong>
-                <i
-                  style={{
-                    width: `${filteredPairs.length ? (Number(value) / filteredPairs.length) * 100 : 0}%`,
-                  }}
-                />
-              </div>
-            ))}
-          </div>
-
-          <div className={styles.listTop}>
-            <div className={styles.listTabs}>
+          <div
+            className={styles.coveragePanel}
+            aria-label="Walmart coverage by selected competitor radius"
+          >
+            <div className={styles.sectionLine}>
+              <h2>Coverage by radius</h2>
               <button
-                className={relation === "all" ? styles.activeTab : undefined}
-                onClick={() => setRelation("all")}
+                className={styles.textButton}
+                onClick={() => setShowTable(true)}
                 type="button"
               >
-                All <span>{count(view?.pairs.length ?? 0)}</span>
-              </button>
-              <button
-                className={relation === "within" ? styles.activeTab : undefined}
-                onClick={() => setRelation("within")}
-                type="button"
-              >
-                Inside <span>{count(filteredWithin)}</span>
-              </button>
-              <button
-                className={
-                  relation === "outside" ? styles.activeTab : undefined
-                }
-                onClick={() => setRelation("outside")}
-                type="button"
-              >
-                Gaps <span>{count(filteredOutside)}</span>
+                Store details
               </button>
             </div>
-            <div className={styles.sortRow}>
-              <span>Nearest relationships</span>
-              <select
-                value={sort}
-                onChange={(event) => setSort(event.target.value as SortMode)}
-              >
-                <option value="nearest">Nearest first</option>
-                <option value="farthest">Farthest first</option>
-                <option value="state">State then store</option>
-                <option value="store">Store number</option>
-              </select>
-            </div>
-          </div>
-
-          <div className={styles.pairList}>
-            {filteredPairs.slice(0, 500).map((pair) => {
-              const selected = selectedPair?.benchmark.id === pair.benchmark.id;
-              return (
+            <p>
+              Percent of Walmart stores in the active country, state, search,
+              and saved scope with at least one selected competitor location
+              within each straight-line radius.
+            </p>
+            <div className={styles.coverageRows}>
+              {coverageBands.map((band) => (
                 <button
-                  aria-pressed={selected}
-                  className={styles.storeCard}
-                  key={pair.benchmark.id}
-                  onClick={() => setSelectedKey(pair.benchmark.id)}
+                  aria-pressed={radius === band.miles}
+                  className={styles.coverageRow}
+                  key={band.miles}
+                  onClick={() => void load({ radius: band.miles })}
                   type="button"
                 >
-                  <span className={styles.retIcon}>W</span>
-                  <span className={styles.storeText}>
-                    <strong>
-                      #{pair.benchmark.store_number} ·{" "}
-                      {pair.benchmark.city || "Unknown city"},{" "}
-                      {pair.benchmark.state || "—"}
-                    </strong>
-                    <small>
-                      {pair.benchmark.store_name || "Walmart location"}
-                    </small>
-                    <small>
-                      Nearest {pair.competitor.retailer_display_name} #
-                      {pair.competitor.store_number}
-                    </small>
-                  </span>
-                  <span
-                    className={
-                      pair.distance_miles <= radius
-                        ? styles.distance
-                        : `${styles.distance} ${styles.out}`
-                    }
-                  >
-                    {miles(pair.distance_miles)}
-                  </span>
+                  <span>{band.label}</span>
+                  <strong>{percent(band.share)}</strong>
+                  <small>
+                    {count(band.within)} covered / {count(band.outside)} gaps
+                  </small>
+                  <i
+                    style={{
+                      width: `${band.share === null ? 0 : band.share * 100}%`,
+                    }}
+                  />
                 </button>
-              );
-            })}
-            {filteredPairs.length > 500 ? (
-              <p className={styles.listNote}>
-                Showing first 500 in this rail for speed. Open the location
-                table for all {count(filteredPairs.length)} visible rows and
-                downloads.
-              </p>
-            ) : null}
-            {!filteredPairs.length ? (
-              <p className={styles.empty}>
-                No mappable retailer relationships match the current filters.
-              </p>
-            ) : null}
+              ))}
+            </div>
+            <div className={styles.coverageCallout}>
+              <span>Selected radius</span>
+              <strong>
+                {count(selectedCoverage?.within ?? filteredWithin)} covered ·{" "}
+                {count(selectedCoverage?.outside ?? filteredOutside)} gaps
+              </strong>
+              <small>
+                Median nearest distance {miles(scopeMedian)}; average
+                full-network distance{" "}
+                {miles(view?.summary.nearest_distance_average_miles ?? null)}.
+              </small>
+            </div>
           </div>
 
           <div className={styles.sideBottom}>
-            <button onClick={() => setShowTable(true)} type="button">
-              Export visible rows
+            <button
+              className={styles.primarySideAction}
+              onClick={() => setShowTable(true)}
+              type="button"
+            >
+              Open location details
             </button>
             <span>{view?.schema_version ?? "No schema"}</span>
           </div>
@@ -1879,9 +1851,8 @@ export function ProximityWorkspace({
                 location-master source
               </span>
               <span>
-                Visible 1/3/5/10 mi: {count(visibleWithin1)} /{" "}
-                {count(visibleWithin3)} / {count(visibleWithin5)} /{" "}
-                {count(visibleWithin10)}
+                Scope coverage 1/3/5/10 mi:{" "}
+                {coverageBands.map((band) => count(band.within)).join(" / ")}
               </span>
             </div>
           </div>
@@ -1998,103 +1969,137 @@ export function ProximityWorkspace({
       ) : null}
 
       {showTable ? (
-        <section aria-label="Location table" className={styles.tableDrawer}>
-          <div className={styles.drawerHead}>
-            <div>
-              <span>Downloadable evidence</span>
-              <h2>All visible Walmart-to-competitor pairs</h2>
-              <p>
-                {count(filteredPairs.length)} rows; the table, map, KPIs, and
-                exports reconcile to the same filtered set.
-              </p>
+        <div
+          className={styles.drawerBackdrop}
+          onClick={() => setShowTable(false)}
+          role="presentation"
+        >
+          <section
+            aria-label="Location table"
+            className={`${styles.drawer} ${styles.tableDrawer}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.drawerHead}>
+              <div>
+                <span>Downloadable evidence</span>
+                <h2>All visible Walmart-to-competitor pairs</h2>
+                <p>
+                  {count(filteredPairs.length)} rows; the table, map, KPIs, and
+                  exports reconcile to the same filtered set.
+                </p>
+              </div>
+              <button onClick={() => setShowTable(false)} type="button">
+                ×
+              </button>
             </div>
-            <button onClick={() => setShowTable(false)} type="button">
-              ×
-            </button>
-          </div>
-          <div className={styles.downloadRow}>
-            <button
-              className={styles.btn}
-              onClick={() =>
-                downloadCsv(filteredPairs, radius, "proximity-filtered.csv")
-              }
-              type="button"
-            >
-              CSV
-            </button>
-            <button
-              className={styles.btn}
-              onClick={() =>
-                downloadCsv(
-                  filteredPairs,
-                  radius,
-                  "proximity-filtered-excel.csv",
-                )
-              }
-              type="button"
-            >
-              Excel CSV
-            </button>
-            <button
-              className={styles.btn}
-              onClick={() =>
-                downloadJson(filteredPairs, radius, "proximity-filtered.json")
-              }
-              type="button"
-            >
-              JSON
-            </button>
-            <button
-              className={styles.btn}
-              onClick={() =>
-                downloadGeoJson(
-                  filteredPairs,
-                  radius,
-                  "proximity-filtered.geojson",
-                )
-              }
-              type="button"
-            >
-              GeoJSON
-            </button>
-          </div>
-          <div className={styles.tableWrap}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Walmart #</th>
-                  <th>Walmart location</th>
-                  <th>Competitor #</th>
-                  <th>Competitor location</th>
-                  <th>Distance</th>
-                  <th>≤ {radius} mi</th>
-                  <th>Walmart coordinate</th>
-                  <th>Competitor coordinate</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredPairs.map((pair) => (
-                  <tr key={pair.benchmark.id}>
-                    <td>{pair.benchmark.store_number}</td>
-                    <td>{locationLabel(pair.benchmark)}</td>
-                    <td>{pair.competitor.store_number}</td>
-                    <td>{locationLabel(pair.competitor)}</td>
-                    <td>{miles(pair.distance_miles)}</td>
-                    <td>{pair.distance_miles <= radius ? "Yes" : "No"}</td>
-                    <td>
-                      {pair.benchmark.latitude.toFixed(5)},{" "}
-                      {pair.benchmark.longitude.toFixed(5)}
-                    </td>
-                    <td>
-                      {pair.competitor.latitude.toFixed(5)},{" "}
-                      {pair.competitor.longitude.toFixed(5)}
-                    </td>
+            <div className={styles.tableSummary}>
+              <article>
+                <span>Walmart locations in scope</span>
+                <strong>{count(scopedPairs.length)}</strong>
+              </article>
+              <article>
+                <span>Covered ≤ {radius} mi</span>
+                <strong>
+                  {count(selectedCoverage?.within ?? filteredWithin)}
+                </strong>
+              </article>
+              <article>
+                <span>Gaps ≤ {radius} mi</span>
+                <strong>
+                  {count(selectedCoverage?.outside ?? filteredOutside)}
+                </strong>
+              </article>
+              <article>
+                <span>Coverage rate</span>
+                <strong>
+                  {percent(selectedCoverage?.share ?? visibleShare)}
+                </strong>
+              </article>
+            </div>
+            <div className={styles.downloadRow}>
+              <button
+                className={styles.btn}
+                onClick={() =>
+                  downloadCsv(filteredPairs, radius, "proximity-filtered.csv")
+                }
+                type="button"
+              >
+                CSV
+              </button>
+              <button
+                className={styles.btn}
+                onClick={() =>
+                  downloadCsv(
+                    filteredPairs,
+                    radius,
+                    "proximity-filtered-excel.csv",
+                  )
+                }
+                type="button"
+              >
+                Excel CSV
+              </button>
+              <button
+                className={styles.btn}
+                onClick={() =>
+                  downloadJson(filteredPairs, radius, "proximity-filtered.json")
+                }
+                type="button"
+              >
+                JSON
+              </button>
+              <button
+                className={styles.btn}
+                onClick={() =>
+                  downloadGeoJson(
+                    filteredPairs,
+                    radius,
+                    "proximity-filtered.geojson",
+                  )
+                }
+                type="button"
+              >
+                GeoJSON
+              </button>
+            </div>
+            <div className={styles.tableWrap}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Walmart #</th>
+                    <th>Walmart location</th>
+                    <th>Competitor #</th>
+                    <th>Competitor location</th>
+                    <th>Distance</th>
+                    <th>≤ {radius} mi</th>
+                    <th>Walmart coordinate</th>
+                    <th>Competitor coordinate</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
+                </thead>
+                <tbody>
+                  {filteredPairs.map((pair) => (
+                    <tr key={pair.benchmark.id}>
+                      <td>{pair.benchmark.store_number}</td>
+                      <td>{locationLabel(pair.benchmark)}</td>
+                      <td>{pair.competitor.store_number}</td>
+                      <td>{locationLabel(pair.competitor)}</td>
+                      <td>{miles(pair.distance_miles)}</td>
+                      <td>{pair.distance_miles <= radius ? "Yes" : "No"}</td>
+                      <td>
+                        {pair.benchmark.latitude.toFixed(5)},{" "}
+                        {pair.benchmark.longitude.toFixed(5)}
+                      </td>
+                      <td>
+                        {pair.competitor.latitude.toFixed(5)},{" "}
+                        {pair.competitor.longitude.toFixed(5)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
       ) : null}
 
       {modal ? (
@@ -2188,15 +2193,16 @@ export function ProximityWorkspace({
             {modal === "notes" ? (
               <div className={styles.modalBody}>
                 <p>
-                  Use the left rail for fast slicing, the map controls for
-                  spatial exploration, and the bottom drawer for the complete
-                  downloadable evidence table.
+                  Use the left rail for competitor and radius slicing, the map
+                  controls for spatial exploration, and the location details
+                  drawer for the complete downloadable evidence table.
                 </p>
                 <p>
                   Suggested workflow: choose one competitor, select a radius,
-                  toggle between covered and white-space views, save notable
-                  relationships, then export CSV/JSON/GeoJSON for follow-up
-                  analysis or future app features.
+                  review the coverage-by-radius matrix, toggle between covered
+                  and white-space views, save notable relationships, then export
+                  CSV/JSON/GeoJSON for follow-up analysis or future app
+                  features.
                 </p>
               </div>
             ) : null}

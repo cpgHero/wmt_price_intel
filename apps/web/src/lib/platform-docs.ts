@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.128",
+  version: "1.3.129",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2946,6 +2946,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-11",
+              "Local verification passed; production deployment pending",
+              "Proximity coverage UX is refocused around Walmart footprint coverage by competitor radius.",
+              "The Proximity page now initializes from the app dark theme, emphasizes Walmart locations in active scope, covered locations, uncovered locations, and represented competitor sites, replaces the long left-rail nearest-relationships list with a compact 1/3/5/10-mile coverage-by-radius matrix, and moves complete row-level evidence into a full-height right-side location details drawer with CSV, Excel-compatible CSV, JSON, and GeoJSON downloads. Coverage percentages are calculated from the active country/state/search/saved scope rather than from the covered/gap display toggle, so toggling the visible rows cannot distort the coverage denominator. The map canvas and dark-mode map layers were hardened for visibility. This is a Proximity UI, information-design, denominator-labeling, and dark-mode rendering repair only; it does not change location rows, coordinates, retailer eligibility, nearest-location pairing, Haversine distance math, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-11",
               "Merged, CI-passed, deployed, and production-verified",
