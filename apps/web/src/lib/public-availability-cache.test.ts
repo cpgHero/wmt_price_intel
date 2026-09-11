@@ -7,6 +7,9 @@ const publicAvailabilityRoutes = [
   { paths: ["../app/api/price-monitoring/[analysisId]/catalog/route.ts"] },
   { paths: ["../app/api/price-monitoring/[analysisId]/map/route.ts"] },
   {
+    paths: ["../app/api/price-monitoring/[analysisId]/state-coverage/route.ts"],
+  },
+  {
     paths: [
       "../app/api/price-monitoring/[analysisId]/architecture-matrix/route.ts",
     ],

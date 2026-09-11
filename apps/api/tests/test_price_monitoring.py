@@ -893,6 +893,252 @@ async def test_price_monitoring_map_passes_exact_product_and_detail_scope() -> N
     assert response.json() == {"analysis_id": "analysis-1", "detail": "summary"}
 
 
+async def test_price_monitoring_state_coverage_passes_product_scope() -> None:
+    class PriceService:
+        async def state_coverage(
+            self,
+            analysis_id: str,
+            products: list[dict[str, str]],
+        ) -> dict[str, object]:
+            assert analysis_id == "analysis-1"
+            assert products == [
+                {"retailer_id": "walmart_us", "product_id": "123"},
+                {"retailer_id": "aldi_us", "product_id": "456"},
+            ]
+            return {
+                "schema_version": "1.0.0",
+                "analysis_id": analysis_id,
+                "definition": (
+                    "Positive-price exact-product Search distribution by state; "
+                    "not inventory or in-stock status."
+                ),
+                "state_options": [
+                    {
+                        "state": "AR",
+                        "product_count": 2,
+                        "distribution_store_count": 17,
+                    }
+                ],
+                "products": [
+                    {
+                        "retailer_id": "walmart_us",
+                        "product_id": "123",
+                        "distribution_store_count": 10,
+                        "states": [{"state": "AR", "distribution_store_count": 10}],
+                    },
+                    {
+                        "retailer_id": "aldi_us",
+                        "product_id": "456",
+                        "distribution_store_count": 7,
+                        "states": [{"state": "AR", "distribution_store_count": 7}],
+                    },
+                ],
+            }
+
+    app = create_app()
+    _allow_public_reads(app)
+    app.dependency_overrides[get_price_monitoring_service] = lambda: PriceService()
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await app.state.database_probe.dispose()
+        response = await client.post(
+            "/api/v1/analyses/analysis-1/price-monitoring/state-coverage",
+            json={
+                "products": [
+                    {"retailer_id": "walmart_us", "product_id": "123"},
+                    {"retailer_id": "aldi_us", "product_id": "456"},
+                ]
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["state_options"][0] == {
+        "state": "AR",
+        "product_count": 2,
+        "distribution_store_count": 17,
+    }
+
+
+async def test_state_coverage_counts_only_store_distribution_by_state() -> None:
+    class Analyses:
+        async def get(self, analysis_id: str) -> SimpleNamespace:
+            assert analysis_id == "analysis-1"
+            return SimpleNamespace(
+                result={
+                    "benchmark_retailer": "walmart_us",
+                    "competitors": ["aldi_us"],
+                }
+            )
+
+    async def product_observations_for_products(
+        _service: PriceMonitoringService,
+        analysis_id: str,
+        *,
+        retailer_id: str,
+        product_ids: list[str],
+        comparison_metric: str,
+    ) -> dict[str, tuple[ProductPriceObservation, ...]]:
+        assert analysis_id == "analysis-1"
+        assert comparison_metric == "package_price"
+        if retailer_id == "walmart_us":
+            assert product_ids == ["123"]
+            return {
+                "123": (
+                    ProductPriceObservation(
+                        retailer_id="walmart_us",
+                        retailer_name="Walmart (US)",
+                        product_id="123",
+                        product_name="Product 123",
+                        image_url=None,
+                        scope_key="walmart_us|store|1",
+                        location_kind="store",
+                        store_number="1",
+                        store_name="Store One",
+                        zipcode="72712",
+                        city="Bentonville",
+                        state="ar",
+                        country="USA",
+                        latitude=36.37,
+                        longitude=-94.21,
+                        package_price=4.5,
+                        comparison_value=4.5,
+                        observed_at="2026-08-07T06:00:00Z",
+                        is_sponsored=False,
+                    ),
+                    ProductPriceObservation(
+                        retailer_id="walmart_us",
+                        retailer_name="Walmart (US)",
+                        product_id="123",
+                        product_name="Product 123",
+                        image_url=None,
+                        scope_key="walmart_us|store|2",
+                        location_kind="store",
+                        store_number="2",
+                        store_name="Store Two",
+                        zipcode="90210",
+                        city="Beverly Hills",
+                        state="CA",
+                        country="USA",
+                        latitude=34.09,
+                        longitude=-118.41,
+                        package_price=4.75,
+                        comparison_value=4.75,
+                        observed_at="2026-08-07T06:00:00Z",
+                        is_sponsored=False,
+                    ),
+                    ProductPriceObservation(
+                        retailer_id="walmart_us",
+                        retailer_name="Walmart (US)",
+                        product_id="123",
+                        product_name="Product 123",
+                        image_url=None,
+                        scope_key="walmart_us|service_area|ca",
+                        location_kind="service_area",
+                        store_number=None,
+                        store_name=None,
+                        zipcode="90210",
+                        city="Beverly Hills",
+                        state="CA",
+                        country="USA",
+                        latitude=None,
+                        longitude=None,
+                        package_price=4.75,
+                        comparison_value=4.75,
+                        observed_at="2026-08-07T06:00:00Z",
+                        is_sponsored=False,
+                    ),
+                )
+            }
+        assert retailer_id == "aldi_us"
+        assert product_ids == ["456"]
+        return {
+            "456": (
+                ProductPriceObservation(
+                    retailer_id="aldi_us",
+                    retailer_name="ALDI",
+                    product_id="456",
+                    product_name="Product 456",
+                    image_url=None,
+                    scope_key="aldi_us|store|1",
+                    location_kind="store",
+                    store_number="1",
+                    store_name="ALDI One",
+                    zipcode="75201",
+                    city="Dallas",
+                    state="TX",
+                    country="USA",
+                    latitude=32.78,
+                    longitude=-96.8,
+                    package_price=3.5,
+                    comparison_value=3.5,
+                    observed_at="2026-08-07T06:00:00Z",
+                    is_sponsored=False,
+                ),
+                ProductPriceObservation(
+                    retailer_id="aldi_us",
+                    retailer_name="ALDI",
+                    product_id="456",
+                    product_name="Product 456",
+                    image_url=None,
+                    scope_key="aldi_us|store|2",
+                    location_kind="store",
+                    store_number="2",
+                    store_name="ALDI Missing State",
+                    zipcode="75001",
+                    city="Addison",
+                    state=None,
+                    country="USA",
+                    latitude=32.96,
+                    longitude=-96.84,
+                    package_price=3.75,
+                    comparison_value=3.75,
+                    observed_at="2026-08-07T06:00:00Z",
+                    is_sponsored=False,
+                ),
+            )
+        }
+
+    service = object.__new__(PriceMonitoringService)
+    service._analyses = Analyses()
+    service.product_observations_for_products = MethodType(  # type: ignore[method-assign]
+        product_observations_for_products,
+        service,
+    )
+
+    result = await service.state_coverage(
+        "analysis-1",
+        [
+            {"retailer_id": "walmart_us", "product_id": "123"},
+            {"retailer_id": "aldi_us", "product_id": "456"},
+        ],
+    )
+
+    assert result["state_options"] == [
+        {"state": "AR", "product_count": 1, "distribution_store_count": 1},
+        {"state": "CA", "product_count": 1, "distribution_store_count": 1},
+        {"state": "TX", "product_count": 1, "distribution_store_count": 1},
+    ]
+    assert result["products"] == [
+        {
+            "retailer_id": "aldi_us",
+            "product_id": "456",
+            "distribution_store_count": 1,
+            "states": [{"state": "TX", "distribution_store_count": 1}],
+        },
+        {
+            "retailer_id": "walmart_us",
+            "product_id": "123",
+            "distribution_store_count": 2,
+            "states": [
+                {"state": "AR", "distribution_store_count": 1},
+                {"state": "CA", "distribution_store_count": 1},
+            ],
+        },
+    ]
+
+
 async def test_price_monitoring_map_projects_observed_and_not_observed_store_points() -> None:
     service = object.__new__(PriceMonitoringService)
     service._map_cache = {}

@@ -38,7 +38,9 @@ describe("canonical report workspace source contract", () => {
     expect(workspaceSource).toContain("Category");
     expect(workspaceSource).toContain("Subcategory");
     expect(workspaceSource).toContain("State");
-    expect(workspaceSource).toContain("Available in store evidence drawer");
+    expect(workspaceSource).toContain("state-coverage");
+    expect(workspaceSource).toContain("compact source-backed state coverage");
+    expect(workspaceSource).toContain("displayed price gap state-specific");
     expect(workspaceSource).toContain("Walmart footprint");
     expect(workspaceSource).toContain("Action priority");
     expect(stylesSource).toContain(".canonical-filter-drawer");
