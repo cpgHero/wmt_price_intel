@@ -32,6 +32,8 @@ from rci_locations.models import (
 LOCATION_POLICY_LOCK_NAMESPACE = 1_381_124_633
 LOCATION_POLICY_LOCK_KEY = 1
 EARTH_RADIUS_MILES = 3958.7613
+LOCATION_GRID_CELL_DEGREES = 1.0
+MILES_PER_DEGREE = 68.7
 
 
 def _haversine_miles(
@@ -49,6 +51,118 @@ def _haversine_miles(
         + math.cos(left_latitude) * math.cos(right_latitude) * math.sin(delta_longitude / 2) ** 2
     )
     return 2 * EARTH_RADIUS_MILES * math.asin(min(1.0, math.sqrt(haversine)))
+
+
+def _location_grid_cell(location: ProximityLocation) -> tuple[int, int]:
+    return (
+        math.floor(location.latitude / LOCATION_GRID_CELL_DEGREES),
+        math.floor(location.longitude / LOCATION_GRID_CELL_DEGREES),
+    )
+
+
+def _build_location_grid(
+    locations: Sequence[ProximityLocation],
+) -> dict[tuple[int, int], list[ProximityLocation]]:
+    grid: dict[tuple[int, int], list[ProximityLocation]] = {}
+    for location in locations:
+        grid.setdefault(_location_grid_cell(location), []).append(location)
+    return grid
+
+
+def _nearest_seed_from_grid(
+    benchmark_location: ProximityLocation,
+    competitor_locations: Sequence[ProximityLocation],
+    competitor_grid: dict[tuple[int, int], list[ProximityLocation]],
+) -> tuple[ProximityLocation, float] | None:
+    center_latitude_cell, center_longitude_cell = _location_grid_cell(benchmark_location)
+    nearest: ProximityLocation | None = None
+    nearest_distance = float("inf")
+
+    for ring in range(0, 7):
+        for latitude_cell in range(center_latitude_cell - ring, center_latitude_cell + ring + 1):
+            for longitude_cell in range(
+                center_longitude_cell - ring,
+                center_longitude_cell + ring + 1,
+            ):
+                if (
+                    max(
+                        abs(latitude_cell - center_latitude_cell),
+                        abs(longitude_cell - center_longitude_cell),
+                    )
+                    != ring
+                ):
+                    continue
+                for competitor_location in competitor_grid.get((latitude_cell, longitude_cell), []):
+                    distance = _haversine_miles(
+                        benchmark_location.latitude,
+                        benchmark_location.longitude,
+                        competitor_location.latitude,
+                        competitor_location.longitude,
+                    )
+                    if distance < nearest_distance:
+                        nearest = competitor_location
+                        nearest_distance = distance
+        if nearest is not None:
+            return nearest, nearest_distance
+
+    for competitor_location in competitor_locations:
+        distance = _haversine_miles(
+            benchmark_location.latitude,
+            benchmark_location.longitude,
+            competitor_location.latitude,
+            competitor_location.longitude,
+        )
+        if distance < nearest_distance:
+            nearest = competitor_location
+            nearest_distance = distance
+    return (nearest, nearest_distance) if nearest is not None else None
+
+
+def _nearest_competitor_location(
+    benchmark_location: ProximityLocation,
+    competitor_locations: Sequence[ProximityLocation],
+    competitor_grid: dict[tuple[int, int], list[ProximityLocation]],
+) -> tuple[ProximityLocation, float] | None:
+    seed = _nearest_seed_from_grid(benchmark_location, competitor_locations, competitor_grid)
+    if seed is None:
+        return None
+    nearest, nearest_distance = seed
+
+    latitude_delta = nearest_distance / MILES_PER_DEGREE + LOCATION_GRID_CELL_DEGREES
+    longitude_miles_per_degree = MILES_PER_DEGREE * max(
+        0.05,
+        abs(math.cos(math.radians(benchmark_location.latitude))),
+    )
+    longitude_delta = min(
+        360.0,
+        nearest_distance / longitude_miles_per_degree + LOCATION_GRID_CELL_DEGREES,
+    )
+    min_latitude_cell = math.floor(
+        (benchmark_location.latitude - latitude_delta) / LOCATION_GRID_CELL_DEGREES
+    )
+    max_latitude_cell = math.floor(
+        (benchmark_location.latitude + latitude_delta) / LOCATION_GRID_CELL_DEGREES
+    )
+    min_longitude_cell = math.floor(
+        (benchmark_location.longitude - longitude_delta) / LOCATION_GRID_CELL_DEGREES
+    )
+    max_longitude_cell = math.floor(
+        (benchmark_location.longitude + longitude_delta) / LOCATION_GRID_CELL_DEGREES
+    )
+
+    for latitude_cell in range(min_latitude_cell, max_latitude_cell + 1):
+        for longitude_cell in range(min_longitude_cell, max_longitude_cell + 1):
+            for competitor_location in competitor_grid.get((latitude_cell, longitude_cell), []):
+                distance = _haversine_miles(
+                    benchmark_location.latitude,
+                    benchmark_location.longitude,
+                    competitor_location.latitude,
+                    competitor_location.longitude,
+                )
+                if distance < nearest_distance:
+                    nearest = competitor_location
+                    nearest_distance = distance
+    return nearest, nearest_distance
 
 
 class PostgresLocationRepository:
@@ -407,26 +521,21 @@ class PostgresLocationRepository:
 
         pairs: list[ProximityPair] = []
         if competitor_locations:
+            competitor_grid = _build_location_grid(competitor_locations)
             for benchmark_location in benchmark_locations:
-                nearest = min(
+                nearest_result = _nearest_competitor_location(
+                    benchmark_location,
                     competitor_locations,
-                    key=lambda competitor_location: _haversine_miles(
-                        benchmark_location.latitude,
-                        benchmark_location.longitude,
-                        competitor_location.latitude,
-                        competitor_location.longitude,
-                    ),
+                    competitor_grid,
                 )
+                if nearest_result is None:
+                    continue
+                nearest, nearest_distance = nearest_result
                 pairs.append(
                     ProximityPair(
                         benchmark=benchmark_location,
                         competitor=nearest,
-                        distance_miles=_haversine_miles(
-                            benchmark_location.latitude,
-                            benchmark_location.longitude,
-                            nearest.latitude,
-                            nearest.longitude,
-                        ),
+                        distance_miles=nearest_distance,
                     )
                 )
         return ProximityResult(
