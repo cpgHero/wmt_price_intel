@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented in code; local focused validation passed. CI, merge, and production verification pending.
+Merged, CI-passed, deployed, and production-verified.
 
 ## Trigger
 
@@ -32,5 +32,7 @@ Required validation before production completion:
 - Prettier on the Proximity page component, CSS, and this change note.
 - Parser/type-syntax validation for the modified TSX.
 - Platform-docs coverage check.
-- CI.
-- Production smoke test for `/proximity` after deployment.
+- CI passed for documentation, TypeScript, Python, and container builds.
+- Railway production deployed the merged web service.
+- Production smoke test passed for `/proximity?refresh=6e98214`.
+- Production API smoke test for Walmart US versus CVS at 10 miles returned 4,683 paired Walmart locations, 9,841 mappable competitor locations, and 3,910 Walmart locations within 10 miles in about 1.8 seconds.
