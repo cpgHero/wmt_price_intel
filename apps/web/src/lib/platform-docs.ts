@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.124",
+  version: "1.3.125",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2946,6 +2946,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-11",
+              "Implemented in code; CI, merge, and production verification pending",
+              "Location read queries now type optional bind parameters for production Postgres.",
+              "The Postgres location repository now declares SQLAlchemy types for optional retailer, country, ZIP, search, limit, and offset bind parameters used by location-list reads. This fixes the production psycopg ambiguous-parameter failure observed on `/api/v1/retailers?country=USA`, which the Proximity page uses to populate the retailer selector. This is a query-binding reliability fix only; it does not change location rows, coordinates, retailer eligibility, proximity distance math, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-11",
               "Implemented in code; CI, merge, and production verification pending",

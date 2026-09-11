@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from dataclasses import asdict
 from typing import Any
 
-from sqlalchemy import text
+from sqlalchemy import Integer, String, bindparam, text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 from rci_locations.eligibility import eligibility_plan_sha256, eligibility_snapshot_sha256
@@ -324,7 +324,7 @@ class PostgresLocationRepository:
             GROUP BY r.id, r.display_name, r.country, r.active, r.catalogued
             ORDER BY r.display_name, r.country, r.id
             """
-        )
+        ).bindparams(bindparam("country", type_=String()))
         async with self._engine.connect() as connection:
             rows = (await connection.execute(statement, {"country": country})).mappings()
             return [RetailerCount(**dict(row)) for row in rows]
@@ -366,6 +366,13 @@ class PostgresLocationRepository:
             ORDER BY retailer_id, store_number, id
             LIMIT :limit OFFSET :offset
             """
+        ).bindparams(
+            bindparam("retailer_id", type_=String()),
+            bindparam("country", type_=String()),
+            bindparam("zipcode", type_=String()),
+            bindparam("query", type_=String()),
+            bindparam("limit", type_=Integer()),
+            bindparam("offset", type_=Integer()),
         )
         parameters = {
             "retailer_id": retailer_id,
