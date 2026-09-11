@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import asdict
@@ -19,6 +20,10 @@ from rci_locations.models import (
     LocationEligibilityState,
     LocationRecord,
     LocationSearchResult,
+    ProximityLocation,
+    ProximityPair,
+    ProximityResult,
+    ProximityRetailer,
     RetailerAlias,
     RetailerCount,
     RetailerDefinition,
@@ -26,6 +31,24 @@ from rci_locations.models import (
 
 LOCATION_POLICY_LOCK_NAMESPACE = 1_381_124_633
 LOCATION_POLICY_LOCK_KEY = 1
+EARTH_RADIUS_MILES = 3958.7613
+
+
+def _haversine_miles(
+    latitude_left: float,
+    longitude_left: float,
+    latitude_right: float,
+    longitude_right: float,
+) -> float:
+    left_latitude = math.radians(latitude_left)
+    right_latitude = math.radians(latitude_right)
+    delta_latitude = math.radians(latitude_right - latitude_left)
+    delta_longitude = math.radians(longitude_right - longitude_left)
+    haversine = (
+        math.sin(delta_latitude / 2) ** 2
+        + math.cos(left_latitude) * math.cos(right_latitude) * math.sin(delta_longitude / 2) ** 2
+    )
+    return 2 * EARTH_RADIUS_MILES * math.asin(min(1.0, math.sqrt(haversine)))
 
 
 class PostgresLocationRepository:
@@ -355,6 +378,143 @@ class PostgresLocationRepository:
         async with self._engine.connect() as connection:
             rows = (await connection.execute(statement, parameters)).mappings()
             return [LocationSearchResult(**dict(row)) for row in rows]
+
+    async def nearest_retailer_proximity(
+        self,
+        *,
+        benchmark_retailer_id: str,
+        competitor_retailer_id: str,
+        country: str,
+    ) -> ProximityResult:
+        if benchmark_retailer_id == competitor_retailer_id:
+            raise ValueError("benchmark and competitor retailers must be different")
+        async with self._engine.connect() as connection:
+            benchmark = await self._proximity_retailer(connection, benchmark_retailer_id, country)
+            competitor = await self._proximity_retailer(connection, competitor_retailer_id, country)
+            benchmark_locations = await self._mappable_locations(
+                connection, benchmark_retailer_id, country
+            )
+            competitor_locations = await self._mappable_locations(
+                connection, competitor_retailer_id, country
+            )
+
+        pairs: list[ProximityPair] = []
+        if competitor_locations:
+            for benchmark_location in benchmark_locations:
+                nearest = min(
+                    competitor_locations,
+                    key=lambda competitor_location: _haversine_miles(
+                        benchmark_location.latitude,
+                        benchmark_location.longitude,
+                        competitor_location.latitude,
+                        competitor_location.longitude,
+                    ),
+                )
+                pairs.append(
+                    ProximityPair(
+                        benchmark=benchmark_location,
+                        competitor=nearest,
+                        distance_miles=_haversine_miles(
+                            benchmark_location.latitude,
+                            benchmark_location.longitude,
+                            nearest.latitude,
+                            nearest.longitude,
+                        ),
+                    )
+                )
+        return ProximityResult(
+            benchmark=benchmark,
+            competitor=competitor,
+            pairs=tuple(
+                sorted(
+                    pairs,
+                    key=lambda pair: (
+                        pair.distance_miles,
+                        pair.benchmark.state or "",
+                        pair.benchmark.city or "",
+                        pair.benchmark.store_number,
+                    ),
+                )
+            ),
+        )
+
+    @staticmethod
+    async def _proximity_retailer(
+        connection: AsyncConnection,
+        retailer_id: str,
+        country: str,
+    ) -> ProximityRetailer:
+        statement = text(
+            """
+            SELECT r.id,
+                   r.display_name,
+                   r.country,
+                   count(l.id)::integer AS location_count,
+                   count(l.id) FILTER (
+                     WHERE l.latitude IS NOT NULL AND l.longitude IS NOT NULL
+                   )::integer AS mappable_location_count
+            FROM retailer r
+            LEFT JOIN retailer_location l
+              ON l.retailer_id = r.id
+             AND l.country = :country
+             AND l.collection_eligible
+            WHERE r.id = :retailer_id
+              AND r.country = :country
+            GROUP BY r.id, r.display_name, r.country
+            """
+        )
+        row = (
+            (await connection.execute(statement, {"retailer_id": retailer_id, "country": country}))
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise LookupError(f"retailer {retailer_id} is unavailable for {country}")
+        return ProximityRetailer(**dict(row))
+
+    @staticmethod
+    async def _mappable_locations(
+        connection: AsyncConnection,
+        retailer_id: str,
+        country: str,
+    ) -> list[ProximityLocation]:
+        statement = text(
+            """
+            SELECT l.id::text AS id,
+                   l.retailer_id,
+                   r.display_name AS retailer_display_name,
+                   l.provider_location_id,
+                   l.store_number,
+                   l.store_name,
+                   l.zipcode,
+                   l.city,
+                   l.state,
+                   l.country,
+                   l.latitude,
+                   l.longitude
+            FROM retailer_location l
+            JOIN retailer r ON r.id = l.retailer_id
+            WHERE l.collection_eligible
+              AND l.retailer_id = :retailer_id
+              AND l.country = :country
+              AND l.latitude IS NOT NULL
+              AND l.longitude IS NOT NULL
+            ORDER BY l.state, l.city, l.store_number, l.id
+            """
+        )
+        rows = (
+            await connection.execute(statement, {"retailer_id": retailer_id, "country": country})
+        ).mappings()
+        return [
+            ProximityLocation(
+                **{
+                    **dict(row),
+                    "latitude": float(row["latitude"]),
+                    "longitude": float(row["longitude"]),
+                }
+            )
+            for row in rows
+        ]
 
     async def list_imports(self, limit: int = 20) -> list[ImportState]:
         statement = text(

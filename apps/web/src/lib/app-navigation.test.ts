@@ -23,6 +23,7 @@ describe("application navigation", () => {
       "/",
       "/price-intelligence",
       "/analyses",
+      "/proximity",
       "/collections",
       "/automation",
       "/data-quality",
@@ -49,6 +50,7 @@ describe("application navigation", () => {
     );
     expect(activeNavigationItem("/workspace/matches")).toBeNull();
     expect(activeNavigationItem("/price-intelligence/analysis-123")).toBeNull();
+    expect(activeNavigationItem("/proximity")?.label).toBe("Proximity");
     expect(
       activeNavigationItem(
         "/price-intelligence/analysis-123",
@@ -113,6 +115,7 @@ describe("application navigation", () => {
     expect(hrefs).toEqual([
       "/",
       "/analyses",
+      "/proximity",
       "/collections",
       "/automation",
       "/admin/report-publishing",

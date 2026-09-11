@@ -687,6 +687,79 @@ export interface CollectionLocationFacet {
   location_count: number;
 }
 
+export interface LocationRetailer {
+  id: string;
+  display_name: string;
+  country: string;
+  active: boolean;
+  catalogued: boolean;
+  location_count: number;
+}
+
+export interface ProximityLocation {
+  id: string;
+  retailer_id: string;
+  retailer_display_name: string;
+  provider_location_id: string | null;
+  store_number: string;
+  store_name: string | null;
+  zipcode: string | null;
+  city: string | null;
+  state: string | null;
+  country: string;
+  latitude: number;
+  longitude: number;
+}
+
+export interface ProximityPair {
+  benchmark: ProximityLocation;
+  competitor: ProximityLocation;
+  distance_miles: number;
+  within_1_mile: boolean;
+  within_3_miles: boolean;
+  within_5_miles: boolean;
+  within_10_miles: boolean;
+}
+
+export interface ProximityView {
+  schema_version: string;
+  generated_at: string;
+  source_authority: string;
+  distance_methodology: string;
+  country: string;
+  selected_radius_miles: number;
+  benchmark: {
+    id: string;
+    display_name: string;
+    country: string;
+    location_count: number;
+    mappable_location_count: number;
+  };
+  competitor: {
+    id: string;
+    display_name: string;
+    country: string;
+    location_count: number;
+    mappable_location_count: number;
+  };
+  state_options: string[];
+  summary: {
+    benchmark_mappable_locations: number;
+    competitor_mappable_locations: number;
+    paired_locations: number;
+    selected_radius_miles: number;
+    within_selected_radius: number;
+    within_selected_radius_share: number | null;
+    within_1_mile: number;
+    within_3_miles: number;
+    within_5_miles: number;
+    within_10_miles: number;
+    nearest_distance_median_miles: number | null;
+    nearest_distance_average_miles: number | null;
+  };
+  pairs: ProximityPair[];
+}
+
 export interface ProductPackSummary {
   id: string;
   name: string;

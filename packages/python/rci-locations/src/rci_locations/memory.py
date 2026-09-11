@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import math
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import replace
@@ -17,10 +18,33 @@ from rci_locations.models import (
     LocationEligibilityState,
     LocationRecord,
     LocationSearchResult,
+    ProximityLocation,
+    ProximityPair,
+    ProximityResult,
+    ProximityRetailer,
     RetailerAlias,
     RetailerCount,
     RetailerDefinition,
 )
+
+EARTH_RADIUS_MILES = 3958.7613
+
+
+def _haversine_miles(
+    latitude_left: float,
+    longitude_left: float,
+    latitude_right: float,
+    longitude_right: float,
+) -> float:
+    left_latitude = math.radians(latitude_left)
+    right_latitude = math.radians(latitude_right)
+    delta_latitude = math.radians(latitude_right - latitude_left)
+    delta_longitude = math.radians(longitude_right - longitude_left)
+    haversine = (
+        math.sin(delta_latitude / 2) ** 2
+        + math.cos(left_latitude) * math.cos(right_latitude) * math.sin(delta_longitude / 2) ** 2
+    )
+    return 2 * EARTH_RADIUS_MILES * math.asin(min(1.0, math.sqrt(haversine)))
 
 
 class InMemoryLocationRepository:
@@ -203,6 +227,118 @@ class InMemoryLocationRepository:
                 )
             )
         return matches[offset : offset + limit]
+
+    async def nearest_retailer_proximity(
+        self,
+        *,
+        benchmark_retailer_id: str,
+        competitor_retailer_id: str,
+        country: str,
+    ) -> ProximityResult:
+        if benchmark_retailer_id == competitor_retailer_id:
+            raise ValueError("benchmark and competitor retailers must be different")
+        benchmark = self._proximity_retailer(benchmark_retailer_id, country)
+        competitor = self._proximity_retailer(competitor_retailer_id, country)
+        benchmark_locations = self._mappable_locations(benchmark_retailer_id, country)
+        competitor_locations = self._mappable_locations(competitor_retailer_id, country)
+        pairs: list[ProximityPair] = []
+        if competitor_locations:
+            for benchmark_location in benchmark_locations:
+                nearest = min(
+                    competitor_locations,
+                    key=lambda competitor_location: _haversine_miles(
+                        benchmark_location.latitude,
+                        benchmark_location.longitude,
+                        competitor_location.latitude,
+                        competitor_location.longitude,
+                    ),
+                )
+                pairs.append(
+                    ProximityPair(
+                        benchmark=benchmark_location,
+                        competitor=nearest,
+                        distance_miles=_haversine_miles(
+                            benchmark_location.latitude,
+                            benchmark_location.longitude,
+                            nearest.latitude,
+                            nearest.longitude,
+                        ),
+                    )
+                )
+        return ProximityResult(
+            benchmark=benchmark,
+            competitor=competitor,
+            pairs=tuple(
+                sorted(
+                    pairs,
+                    key=lambda pair: (
+                        pair.distance_miles,
+                        pair.benchmark.state or "",
+                        pair.benchmark.city or "",
+                        pair.benchmark.store_number,
+                    ),
+                )
+            ),
+        )
+
+    def _proximity_retailer(self, retailer_id: str, country: str) -> ProximityRetailer:
+        retailer = self.retailers.get(retailer_id)
+        if retailer is None or retailer.country != country:
+            raise LookupError(f"retailer {retailer_id} is unavailable for {country}")
+        locations = [
+            location
+            for location in self.locations.values()
+            if location.retailer_id == retailer_id
+            and location.country == country
+            and location.collection_eligible
+        ]
+        return ProximityRetailer(
+            id=retailer.id,
+            display_name=retailer.display_name,
+            country=retailer.country,
+            location_count=len(locations),
+            mappable_location_count=sum(
+                location.latitude is not None and location.longitude is not None
+                for location in locations
+            ),
+        )
+
+    def _mappable_locations(self, retailer_id: str, country: str) -> list[ProximityLocation]:
+        retailer = self.retailers[retailer_id]
+        locations: list[ProximityLocation] = []
+        for index, location in enumerate(self.locations.values()):
+            if (
+                location.retailer_id != retailer_id
+                or location.country != country
+                or not location.collection_eligible
+                or location.latitude is None
+                or location.longitude is None
+            ):
+                continue
+            locations.append(
+                ProximityLocation(
+                    id=f"memory-{index}",
+                    retailer_id=location.retailer_id,
+                    retailer_display_name=retailer.display_name,
+                    provider_location_id=location.provider_location_id,
+                    store_number=location.store_number,
+                    store_name=location.store_name,
+                    zipcode=location.zipcode,
+                    city=location.city,
+                    state=location.state,
+                    country=location.country,
+                    latitude=location.latitude,
+                    longitude=location.longitude,
+                )
+            )
+        return sorted(
+            locations,
+            key=lambda location: (
+                location.state or "",
+                location.city or "",
+                location.store_number,
+            ),
+        )
 
     async def list_imports(self, limit: int = 20) -> list[ImportState]:
         return sorted(self.imports.values(), key=lambda item: item.started_at, reverse=True)[:limit]

@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.123",
+  version: "1.3.124",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -196,6 +196,11 @@ export const platformDocumentation: PlatformDocumentation = {
               "Competitive Intelligence",
               "Retailer scorecards, price/cohort views, products, geography, assortment, match review, and methodology.",
               "Comparison basis, competitor, geography, and evidence readiness govern every result.",
+            ],
+            [
+              "Proximity",
+              "Walmart US or CA store-network proximity against one selected competitor retailer.",
+              "Uses eligible location-master coordinates only. It is straight-line distance, not drive time, product assortment, inventory, or observed product distribution.",
             ],
             [
               "Collections",
@@ -747,6 +752,7 @@ export const platformDocumentation: PlatformDocumentation = {
       links: [
         { href: "/price-intelligence", label: "Price Intelligence" },
         { href: "/analyses", label: "Competitive Intelligence" },
+        { href: "/proximity", label: "Proximity" },
       ],
       blocks: [
         {
@@ -768,6 +774,11 @@ export const platformDocumentation: PlatformDocumentation = {
               term: "Competitive Intelligence",
               definition:
                 "Adds governed product relationships and location correspondence. Its focused report tabs are Retailer Scorecards, Cohort Scorecards, Competitive Footprint, Matched Price Matrix, Match Summary, Price Ladders, Store Comparisons, Competitive History, and Assortment Scorecards. Market Performance is consolidated into Competitive Footprint; Store Exceptions is a Store Comparisons view; report-level Data Integrity is administered from Operations > Data Quality. Product leadership tabs share one retailer, comparison basis, benchmark product, 1/3/5-mile radius, and benchmark geography.",
+            },
+            {
+              term: "Proximity",
+              definition:
+                "Explores location-master store-network distance before a collection or report. The current app page fixes Walmart US or Walmart CA as the benchmark, requires exactly one selected competitor retailer, computes the nearest selected competitor location for every mappable Walmart location, and exposes the same filtered rows through the side list, map, table drawer, CSV, Excel-compatible CSV, and JSON downloads. Counts come from eligible location-master rows with coordinates; they do not claim product availability, current inventory, Search observation, drive time, or sales opportunity.",
             },
           ],
         },
@@ -791,6 +802,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "Cohort price presentation follows the governed package signature. When every member has one fixed fluid-ounce size, the observation-weighted package-equivalent median is primary and price per fluid ounce is secondary. When package volumes differ, price per fluid ounce is primary. The canonical normalized metric remains available in export and audit lineage; presentation never changes eligibility, price outcomes, or stored calculations.",
             "PDP evidence may fill a missing Product Pack attribute at read-model projection time, but never changes Search-listed price, query context, sponsorship, or observed distribution. Derived unit price is recomputed only from explicit package evidence. Written singular/plural units are equivalent; day supply is converted to count only when the PDP also explicitly directs exactly one unit daily. Dosage quantities and multi-unit daily regimens are not package counts.",
             "Default competitive portfolios are persisted per immutable analysis, comparison profile, and 1/3/5-mile radius. Retailer selection filters one materialized all-retailer document; state and city combinations remain on-demand. Rebuilding these read models does not call MetricsCart or OpenAI.",
+            "Proximity is a separate location-master analytics page, not a product report. It always uses Walmart US or Walmart CA against one selected competitor, computes nearest-store Haversine distances from eligible coordinates, and keeps all radius, state, search, table, map, and download views on the same filtered row set.",
             "Price Intelligence Home reads one publication-time materialized catalog per configured retailer. Search, brand, brand type, seller, and pagination are applied by the API, and the browser receives 40 rows at a time. Opening a product loads its complete product-location, map, price-distribution, and PDP evidence lazily. Catalog materialization uses retained evidence and makes no MetricsCart or OpenAI call.",
             "The canonical product report uses five distinct app tabs: Executive Summary for complete win/loss action lists, Product Wins & Losses for the image-first relationship action board, Distribution & Assortment for deduplicated Walmart product footprints plus exact-product location evidence, Price Architecture for table-based comparison-value ladders, and Evidence & QA for guardrails and exclusions. Executive Summary provides a wins/losses toggle so one comprehensive action list is visible at a time rather than forcing deep page scrolling. Product Wins & Losses keeps image-first cards, pages the complete active relationship set so the browser does not render hundreds of cards at once, and exposes a filter drawer for source-backed relationship dimensions: search text, outcome, Walmart brand, Walmart brand type, competitor retailer, competitor brand, Product Pack category, comparison basis, state distribution footprint, unit basis, price basis, Walmart footprint tier, and sort. The report-level state filter uses a compact state-coverage read model derived from exact-product positive-price Search observations; selecting a state keeps relationships where either product has observed store distribution in that state and must not imply the displayed price gap is state-specific. A global subcategory filter must not be invented if that field is absent from the canonical relationship dataset. Executive and price tables must not truncate governed win/loss lists. They show Walmart and competitor positive-price store footprints as a share of the retailer's report footprint denominator, defined as the largest observed positive-price store footprint for that retailer in the current canonical report dataset. This denominator is not total chain stores, inventory, or a sampled returned-row count. Distribution & Assortment keeps every governed Walmart product footprint visible, while broad distribution is a visible metric rather than a hidden filter. Distribution & Assortment loads source-backed product location maps and store-evidence drawers through the price-monitoring product view; drawers expose store-list detail with state filtering plus CSV, Excel-compatible, and JSON downloads. Drawer exports include observed distribution store rows, returned searched-not-observed store rows, report-footprint share metadata, searched-row audit-share metadata, active state_filter metadata, and visible filtered row counts so the footprint numerator and denominators are auditable. Price display must distinguish source-backed package price from normalized comparison value; a normalized $/gallon value is never labeled as shelf or package price unless source package-price evidence is present. If map evidence is unavailable, the report must say so rather than drawing inferred geography.",
             "Report Walmart-lower, competitor-lower, parity, and clear-leader rates separately. A narrow Walmart lead is Walmart-lower but not a clear leader; labels must not substitute one measure for the other.",
@@ -2934,6 +2946,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-11",
+              "Implemented in code; CI, merge, and production verification pending",
+              "Analytics adds a Proximity page for Walmart-to-retailer location-network distance.",
+              "The Proximity page fixes Walmart US or Walmart CA as the benchmark and compares it with exactly one selected competitor retailer from the location master. The API computes nearest selected-competitor locations using eligible rows with non-null coordinates and Haversine straight-line distance, then the app exposes source-backed radius KPIs, state/search filters, a map, a comprehensive location table drawer, and CSV, Excel-compatible CSV, and JSON downloads from the same filtered row set. This is a location-master analytics and UX change only; it does not change product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-11",
               "Merged, CI-passed, deployed, and production-verified",

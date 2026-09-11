@@ -103,6 +103,45 @@ class LocationSearchResult:
 
 
 @dataclass(frozen=True, slots=True)
+class ProximityRetailer:
+    id: str
+    display_name: str
+    country: str
+    location_count: int
+    mappable_location_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class ProximityLocation:
+    id: str
+    retailer_id: str
+    retailer_display_name: str
+    provider_location_id: str | None
+    store_number: str
+    store_name: str | None
+    zipcode: str | None
+    city: str | None
+    state: str | None
+    country: str
+    latitude: float
+    longitude: float
+
+
+@dataclass(frozen=True, slots=True)
+class ProximityPair:
+    benchmark: ProximityLocation
+    competitor: ProximityLocation
+    distance_miles: float
+
+
+@dataclass(frozen=True, slots=True)
+class ProximityResult:
+    benchmark: ProximityRetailer
+    competitor: ProximityRetailer
+    pairs: tuple[ProximityPair, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ImportState:
     id: str
     source_path: str

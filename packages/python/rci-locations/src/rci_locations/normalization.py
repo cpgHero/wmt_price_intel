@@ -7,16 +7,20 @@ import unicodedata
 from typing import Any
 
 COUNTRY_ALIASES = {
+    "CA": "CANADA",
+    "CAN": "CANADA",
     "US": "USA",
     "U.S.": "USA",
     "UNITED STATES": "USA",
     "UNITED STATES OF AMERICA": "USA",
+    "CANADA": "CANADA",
     "PUERTO RICO": "PR",
     "AU": "AUSTRALIA",
     "MX": "MEXICO",
 }
 
 COUNTRY_ID_SUFFIXES = {
+    "CANADA": "ca",
     "USA": "us",
     "PR": "pr",
     "AUSTRALIA": "au",
