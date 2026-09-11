@@ -2,7 +2,7 @@
 
 Date: 2026-09-10
 
-Status: filter and price-label changes merged, CI-passed, and production-verified; image-card store-list actions merged, CI-passed, and production-verified; compact report-level state filter merged, CI-passed, deployed, and production-verified after direct state-index optimization. Image-card pagination is implemented in follow-up code with CI, merge, and production verification pending.
+Status: filter and price-label changes merged, CI-passed, and production-verified; image-card store-list actions merged, CI-passed, and production-verified; compact report-level state filter merged, CI-passed, deployed, and production-verified after direct state-index optimization; image-card pagination merged, CI-passed, deployed, and production-verified.
 
 ## Purpose
 
