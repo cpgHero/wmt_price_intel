@@ -8,7 +8,13 @@ from rci_api.locations import get_location_repository
 from rci_api.main import create_app
 from rci_locations import InMemoryLocationRepository, RetailerCatalog
 from rci_locations.importer import transform_row
-from rci_locations.models import ImportSummary, LocationRecord, RetailerDefinition
+from rci_locations.models import (
+    ImportSummary,
+    LocationRecord,
+    ProximityLocation,
+    RetailerDefinition,
+)
+from rci_locations.repository import _build_location_grid, _nearest_competitor_location
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 
@@ -130,6 +136,62 @@ def _location(
         source_row_id=store_number,
         raw_row={},
     )
+
+
+def _proximity_location(
+    retailer_id: str,
+    store_number: str,
+    *,
+    latitude: float,
+    longitude: float,
+) -> ProximityLocation:
+    return ProximityLocation(
+        id=f"{retailer_id}-{store_number}",
+        retailer_id=retailer_id,
+        retailer_display_name=retailer_id,
+        provider_location_id=f"provider-{store_number}",
+        store_number=store_number,
+        store_name=f"{retailer_id} {store_number}",
+        zipcode="72712",
+        city="Bentonville",
+        state="AR",
+        country="USA",
+        latitude=latitude,
+        longitude=longitude,
+    )
+
+
+def test_spatial_grid_nearest_refines_to_exact_adjacent_cell_match() -> None:
+    benchmark = _proximity_location(
+        "walmart_us",
+        "100",
+        latitude=36.01,
+        longitude=-94.01,
+    )
+    competitors = [
+        _proximity_location(
+            "competitor_us",
+            "same-cell-seed",
+            latitude=36.95,
+            longitude=-94.95,
+        ),
+        _proximity_location(
+            "competitor_us",
+            "adjacent-cell-nearest",
+            latitude=36.01,
+            longitude=-93.99,
+        ),
+    ]
+
+    nearest = _nearest_competitor_location(
+        benchmark,
+        competitors,
+        _build_location_grid(competitors),
+    )
+
+    assert nearest is not None
+    assert nearest[0].store_number == "adjacent-cell-nearest"
+    assert nearest[1] < 2
 
 
 async def test_retailer_proximity_pairs_walmart_to_one_selected_competitor() -> None:

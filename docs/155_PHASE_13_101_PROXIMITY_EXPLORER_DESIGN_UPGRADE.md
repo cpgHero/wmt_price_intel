@@ -21,6 +21,8 @@ The Proximity page has been redesigned as a map-first explorer:
 
 The default competitor selection now prioritizes active/catalogued competitors with the largest location footprints instead of choosing the first alphabetical retailer.
 
+The backend nearest-location calculation now uses a deterministic spatial grid to avoid CPU-heavy all-pairs scans for large US retailer footprints. It first finds a nearby candidate from coordinate grid cells, then performs a bounded refinement pass over every competitor location that could beat the seed distance, preserving exact Haversine nearest-location selection.
+
 ## Evidence boundary
 
 The page remains source-backed by location-master data:
