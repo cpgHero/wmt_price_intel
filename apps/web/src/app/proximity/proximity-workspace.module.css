@@ -32,6 +32,30 @@
     sans-serif;
   min-height: calc(100dvh - 2rem);
   overflow: hidden;
+  position: relative;
+}
+
+.workspace.dark {
+  --bg: #0b1218;
+  --surface: #101b24;
+  --surface2: #152530;
+  --ink: #eaf2f5;
+  --sub: #9fb0bd;
+  --muted: #7f91a0;
+  --line: rgba(207, 224, 234, 0.14);
+  --accent: #65dfbf;
+  --accent-bg: rgba(101, 223, 191, 0.12);
+  --blue: #5da8ff;
+  --red: #ff7285;
+  --red-bg: rgba(255, 114, 133, 0.11);
+  --shadow: 0 20px 56px rgba(0, 0, 0, 0.34), 0 2px 5px rgba(0, 0, 0, 0.25);
+  background:
+    radial-gradient(
+      circle at 18% 14%,
+      rgba(101, 223, 191, 0.11),
+      transparent 30rem
+    ),
+    var(--bg);
 }
 
 .workspace button,
@@ -55,6 +79,26 @@
   justify-content: space-between;
   min-height: 3.9rem;
   padding: 0 1.55rem;
+}
+
+.dark .topbar,
+.dark .quickViews,
+.dark .legend,
+.dark .mapInsightPanel,
+.dark .zoomControl,
+.dark .detailPanel,
+.dark .baseSelect,
+.dark .iconButton {
+  background: rgba(16, 27, 36, 0.94);
+}
+
+.dark .btn {
+  background: var(--surface2);
+}
+
+.dark .btn.primary {
+  background: var(--accent);
+  color: #062018;
 }
 
 .brand {
@@ -124,6 +168,11 @@
   gap: 0.45rem;
 }
 
+.actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .btn,
 .iconButton {
   align-items: center;
@@ -148,6 +197,51 @@
   background: var(--accent);
   border-color: var(--accent);
   color: white;
+}
+
+.pill {
+  background: var(--surface2);
+  border-radius: 999px;
+  color: var(--sub);
+  font-size: 0.64rem;
+  margin-left: 0.18rem;
+  min-width: 1.25rem;
+  padding: 0.06rem 0.34rem;
+  text-align: center;
+}
+
+.menuWrap {
+  position: relative;
+}
+
+.exportMenu {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.68rem;
+  box-shadow: var(--shadow);
+  display: grid;
+  min-width: 13rem;
+  padding: 0.28rem;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  z-index: 40;
+}
+
+.exportMenu button {
+  background: transparent;
+  border: 0;
+  border-radius: 0.48rem;
+  color: var(--sub);
+  font-size: 0.72rem;
+  font-weight: 750;
+  padding: 0.52rem 0.6rem;
+  text-align: left;
+}
+
+.exportMenu button:hover {
+  background: var(--surface2);
+  color: var(--ink);
 }
 
 .iconButton {
@@ -460,6 +554,52 @@
   padding: 0.5rem 0.6rem;
 }
 
+.layerBox {
+  border-bottom: 1px solid var(--line);
+  flex-shrink: 0;
+  padding: 0.78rem 0.9rem;
+}
+
+.layerGrid {
+  display: grid;
+  gap: 0.42rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.layerGrid button {
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 0.52rem;
+  color: var(--sub);
+  display: flex;
+  font-size: 0.68rem;
+  font-weight: 780;
+  justify-content: space-between;
+  min-height: 2rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.layerGrid button i {
+  background: var(--muted);
+  border-radius: 999px;
+  display: block;
+  height: 0.48rem;
+  opacity: 0.45;
+  width: 0.48rem;
+}
+
+.layerGrid button[aria-pressed="true"] {
+  background: var(--accent-bg);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  color: var(--ink);
+}
+
+.layerGrid button[aria-pressed="true"] i {
+  background: var(--accent);
+  opacity: 1;
+}
+
 .bandStack {
   background:
     linear-gradient(180deg, rgba(248, 250, 251, 0.92), rgba(255, 255, 255, 1)),
@@ -668,6 +808,11 @@
   position: relative;
 }
 
+.dark .mapSection {
+  background:
+    linear-gradient(135deg, rgba(101, 223, 191, 0.06), transparent 38%), #0d1720;
+}
+
 .mapArea {
   height: 100%;
   min-height: 31rem;
@@ -709,12 +854,32 @@
 }
 
 .mapSvg {
+  cursor: grab;
   display: block;
   height: 100%;
   min-height: 31rem;
+  outline: none;
   position: relative;
+  touch-action: none;
   width: 100%;
   z-index: 2;
+}
+
+.mapSvg:focus-visible {
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--accent) 50%, white);
+}
+
+.outlineMap .water {
+  fill: #f6f8fa;
+}
+
+.dark .outlineMap .water {
+  fill: #0d1720;
+}
+
+.outlineMap .mapVignette,
+.outlineMap .gridLine {
+  opacity: 0.35;
 }
 
 .water {
@@ -818,6 +983,39 @@
   stroke-width: 2.4;
 }
 
+.radiusRing {
+  fill: rgba(8, 125, 114, 0.07);
+  pointer-events: none;
+  stroke: rgba(8, 125, 114, 0.45);
+  stroke-dasharray: 6 4;
+  stroke-width: 1.4;
+}
+
+.walmartCluster,
+.competitorCluster {
+  pointer-events: none;
+}
+
+.walmartCluster circle {
+  fill: rgba(22, 115, 219, 0.82);
+  stroke: white;
+  stroke-width: 2;
+}
+
+.competitorCluster circle {
+  fill: rgba(218, 71, 96, 0.82);
+  stroke: white;
+  stroke-width: 2;
+}
+
+.walmartCluster text,
+.competitorCluster text {
+  fill: white;
+  font-size: 10px;
+  font-weight: 900;
+  text-anchor: middle;
+}
+
 .mapToolbar {
   align-items: flex-start;
   display: flex;
@@ -855,6 +1053,18 @@
   font-weight: 800;
   padding: 0.48rem 0.6rem;
   white-space: nowrap;
+}
+
+.baseSelect {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  box-shadow: var(--shadow);
+  color: var(--sub);
+  font-size: 0.68rem;
+  font-weight: 800;
+  min-height: 2.15rem;
+  padding: 0.38rem 0.55rem;
 }
 
 .legend {
@@ -978,6 +1188,42 @@
   border-top: 1px solid var(--line);
 }
 
+.zoomControl span {
+  border-top: 1px solid var(--line);
+  color: var(--sub);
+  display: block;
+  font-size: 0.58rem;
+  font-weight: 850;
+  padding: 0.28rem 0;
+  text-align: center;
+}
+
+.mapTooltip {
+  background: rgba(16, 27, 36, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 0.6rem;
+  box-shadow: var(--shadow);
+  color: white;
+  display: grid;
+  gap: 0.16rem;
+  max-width: 18rem;
+  padding: 0.55rem 0.65rem;
+  pointer-events: none;
+  position: absolute;
+  transform: translate(-50%, -112%);
+  z-index: 6;
+}
+
+.mapTooltip strong {
+  font-size: 0.74rem;
+}
+
+.mapTooltip span {
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.68rem;
+  line-height: 1.35;
+}
+
 .detailPanel {
   background: rgba(255, 255, 255, 0.96);
   border: 1px solid var(--line);
@@ -1009,8 +1255,22 @@
 }
 
 .detailHeader strong {
+  display: block;
   color: var(--accent);
   font-size: 1.25rem;
+  text-align: right;
+}
+
+.saveButton {
+  background: var(--accent-bg);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: 999px;
+  color: var(--accent);
+  display: block;
+  font-size: 0.64rem;
+  font-weight: 850;
+  margin-bottom: 0.28rem;
+  padding: 0.22rem 0.45rem;
 }
 
 .detailStack {
@@ -1071,6 +1331,43 @@
   color: var(--sub);
 }
 
+.peerList {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.34rem;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+}
+
+.peerList > span {
+  color: var(--sub);
+  font-size: 0.61rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.peerList button {
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  color: var(--sub);
+  display: flex;
+  font-size: 0.68rem;
+  gap: 0.5rem;
+  justify-content: space-between;
+  padding: 0.45rem 0.5rem;
+  text-align: left;
+}
+
+.peerList b {
+  color: var(--accent);
+  font-size: 0.68rem;
+  margin: 0;
+  white-space: nowrap;
+}
+
 .mapFooter {
   align-items: center;
   background: rgba(255, 255, 255, 0.94);
@@ -1129,8 +1426,21 @@
 }
 
 .tableDrawer {
-  max-width: 68rem;
-  width: min(96vw, 68rem);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.9rem 0.9rem 0 0;
+  bottom: 0;
+  box-shadow: 0 -24px 80px rgba(15, 23, 42, 0.16);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  left: 1.55rem;
+  max-height: min(62dvh, 36rem);
+  overflow: hidden;
+  padding: 0.95rem;
+  position: absolute;
+  right: 1.55rem;
+  z-index: 45;
 }
 
 .drawerHead {
@@ -1182,6 +1492,68 @@
   color: color-mix(in srgb, var(--accent) 72%, #182b3a);
   font-size: 0.76rem;
   line-height: 1.35;
+}
+
+.checkRow {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 0.58rem;
+  color: var(--sub);
+  display: flex;
+  font-size: 0.76rem;
+  font-weight: 750;
+  gap: 0.5rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.checkRow input {
+  accent-color: var(--accent);
+  width: auto;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  box-shadow: var(--shadow);
+  left: 50%;
+  max-width: min(92vw, 40rem);
+  padding: 1rem;
+  position: fixed;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 40rem;
+}
+
+.modalBody {
+  color: var(--sub);
+  display: grid;
+  font-size: 0.86rem;
+  gap: 0.75rem;
+  line-height: 1.55;
+  margin-top: 0.85rem;
+}
+
+.modalBody p {
+  margin: 0;
+}
+
+.savedRow {
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 0.65rem;
+  color: var(--ink);
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.72rem 0.78rem;
+  text-align: left;
+}
+
+.savedRow b {
+  color: var(--accent);
+  white-space: nowrap;
 }
 
 .tableWrap {
