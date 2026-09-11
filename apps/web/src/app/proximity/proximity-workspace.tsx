@@ -1,6 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  type KeyboardEvent,
+  type PointerEvent,
+  type WheelEvent,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type { LocationRetailer, ProximityPair, ProximityView } from "@/lib/api";
 import usStatesTopology from "../../../../../config/us-states-10m.json";
@@ -10,6 +18,9 @@ import styles from "./proximity-workspace.module.css";
 const RADIUS_OPTIONS = [1, 3, 5, 10] as const;
 type RelationFilter = "all" | "within" | "outside";
 type SortMode = "nearest" | "farthest" | "state" | "store";
+type ThemeMode = "light" | "dark";
+type MapStyle = "insight" | "outline";
+type ModalKind = "method" | "shortlist" | "notes" | null;
 
 type Topology = {
   arcs: number[][][];
@@ -61,6 +72,10 @@ function locationLabel(location: ProximityPair["benchmark"]) {
   return [location.store_name, location.city, location.state, location.zipcode]
     .filter(Boolean)
     .join(" · ");
+}
+
+function pairKey(pair: ProximityPair) {
+  return `${pair.benchmark.id}::${pair.competitor.id}`;
 }
 
 function googleMapsUrl(latitude: number, longitude: number) {
@@ -173,6 +188,76 @@ function downloadJson(
   );
 }
 
+function downloadGeoJson(
+  rows: ProximityPair[],
+  selectedRadius: number,
+  filename: string,
+) {
+  const features = rows.flatMap((pair) => [
+    {
+      geometry: {
+        coordinates: [pair.benchmark.longitude, pair.benchmark.latitude],
+        type: "Point",
+      },
+      properties: {
+        competitor_location_id: pair.competitor.id,
+        competitor_retailer_id: pair.competitor.retailer_id,
+        nearest_distance_miles: pair.distance_miles,
+        retailer_id: pair.benchmark.retailer_id,
+        role: "walmart",
+        selected_radius_miles: selectedRadius,
+        store_number: pair.benchmark.store_number,
+        within_selected_radius: pair.distance_miles <= selectedRadius,
+      },
+      type: "Feature",
+    },
+    {
+      geometry: {
+        coordinates: [pair.competitor.longitude, pair.competitor.latitude],
+        type: "Point",
+      },
+      properties: {
+        nearest_walmart_location_id: pair.benchmark.id,
+        nearest_walmart_store_number: pair.benchmark.store_number,
+        retailer_id: pair.competitor.retailer_id,
+        role: "competitor",
+        selected_radius_miles: selectedRadius,
+        store_number: pair.competitor.store_number,
+      },
+      type: "Feature",
+    },
+    {
+      geometry: {
+        coordinates: [
+          [pair.benchmark.longitude, pair.benchmark.latitude],
+          [pair.competitor.longitude, pair.competitor.latitude],
+        ],
+        type: "LineString",
+      },
+      properties: {
+        nearest_distance_miles: pair.distance_miles,
+        role: "relationship",
+        selected_radius_miles: selectedRadius,
+        walmart_location_id: pair.benchmark.id,
+        within_selected_radius: pair.distance_miles <= selectedRadius,
+      },
+      type: "Feature",
+    },
+  ]);
+  download(
+    filename,
+    "application/geo+json;charset=utf-8",
+    JSON.stringify(
+      {
+        features,
+        type: "FeatureCollection",
+      },
+      null,
+      2,
+    ),
+  );
+}
+
 function mercator(longitude: number, latitude: number) {
   const limitedLatitude = Math.max(
     -85.05112878,
@@ -183,6 +268,10 @@ function mercator(longitude: number, latitude: number) {
     x: (longitude + 180) / 360,
     y: 0.5 - Math.log((1 + sine) / (1 - sine)) / (4 * Math.PI),
   };
+}
+
+function clamp(value: number, minimum: number, maximum: number) {
+  return Math.max(minimum, Math.min(maximum, value));
 }
 
 function tickValues(minimum: number, maximum: number, target = 6) {
@@ -318,6 +407,37 @@ function usStatePaths(
     .filter((shape) => shape.path);
 }
 
+function clusterLocations(
+  locations: ProximityPair["benchmark"][],
+  point: (longitude: number, latitude: number) => { x: number; y: number },
+  bucketSize: number,
+) {
+  const clusters = new Map<
+    string,
+    { count: number; ids: Set<string>; label: string; x: number; y: number }
+  >();
+  locations.forEach((location) => {
+    const rendered = point(location.longitude, location.latitude);
+    const key = `${Math.round(rendered.x / bucketSize)}:${Math.round(rendered.y / bucketSize)}`;
+    const existing = clusters.get(key);
+    if (existing) {
+      existing.count += 1;
+      existing.ids.add(location.id);
+      existing.x += (rendered.x - existing.x) / existing.count;
+      existing.y += (rendered.y - existing.y) / existing.count;
+      return;
+    }
+    clusters.set(key, {
+      count: 1,
+      ids: new Set([location.id]),
+      label: location.state || location.city || "cluster",
+      x: rendered.x,
+      y: rendered.y,
+    });
+  });
+  return Array.from(clusters.values()).filter((cluster) => cluster.count > 1);
+}
+
 export function ProximityWorkspace({
   initialView,
   initialRetailers,
@@ -344,16 +464,67 @@ export function ProximityWorkspace({
   const [sort, setSort] = useState<SortMode>("nearest");
   const [showFilters, setShowFilters] = useState(false);
   const [showTable, setShowTable] = useState(false);
+  const [showExportMenu, setShowExportMenu] = useState(false);
+  const [showLinks, setShowLinks] = useState(true);
+  const [showRings, setShowRings] = useState(true);
+  const [showWalmart, setShowWalmart] = useState(true);
+  const [showCompetitors, setShowCompetitors] = useState(true);
+  const [showClusters, setShowClusters] = useState(false);
+  const [onlySaved, setOnlySaved] = useState(false);
+  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [mapStyle, setMapStyle] = useState<MapStyle>("insight");
+  const [mapZoom, setMapZoom] = useState(1);
+  const [mapOffset, setMapOffset] = useState({ x: 0, y: 0 });
+  const [dragStart, setDragStart] = useState<{
+    clientX: number;
+    clientY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const [modal, setModal] = useState<ModalKind>(null);
+  const [savedByComparison, setSavedByComparison] = useState<
+    Record<string, string[]>
+  >(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const stored = window.localStorage.getItem("proximity-shortlists");
+      return stored ? (JSON.parse(stored) as Record<string, string[]>) : {};
+    } catch {
+      return {};
+    }
+  });
   const [selectedKey, setSelectedKey] = useState<string | null>(
     initialView?.pairs[0]?.benchmark.id ?? null,
   );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const mapAreaRef = useRef<HTMLDivElement>(null);
+  const shortlistStorageKey = `proximity-shortlist:${country}:${competitorRetailerId}`;
+  const savedKeys = useMemo(
+    () => new Set(savedByComparison[shortlistStorageKey] ?? []),
+    [savedByComparison, shortlistStorageKey],
+  );
 
   const competitorOptions = useMemo(
     () => availableCompetitors(retailers, country),
     [country, retailers],
   );
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      "proximity-theme",
+      theme === "dark" ? "dark" : "light",
+    );
+  }, [theme]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      "proximity-shortlists",
+      JSON.stringify(savedByComparison),
+    );
+  }, [savedByComparison]);
 
   async function load(next: {
     country?: string;
@@ -408,6 +579,9 @@ export function ProximityWorkspace({
       setStateFilter("all");
       setRelation("all");
       setSort("nearest");
+      setOnlySaved(false);
+      setMapOffset({ x: 0, y: 0 });
+      setMapZoom(1);
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -424,6 +598,7 @@ export function ProximityWorkspace({
     const normalizedQuery = query.trim().toLowerCase();
     return (view?.pairs ?? [])
       .filter((pair) => {
+        if (onlySaved && !savedKeys.has(pairKey(pair))) return false;
         if (stateFilter !== "all" && pair.benchmark.state !== stateFilter) {
           return false;
         }
@@ -469,7 +644,16 @@ export function ProximityWorkspace({
         }
         return left.distance_miles - right.distance_miles;
       });
-  }, [query, radius, relation, sort, stateFilter, view?.pairs]);
+  }, [
+    onlySaved,
+    query,
+    radius,
+    relation,
+    savedKeys,
+    sort,
+    stateFilter,
+    view?.pairs,
+  ]);
 
   const selectedPair =
     filteredPairs.find((pair) => pair.benchmark.id === selectedKey) ??
@@ -520,9 +704,155 @@ export function ProximityWorkspace({
     () => (country === "USA" ? usStatePaths(map.point) : []),
     [country, map],
   );
+  const clusterBucket = clamp(72 / mapZoom, 24, 90);
+  const walmartClusters = useMemo(
+    () =>
+      showClusters
+        ? clusterLocations(
+            filteredPairs.map((pair) => pair.benchmark),
+            map.point,
+            clusterBucket,
+          )
+        : [],
+    [clusterBucket, filteredPairs, map.point, showClusters],
+  );
+  const competitorClusters = useMemo(
+    () =>
+      showClusters
+        ? clusterLocations(competitorPoints, map.point, clusterBucket)
+        : [],
+    [clusterBucket, competitorPoints, map.point, showClusters],
+  );
+  const selectedRadiusPixels = selectedPair
+    ? Math.abs(
+        map.point(
+          selectedPair.benchmark.longitude,
+          selectedPair.benchmark.latitude + radius / 69,
+        ).y -
+          map.point(
+            selectedPair.benchmark.longitude,
+            selectedPair.benchmark.latitude,
+          ).y,
+      )
+    : 0;
+  const selectedPeers = selectedPair
+    ? filteredPairs
+        .filter(
+          (pair) =>
+            pair.competitor.id === selectedPair.competitor.id &&
+            pair.benchmark.id !== selectedPair.benchmark.id,
+        )
+        .slice(0, 4)
+    : [];
+  const hoveredPair =
+    filteredPairs.find((pair) => pairKey(pair) === hoveredKey) ?? null;
+  const hoveredPoint = hoveredPair
+    ? map.point(hoveredPair.benchmark.longitude, hoveredPair.benchmark.latitude)
+    : null;
+  const transformedHoverPoint = hoveredPoint
+    ? {
+        x: clamp(
+          ((mapOffset.x + hoveredPoint.x * mapZoom) / 1000) * 100,
+          4,
+          96,
+        ),
+        y: clamp(((mapOffset.y + hoveredPoint.y * mapZoom) / 640) * 100, 5, 95),
+      }
+    : null;
+  const mapTransform = `translate(${mapOffset.x} ${mapOffset.y}) scale(${mapZoom})`;
+
+  function resetView() {
+    setQuery("");
+    setStateFilter("all");
+    setRelation("all");
+    setSort("nearest");
+    setOnlySaved(false);
+    setMapOffset({ x: 0, y: 0 });
+    setMapZoom(1);
+  }
+
+  function zoomMap(multiplier: number) {
+    setMapZoom((current) => clamp(current * multiplier, 0.7, 8));
+  }
+
+  function handleWheel(event: WheelEvent<SVGSVGElement>) {
+    event.preventDefault();
+    zoomMap(event.deltaY < 0 ? 1.15 : 0.87);
+  }
+
+  function handlePointerDown(event: PointerEvent<SVGSVGElement>) {
+    if (event.button !== 0) return;
+    const target = event.currentTarget;
+    target.setPointerCapture(event.pointerId);
+    setDragStart({
+      clientX: event.clientX,
+      clientY: event.clientY,
+      originX: mapOffset.x,
+      originY: mapOffset.y,
+    });
+  }
+
+  function handlePointerMove(event: PointerEvent<SVGSVGElement>) {
+    if (!dragStart) return;
+    const rect = event.currentTarget.getBoundingClientRect();
+    setMapOffset({
+      x:
+        dragStart.originX +
+        ((event.clientX - dragStart.clientX) / rect.width) * 1000,
+      y:
+        dragStart.originY +
+        ((event.clientY - dragStart.clientY) / rect.height) * 640,
+    });
+  }
+
+  function handleKeyDown(event: KeyboardEvent<SVGSVGElement>) {
+    if (event.key === "+" || event.key === "=") {
+      event.preventDefault();
+      zoomMap(1.18);
+    } else if (event.key === "-") {
+      event.preventDefault();
+      zoomMap(0.84);
+    } else if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      setMapOffset((current) => ({ ...current, x: current.x + 24 }));
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      setMapOffset((current) => ({ ...current, x: current.x - 24 }));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setMapOffset((current) => ({ ...current, y: current.y + 24 }));
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setMapOffset((current) => ({ ...current, y: current.y - 24 }));
+    }
+  }
+
+  function toggleSaved(pair: ProximityPair) {
+    const key = pairKey(pair);
+    setSavedByComparison((current) => {
+      const currentKeys = new Set(current[shortlistStorageKey] ?? []);
+      if (currentKeys.has(key)) {
+        currentKeys.delete(key);
+      } else {
+        currentKeys.add(key);
+      }
+      return {
+        ...current,
+        [shortlistStorageKey]: Array.from(currentKeys),
+      };
+    });
+  }
+
+  function exportSvg() {
+    if (!svgRef.current) return;
+    const serialized = new XMLSerializer().serializeToString(svgRef.current);
+    download("proximity-map.svg", "image/svg+xml;charset=utf-8", serialized);
+  }
 
   return (
-    <div className={styles.workspace}>
+    <div
+      className={`${styles.workspace} ${theme === "dark" ? styles.dark : ""}`}
+    >
       <header className={styles.topbar}>
         <div className={styles.brand}>
           <div className={styles.brandMark}>↔</div>
@@ -545,6 +875,90 @@ export function ProximityWorkspace({
           </span>
         </div>
         <div className={styles.actions}>
+          <button
+            className={styles.btn}
+            onClick={() => setModal("shortlist")}
+            type="button"
+          >
+            Shortlist <span className={styles.pill}>{savedKeys.size}</span>
+          </button>
+          <button
+            className={styles.btn}
+            onClick={() => setModal("notes")}
+            type="button"
+          >
+            Notes
+          </button>
+          <div className={styles.menuWrap}>
+            <button
+              className={styles.btn}
+              onClick={() => setShowExportMenu((current) => !current)}
+              type="button"
+            >
+              Export ▾
+            </button>
+            {showExportMenu ? (
+              <div className={styles.exportMenu}>
+                <button
+                  onClick={() => {
+                    downloadCsv(
+                      filteredPairs,
+                      radius,
+                      "proximity-filtered.csv",
+                    );
+                    setShowExportMenu(false);
+                  }}
+                  type="button"
+                >
+                  Visible rows · CSV
+                </button>
+                <button
+                  onClick={() => {
+                    downloadJson(
+                      filteredPairs,
+                      radius,
+                      "proximity-filtered.json",
+                    );
+                    setShowExportMenu(false);
+                  }}
+                  type="button"
+                >
+                  Visible rows · JSON
+                </button>
+                <button
+                  onClick={() => {
+                    downloadGeoJson(
+                      filteredPairs,
+                      radius,
+                      "proximity-filtered.geojson",
+                    );
+                    setShowExportMenu(false);
+                  }}
+                  type="button"
+                >
+                  Map layer · GeoJSON
+                </button>
+                <button
+                  onClick={() => {
+                    exportSvg();
+                    setShowExportMenu(false);
+                  }}
+                  type="button"
+                >
+                  Current map · SVG
+                </button>
+              </div>
+            ) : null}
+          </div>
+          <button
+            className={styles.btn}
+            onClick={() =>
+              setTheme((current) => (current === "dark" ? "light" : "dark"))
+            }
+            type="button"
+          >
+            {theme === "dark" ? "Light" : "Dark"}
+          </button>
           <button
             className={styles.btn}
             onClick={() => setShowFilters(true)}
@@ -639,12 +1053,7 @@ export function ProximityWorkspace({
               <h2>Controls</h2>
               <button
                 className={styles.textButton}
-                onClick={() => {
-                  setQuery("");
-                  setStateFilter("all");
-                  setRelation("all");
-                  setSort("nearest");
-                }}
+                onClick={resetView}
                 type="button"
               >
                 Reset view
@@ -731,6 +1140,41 @@ export function ProximityWorkspace({
             <div className={styles.scopeChip}>
               <span>{count(filteredPairs.length)} visible pairs</span>
               <span>{count(stateOptions.length)} states/provinces</span>
+            </div>
+          </div>
+
+          <div className={styles.layerBox}>
+            <div className={styles.sectionLine}>
+              <h2>Map layers</h2>
+              <button
+                className={styles.textButton}
+                onClick={() => setModal("method")}
+                type="button"
+              >
+                Method
+              </button>
+            </div>
+            <div className={styles.layerGrid}>
+              {[
+                ["Walmart", showWalmart, setShowWalmart],
+                ["Competitor", showCompetitors, setShowCompetitors],
+                ["Links", showLinks, setShowLinks],
+                ["Radius ring", showRings, setShowRings],
+                ["Clusters", showClusters, setShowClusters],
+                ["Saved only", onlySaved, setOnlySaved],
+              ].map(([label, value, setter]) => (
+                <button
+                  aria-pressed={Boolean(value)}
+                  key={String(label)}
+                  onClick={() =>
+                    (setter as (next: boolean) => void)(!Boolean(value))
+                  }
+                  type="button"
+                >
+                  <span>{String(label)}</span>
+                  <i />
+                </button>
+              ))}
             </div>
           </div>
 
@@ -854,7 +1298,7 @@ export function ProximityWorkspace({
         </aside>
 
         <section className={styles.mapSection} aria-label="Proximity map">
-          <div className={styles.mapArea}>
+          <div className={styles.mapArea} ref={mapAreaRef}>
             <div className={styles.mapToolbar}>
               <div className={styles.quickViews}>
                 <button
@@ -880,6 +1324,36 @@ export function ProximityWorkspace({
                 </button>
               </div>
               <div className={styles.mapTools}>
+                <select
+                  aria-label="Map style"
+                  className={styles.baseSelect}
+                  onChange={(event) =>
+                    setMapStyle(event.target.value as MapStyle)
+                  }
+                  value={mapStyle}
+                >
+                  <option value="insight">Insight map</option>
+                  <option value="outline">Outline map</option>
+                </select>
+                <button
+                  className={styles.iconButton}
+                  onClick={() => {
+                    setMapOffset({ x: 0, y: 0 });
+                    setMapZoom(1);
+                  }}
+                  title="Fit visible network"
+                  type="button"
+                >
+                  ⤢
+                </button>
+                <button
+                  className={styles.iconButton}
+                  onClick={() => void mapAreaRef.current?.requestFullscreen()}
+                  title="Fullscreen map"
+                  type="button"
+                >
+                  ⛶
+                </button>
                 <button
                   className={styles.iconButton}
                   onClick={() => setShowFilters(true)}
@@ -900,7 +1374,24 @@ export function ProximityWorkspace({
             </div>
 
             {filteredPairs.length ? (
-              <svg className={styles.mapSvg} role="img" viewBox="0 0 1000 640">
+              <svg
+                className={`${styles.mapSvg} ${
+                  mapStyle === "outline" ? styles.outlineMap : ""
+                }`}
+                onKeyDown={handleKeyDown}
+                onPointerDown={handlePointerDown}
+                onPointerLeave={() => {
+                  setDragStart(null);
+                  setHoveredKey(null);
+                }}
+                onPointerMove={handlePointerMove}
+                onPointerUp={() => setDragStart(null)}
+                onWheel={handleWheel}
+                ref={svgRef}
+                role="img"
+                tabIndex={0}
+                viewBox="0 0 1000 640"
+              >
                 <title>Retailer proximity map</title>
                 <defs>
                   <radialGradient id="proximityWater" cx="50%" cy="42%" r="72%">
@@ -929,136 +1420,227 @@ export function ProximityWorkspace({
                   className={styles.mapVignette}
                   d="M60 72 C186 22 304 58 421 38 C564 13 681 31 801 82 C921 133 966 254 940 384 C914 514 779 590 635 601 C502 611 394 569 280 590 C158 613 55 553 44 423 C31 278 -44 145 60 72 Z"
                 />
-                {stateShapes.length ? (
-                  <g className={styles.stateLayer}>
-                    {stateShapes.map((shape) => (
-                      <path d={shape.path} key={shape.id} />
-                    ))}
-                  </g>
-                ) : (
-                  <rect
-                    className={styles.landMass}
-                    height="520"
-                    rx="120"
-                    width="850"
-                    x="75"
-                    y="70"
-                  />
-                )}
-                {map.longitudeTicks.map((longitude) => {
-                  const top = map.point(longitude, map.bounds.maxLatitude);
-                  const bottom = map.point(longitude, map.bounds.minLatitude);
-                  return (
-                    <g key={`lon-${longitude}`}>
-                      <line
-                        className={styles.gridLine}
-                        x1={top.x}
-                        x2={bottom.x}
-                        y1={top.y}
-                        y2={bottom.y}
-                      />
-                      <text className={styles.gridLabel} x={top.x + 4} y="622">
-                        {Math.abs(Math.round(longitude))}°W
-                      </text>
+                <g transform={mapTransform}>
+                  {stateShapes.length ? (
+                    <g className={styles.stateLayer}>
+                      {stateShapes.map((shape) => (
+                        <path d={shape.path} key={shape.id} />
+                      ))}
                     </g>
-                  );
-                })}
-                {map.latitudeTicks.map((latitude) => {
-                  const left = map.point(map.bounds.minLongitude, latitude);
-                  const right = map.point(map.bounds.maxLongitude, latitude);
-                  return (
-                    <g key={`lat-${latitude}`}>
-                      <line
-                        className={styles.gridLine}
-                        x1={left.x}
-                        x2={right.x}
-                        y1={left.y}
-                        y2={right.y}
-                      />
-                      <text className={styles.gridLabel} x="18" y={left.y - 4}>
-                        {Math.abs(Math.round(latitude))}°N
-                      </text>
-                    </g>
-                  );
-                })}
-                <text className={styles.mapLabel} x="78" y="112">
-                  {country === "CANADA" ? "CANADA" : "UNITED STATES"}
-                </text>
-                {filteredPairs.slice(0, 1800).map((pair) => {
-                  const start = map.point(
-                    pair.benchmark.longitude,
-                    pair.benchmark.latitude,
-                  );
-                  const end = map.point(
-                    pair.competitor.longitude,
-                    pair.competitor.latitude,
-                  );
-                  const selected =
-                    selectedPair?.benchmark.id === pair.benchmark.id;
-                  return (
-                    <line
-                      className={
-                        selected
-                          ? styles.selectedLine
-                          : pair.distance_miles <= radius
-                            ? styles.coveredLine
-                            : styles.gapLine
-                      }
-                      key={`line-${pair.benchmark.id}`}
-                      x1={start.x}
-                      x2={end.x}
-                      y1={start.y}
-                      y2={end.y}
-                    />
-                  );
-                })}
-                {competitorPoints.map((location) => {
-                  const point = map.point(
-                    location.longitude,
-                    location.latitude,
-                  );
-                  return (
+                  ) : (
                     <rect
-                      className={styles.competitorPoint}
-                      height="6.5"
-                      key={location.id}
-                      rx="1.8"
-                      width="6.5"
-                      x={point.x - 3.25}
-                      y={point.y - 3.25}
+                      className={styles.landMass}
+                      height="520"
+                      rx="120"
+                      width="850"
+                      x="75"
+                      y="70"
                     />
-                  );
-                })}
-                {filteredPairs.map((pair) => {
-                  const point = map.point(
-                    pair.benchmark.longitude,
-                    pair.benchmark.latitude,
-                  );
-                  const selected =
-                    selectedPair?.benchmark.id === pair.benchmark.id;
-                  return (
+                  )}
+                  {map.longitudeTicks.map((longitude) => {
+                    const top = map.point(longitude, map.bounds.maxLatitude);
+                    const bottom = map.point(longitude, map.bounds.minLatitude);
+                    return (
+                      <g key={`lon-${longitude}`}>
+                        <line
+                          className={styles.gridLine}
+                          x1={top.x}
+                          x2={bottom.x}
+                          y1={top.y}
+                          y2={bottom.y}
+                        />
+                        <text
+                          className={styles.gridLabel}
+                          x={top.x + 4}
+                          y="622"
+                        >
+                          {Math.abs(Math.round(longitude))}°W
+                        </text>
+                      </g>
+                    );
+                  })}
+                  {map.latitudeTicks.map((latitude) => {
+                    const left = map.point(map.bounds.minLongitude, latitude);
+                    const right = map.point(map.bounds.maxLongitude, latitude);
+                    return (
+                      <g key={`lat-${latitude}`}>
+                        <line
+                          className={styles.gridLine}
+                          x1={left.x}
+                          x2={right.x}
+                          y1={left.y}
+                          y2={right.y}
+                        />
+                        <text
+                          className={styles.gridLabel}
+                          x="18"
+                          y={left.y - 4}
+                        >
+                          {Math.abs(Math.round(latitude))}°N
+                        </text>
+                      </g>
+                    );
+                  })}
+                  <text className={styles.mapLabel} x="78" y="112">
+                    {country === "CANADA" ? "CANADA" : "UNITED STATES"}
+                  </text>
+                  {showLinks
+                    ? filteredPairs.slice(0, 1800).map((pair) => {
+                        const start = map.point(
+                          pair.benchmark.longitude,
+                          pair.benchmark.latitude,
+                        );
+                        const end = map.point(
+                          pair.competitor.longitude,
+                          pair.competitor.latitude,
+                        );
+                        const selected =
+                          selectedPair?.benchmark.id === pair.benchmark.id;
+                        return (
+                          <line
+                            className={
+                              selected
+                                ? styles.selectedLine
+                                : pair.distance_miles <= radius
+                                  ? styles.coveredLine
+                                  : styles.gapLine
+                            }
+                            key={`line-${pair.benchmark.id}`}
+                            x1={start.x}
+                            x2={end.x}
+                            y1={start.y}
+                            y2={end.y}
+                          />
+                        );
+                      })
+                    : null}
+                  {showRings && selectedPair ? (
                     <circle
-                      className={
-                        selected
-                          ? styles.selectedPoint
-                          : pair.distance_miles <= radius
-                            ? styles.walmartPoint
-                            : styles.walmartPointOut
+                      className={styles.radiusRing}
+                      cx={
+                        map.point(
+                          selectedPair.benchmark.longitude,
+                          selectedPair.benchmark.latitude,
+                        ).x
                       }
-                      cx={point.x}
-                      cy={point.y}
-                      key={pair.benchmark.id}
-                      onClick={() => setSelectedKey(pair.benchmark.id)}
-                      r={selected ? 7 : 3.6}
+                      cy={
+                        map.point(
+                          selectedPair.benchmark.longitude,
+                          selectedPair.benchmark.latitude,
+                        ).y
+                      }
+                      r={selectedRadiusPixels}
                     />
-                  );
-                })}
+                  ) : null}
+                  {showCompetitors && !showClusters
+                    ? competitorPoints.map((location) => {
+                        const point = map.point(
+                          location.longitude,
+                          location.latitude,
+                        );
+                        return (
+                          <rect
+                            className={styles.competitorPoint}
+                            height="6.5"
+                            key={location.id}
+                            rx="1.8"
+                            width="6.5"
+                            x={point.x - 3.25}
+                            y={point.y - 3.25}
+                          />
+                        );
+                      })
+                    : null}
+                  {showWalmart && !showClusters
+                    ? filteredPairs.map((pair) => {
+                        const point = map.point(
+                          pair.benchmark.longitude,
+                          pair.benchmark.latitude,
+                        );
+                        const selected =
+                          selectedPair?.benchmark.id === pair.benchmark.id;
+                        return (
+                          <circle
+                            className={
+                              selected
+                                ? styles.selectedPoint
+                                : pair.distance_miles <= radius
+                                  ? styles.walmartPoint
+                                  : styles.walmartPointOut
+                            }
+                            cx={point.x}
+                            cy={point.y}
+                            key={pair.benchmark.id}
+                            onClick={() => setSelectedKey(pair.benchmark.id)}
+                            onPointerEnter={() => setHoveredKey(pairKey(pair))}
+                            onPointerLeave={() => setHoveredKey(null)}
+                            r={selected ? 7 : 3.6}
+                          />
+                        );
+                      })
+                    : null}
+                  {showClusters && showCompetitors
+                    ? competitorClusters.map((cluster, index) => (
+                        <g
+                          className={styles.competitorCluster}
+                          key={`competitor-cluster-${index}`}
+                        >
+                          <circle
+                            cx={cluster.x}
+                            cy={cluster.y}
+                            r={clamp(8 + Math.log(cluster.count) * 4, 10, 28)}
+                          />
+                          <text x={cluster.x} y={cluster.y + 3}>
+                            {cluster.count}
+                          </text>
+                        </g>
+                      ))
+                    : null}
+                  {showClusters && showWalmart
+                    ? walmartClusters.map((cluster, index) => (
+                        <g
+                          className={styles.walmartCluster}
+                          key={`walmart-cluster-${index}`}
+                        >
+                          <circle
+                            cx={cluster.x}
+                            cy={cluster.y}
+                            r={clamp(8 + Math.log(cluster.count) * 4, 10, 30)}
+                          />
+                          <text x={cluster.x} y={cluster.y + 3}>
+                            {cluster.count}
+                          </text>
+                        </g>
+                      ))
+                    : null}
+                </g>
               </svg>
             ) : (
               <div className={styles.mapEmpty}>
                 No mappable retailer relationships match the current filters.
               </div>
             )}
+
+            {hoveredPair && transformedHoverPoint ? (
+              <div
+                className={styles.mapTooltip}
+                style={{
+                  left: `${transformedHoverPoint.x}%`,
+                  top: `${transformedHoverPoint.y}%`,
+                }}
+              >
+                <strong>
+                  Walmart #{hoveredPair.benchmark.store_number} ·{" "}
+                  {miles(hoveredPair.distance_miles)}
+                </strong>
+                <span>
+                  {hoveredPair.benchmark.city || "Unknown city"},{" "}
+                  {hoveredPair.benchmark.state || "—"} nearest{" "}
+                  {hoveredPair.competitor.retailer_display_name} #
+                  {hoveredPair.competitor.store_number}
+                </span>
+              </div>
+            ) : null}
 
             <div className={styles.legend}>
               <span>
@@ -1092,20 +1674,32 @@ export function ProximityWorkspace({
               </small>
             </div>
 
-            <div className={styles.zoomControl} aria-hidden="true">
-              <button tabIndex={-1} type="button">
+            <div className={styles.zoomControl} aria-label="Map zoom controls">
+              <button onClick={() => zoomMap(1.2)} type="button">
                 +
               </button>
-              <button tabIndex={-1} type="button">
+              <button onClick={() => zoomMap(0.84)} type="button">
                 −
               </button>
+              <span>{Math.round(mapZoom * 100)}%</span>
             </div>
 
             {selectedPair ? (
               <aside className={styles.detailPanel} aria-label="Selected pair">
                 <div className={styles.detailHeader}>
                   <span>Selected relationship</span>
-                  <strong>{miles(selectedPair.distance_miles)}</strong>
+                  <div>
+                    <button
+                      className={styles.saveButton}
+                      onClick={() => toggleSaved(selectedPair)}
+                      type="button"
+                    >
+                      {savedKeys.has(pairKey(selectedPair))
+                        ? "Saved ★"
+                        : "Save ☆"}
+                    </button>
+                    <strong>{miles(selectedPair.distance_miles)}</strong>
+                  </div>
                 </div>
                 <div className={styles.detailStack}>
                   <article>
@@ -1163,19 +1757,38 @@ export function ProximityWorkspace({
                     </span>
                   ))}
                 </div>
+                {selectedPeers.length ? (
+                  <div className={styles.peerList}>
+                    <span>
+                      Other visible Walmart locations nearest this site
+                    </span>
+                    {selectedPeers.map((pair) => (
+                      <button
+                        key={pair.benchmark.id}
+                        onClick={() => setSelectedKey(pair.benchmark.id)}
+                        type="button"
+                      >
+                        #{pair.benchmark.store_number} ·{" "}
+                        {pair.benchmark.city || "Unknown city"},{" "}
+                        {pair.benchmark.state || "—"}
+                        <b>{miles(pair.distance_miles)}</b>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
               </aside>
             ) : null}
 
             <div className={styles.mapFooter}>
               <span>
                 <i />
-                Offline-ready coordinate map · location-master source
+                Drag, wheel, keyboard, fit, and fullscreen controls ·
+                location-master source
               </span>
               <span>
-                1/3/5/10 mi: {count(view?.summary.within_1_mile ?? 0)} /{" "}
-                {count(view?.summary.within_3_miles ?? 0)} /{" "}
-                {count(view?.summary.within_5_miles ?? 0)} /{" "}
-                {count(view?.summary.within_10_miles ?? 0)}
+                Visible 1/3/5/10 mi: {count(visibleWithin1)} /{" "}
+                {count(visibleWithin3)} / {count(visibleWithin5)} /{" "}
+                {count(visibleWithin10)}
               </span>
             </div>
           </div>
@@ -1202,6 +1815,34 @@ export function ProximityWorkspace({
                 ×
               </button>
             </div>
+            <label className={styles.field}>
+              <span>Walmart market</span>
+              <select
+                value={country}
+                onChange={(event) => void load({ country: event.target.value })}
+              >
+                <option value="USA">Walmart US</option>
+                <option value="CANADA">Walmart CA</option>
+              </select>
+            </label>
+            <label className={styles.field}>
+              <span>Compare to one retailer</span>
+              <select
+                value={competitorRetailerId}
+                onChange={(event) =>
+                  void load({ competitorRetailerId: event.target.value })
+                }
+              >
+                {competitorOptions.length === 0 ? (
+                  <option value="">No competitor locations</option>
+                ) : null}
+                {competitorOptions.map((retailer) => (
+                  <option key={retailer.id} value={retailer.id}>
+                    {retailer.display_name} · {count(retailer.location_count)}
+                  </option>
+                ))}
+              </select>
+            </label>
             <label className={styles.field}>
               <span>Walmart state/province</span>
               <select
@@ -1241,6 +1882,14 @@ export function ProximityWorkspace({
                 <option value="store">Store number</option>
               </select>
             </label>
+            <label className={styles.checkRow}>
+              <input
+                checked={onlySaved}
+                onChange={(event) => setOnlySaved(event.target.checked)}
+                type="checkbox"
+              />
+              <span>Only show shortlisted relationships</span>
+            </label>
             <div className={styles.drawerStats}>
               <span>Visible rows</span>
               <strong>{count(filteredPairs.length)}</strong>
@@ -1248,16 +1897,7 @@ export function ProximityWorkspace({
                 Exports, list, and map all use this same filtered population.
               </small>
             </div>
-            <button
-              className={styles.btn}
-              onClick={() => {
-                setQuery("");
-                setStateFilter("all");
-                setRelation("all");
-                setSort("nearest");
-              }}
-              type="button"
-            >
+            <button className={styles.btn} onClick={resetView} type="button">
               Reset filters
             </button>
           </aside>
@@ -1265,98 +1905,208 @@ export function ProximityWorkspace({
       ) : null}
 
       {showTable ? (
+        <section aria-label="Location table" className={styles.tableDrawer}>
+          <div className={styles.drawerHead}>
+            <div>
+              <span>Downloadable evidence</span>
+              <h2>All visible Walmart-to-competitor pairs</h2>
+              <p>
+                {count(filteredPairs.length)} rows; the table, map, KPIs, and
+                exports reconcile to the same filtered set.
+              </p>
+            </div>
+            <button onClick={() => setShowTable(false)} type="button">
+              ×
+            </button>
+          </div>
+          <div className={styles.downloadRow}>
+            <button
+              className={styles.btn}
+              onClick={() =>
+                downloadCsv(filteredPairs, radius, "proximity-filtered.csv")
+              }
+              type="button"
+            >
+              CSV
+            </button>
+            <button
+              className={styles.btn}
+              onClick={() =>
+                downloadCsv(
+                  filteredPairs,
+                  radius,
+                  "proximity-filtered-excel.csv",
+                )
+              }
+              type="button"
+            >
+              Excel CSV
+            </button>
+            <button
+              className={styles.btn}
+              onClick={() =>
+                downloadJson(filteredPairs, radius, "proximity-filtered.json")
+              }
+              type="button"
+            >
+              JSON
+            </button>
+            <button
+              className={styles.btn}
+              onClick={() =>
+                downloadGeoJson(
+                  filteredPairs,
+                  radius,
+                  "proximity-filtered.geojson",
+                )
+              }
+              type="button"
+            >
+              GeoJSON
+            </button>
+          </div>
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Walmart #</th>
+                  <th>Walmart location</th>
+                  <th>Competitor #</th>
+                  <th>Competitor location</th>
+                  <th>Distance</th>
+                  <th>≤ {radius} mi</th>
+                  <th>Walmart coordinate</th>
+                  <th>Competitor coordinate</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredPairs.map((pair) => (
+                  <tr key={pair.benchmark.id}>
+                    <td>{pair.benchmark.store_number}</td>
+                    <td>{locationLabel(pair.benchmark)}</td>
+                    <td>{pair.competitor.store_number}</td>
+                    <td>{locationLabel(pair.competitor)}</td>
+                    <td>{miles(pair.distance_miles)}</td>
+                    <td>{pair.distance_miles <= radius ? "Yes" : "No"}</td>
+                    <td>
+                      {pair.benchmark.latitude.toFixed(5)},{" "}
+                      {pair.benchmark.longitude.toFixed(5)}
+                    </td>
+                    <td>
+                      {pair.competitor.latitude.toFixed(5)},{" "}
+                      {pair.competitor.longitude.toFixed(5)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
+
+      {modal ? (
         <div
           className={styles.drawerBackdrop}
-          onClick={() => setShowTable(false)}
+          onClick={() => setModal(null)}
           role="presentation"
         >
           <section
-            aria-label="Location table"
-            className={`${styles.drawer} ${styles.tableDrawer}`}
+            aria-modal="true"
+            className={styles.modal}
             onClick={(event) => event.stopPropagation()}
+            role="dialog"
           >
             <div className={styles.drawerHead}>
               <div>
-                <span>Downloadable evidence</span>
-                <h2>All visible Walmart-to-competitor pairs</h2>
-                <p>
-                  {count(filteredPairs.length)} rows; the table, map, KPIs, and
-                  exports reconcile to the same filtered set.
-                </p>
+                <span>
+                  {modal === "method"
+                    ? "Data method"
+                    : modal === "shortlist"
+                      ? "Saved relationships"
+                      : "Workspace notes"}
+                </span>
+                <h2>
+                  {modal === "method"
+                    ? "How this proximity view is calculated"
+                    : modal === "shortlist"
+                      ? "Shortlisted retailer relationships"
+                      : "How to use this page"}
+                </h2>
               </div>
-              <button onClick={() => setShowTable(false)} type="button">
+              <button onClick={() => setModal(null)} type="button">
                 ×
               </button>
             </div>
-            <div className={styles.downloadRow}>
-              <button
-                className={styles.btn}
-                onClick={() =>
-                  downloadCsv(filteredPairs, radius, "proximity-filtered.csv")
-                }
-                type="button"
-              >
-                CSV
-              </button>
-              <button
-                className={styles.btn}
-                onClick={() =>
-                  downloadCsv(
-                    filteredPairs,
-                    radius,
-                    "proximity-filtered-excel.csv",
-                  )
-                }
-                type="button"
-              >
-                Excel CSV
-              </button>
-              <button
-                className={styles.btn}
-                onClick={() =>
-                  downloadJson(filteredPairs, radius, "proximity-filtered.json")
-                }
-                type="button"
-              >
-                JSON
-              </button>
-            </div>
-            <div className={styles.tableWrap}>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Walmart #</th>
-                    <th>Walmart location</th>
-                    <th>Competitor #</th>
-                    <th>Competitor location</th>
-                    <th>Distance</th>
-                    <th>≤ {radius} mi</th>
-                    <th>Walmart coordinate</th>
-                    <th>Competitor coordinate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredPairs.map((pair) => (
-                    <tr key={pair.benchmark.id}>
-                      <td>{pair.benchmark.store_number}</td>
-                      <td>{locationLabel(pair.benchmark)}</td>
-                      <td>{pair.competitor.store_number}</td>
-                      <td>{locationLabel(pair.competitor)}</td>
-                      <td>{miles(pair.distance_miles)}</td>
-                      <td>{pair.distance_miles <= radius ? "Yes" : "No"}</td>
-                      <td>
-                        {pair.benchmark.latitude.toFixed(5)},{" "}
-                        {pair.benchmark.longitude.toFixed(5)}
-                      </td>
-                      <td>
-                        {pair.competitor.latitude.toFixed(5)},{" "}
-                        {pair.competitor.longitude.toFixed(5)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+
+            {modal === "method" ? (
+              <div className={styles.modalBody}>
+                <p>
+                  Each row starts with a Walmart US or CA location from the
+                  location master and pairs it to the nearest selected
+                  competitor location with valid latitude and longitude.
+                </p>
+                <p>
+                  Distances are Haversine straight-line miles. They are useful
+                  for footprint and white-space analysis, but they are not drive
+                  time, traffic-aware distance, inventory, item distribution, or
+                  store operating status.
+                </p>
+                <p>
+                  The visible KPIs, list, map, drawer table, and downloads all
+                  use the same filtered set: country, competitor, radius, state,
+                  relationship type, search, and shortlist status.
+                </p>
+              </div>
+            ) : null}
+
+            {modal === "shortlist" ? (
+              <div className={styles.modalBody}>
+                {filteredPairs.filter((pair) => savedKeys.has(pairKey(pair)))
+                  .length ? (
+                  filteredPairs
+                    .filter((pair) => savedKeys.has(pairKey(pair)))
+                    .map((pair) => (
+                      <button
+                        className={styles.savedRow}
+                        key={pairKey(pair)}
+                        onClick={() => {
+                          setSelectedKey(pair.benchmark.id);
+                          setModal(null);
+                        }}
+                        type="button"
+                      >
+                        <span>
+                          Walmart #{pair.benchmark.store_number} ·{" "}
+                          {pair.benchmark.city || "Unknown city"},{" "}
+                          {pair.benchmark.state || "—"}
+                        </span>
+                        <b>{miles(pair.distance_miles)}</b>
+                      </button>
+                    ))
+                ) : (
+                  <p>
+                    No saved relationships yet. Select a relationship on the map
+                    or list and use Save in the detail panel.
+                  </p>
+                )}
+              </div>
+            ) : null}
+
+            {modal === "notes" ? (
+              <div className={styles.modalBody}>
+                <p>
+                  Use the left rail for fast slicing, the map controls for
+                  spatial exploration, and the bottom drawer for the complete
+                  downloadable evidence table.
+                </p>
+                <p>
+                  Suggested workflow: choose one competitor, select a radius,
+                  toggle between covered and white-space views, save notable
+                  relationships, then export CSV/JSON/GeoJSON for follow-up
+                  analysis or future app features.
+                </p>
+              </div>
+            ) : null}
           </section>
         </div>
       ) : null}
