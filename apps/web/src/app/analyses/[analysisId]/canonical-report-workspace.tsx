@@ -459,6 +459,197 @@ function brandTypeGroups(dataset: CanonicalDataset) {
   }));
 }
 
+function useCanonicalRelationshipBrowser(dataset: CanonicalDataset) {
+  const [filters, setFilters] = useState<CanonicalRelationshipFilters>(
+    DEFAULT_CANONICAL_RELATIONSHIP_FILTERS,
+  );
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const competitorOptions = useMemo(
+    () => canonicalCompetitorOptions(dataset.product_relationships),
+    [dataset.product_relationships],
+  );
+  const benchmarkBrandOptions = useMemo(
+    () => canonicalBenchmarkBrandOptions(dataset.product_relationships),
+    [dataset.product_relationships],
+  );
+  const competitorBrandOptions = useMemo(
+    () => canonicalCompetitorBrandOptions(dataset.product_relationships),
+    [dataset.product_relationships],
+  );
+  const comparisonBasisOptions = useMemo(
+    () => canonicalComparisonBasisOptions(dataset.product_relationships),
+    [dataset.product_relationships],
+  );
+  const unitBasisOptions = useMemo(
+    () => canonicalUnitBasisOptions(dataset.product_relationships),
+    [dataset.product_relationships],
+  );
+  const [stateCoverage, setStateCoverage] = useState<ProductStateCoverageState>(
+    { data: null, error: null, requestKey: "", status: "idle" },
+  );
+  const stateCoverageRequestProducts = useMemo(
+    () => relationshipProducts(dataset.product_relationships),
+    [dataset.product_relationships],
+  );
+  const stateCoverageRequestKey = useMemo(
+    () =>
+      JSON.stringify({
+        analysis_id: dataset.analysis_id,
+        products: stateCoverageRequestProducts,
+      }),
+    [dataset.analysis_id, stateCoverageRequestProducts],
+  );
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetch(
+      `/api/price-monitoring/${encodeURIComponent(dataset.analysis_id)}/state-coverage`,
+      {
+        body: JSON.stringify({ products: stateCoverageRequestProducts }),
+        cache: "no-store",
+        headers: { "content-type": "application/json" },
+        method: "POST",
+        signal: controller.signal,
+      },
+    )
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`State coverage returned ${response.status}`);
+        }
+        const data = (await response.json()) as ProductStateCoverageResponse;
+        setStateCoverage({
+          data,
+          error: null,
+          requestKey: stateCoverageRequestKey,
+          status: "ready",
+        });
+      })
+      .catch((reason: unknown) => {
+        if (reason instanceof DOMException && reason.name === "AbortError") {
+          return;
+        }
+        setStateCoverage({
+          data: null,
+          error:
+            reason instanceof Error
+              ? reason.message
+              : "State coverage could not be loaded.",
+          requestKey: stateCoverageRequestKey,
+          status: "error",
+        });
+      });
+    return () => controller.abort();
+  }, [
+    dataset.analysis_id,
+    stateCoverageRequestKey,
+    stateCoverageRequestProducts,
+  ]);
+
+  const displayedStateCoverage =
+    stateCoverage.requestKey === stateCoverageRequestKey
+      ? stateCoverage
+      : {
+          data: null,
+          error: null,
+          requestKey: stateCoverageRequestKey,
+          status: "loading" as const,
+        };
+  const stateCoverageIndex = useMemo(
+    () => stateCoverageProductIndex(displayedStateCoverage.data),
+    [displayedStateCoverage.data],
+  );
+  const stateOptions = useMemo(
+    () =>
+      (displayedStateCoverage.data?.state_options ?? []).map(
+        (row) => row.state,
+      ),
+    [displayedStateCoverage.data],
+  );
+  const selectedStateMissing =
+    filters.state !== "all" &&
+    displayedStateCoverage.status === "ready" &&
+    !stateOptions.includes(filters.state);
+  const activeStateFilter = selectedStateMissing ? "all" : filters.state;
+  const drawerFilters = useMemo(
+    () => ({ ...filters, state: activeStateFilter }),
+    [activeStateFilter, filters],
+  );
+  const filteredRelationships = useMemo(() => {
+    const base = filterCanonicalRelationships(
+      dataset.product_relationships,
+      filters,
+    );
+    if (activeStateFilter === "all") return base;
+    return base.filter((relationship) =>
+      relationshipHasStateCoverage(
+        relationship,
+        activeStateFilter,
+        stateCoverageIndex,
+      ),
+    );
+  }, [
+    activeStateFilter,
+    dataset.product_relationships,
+    filters,
+    stateCoverageIndex,
+  ]);
+  const filteredGroups = useMemo(
+    () => groupCanonicalRelationshipsByOutcome(filteredRelationships),
+    [filteredRelationships],
+  );
+  const updateFilters = (
+    patch: Partial<CanonicalRelationshipFilters>,
+  ): void => {
+    setFilters((current) => ({ ...current, ...patch }));
+  };
+  const resetFilters = () => setFilters(DEFAULT_CANONICAL_RELATIONSHIP_FILTERS);
+  const stateCoverageStatusLabel =
+    displayedStateCoverage.status === "loading"
+      ? "Loading state coverage…"
+      : displayedStateCoverage.status === "error"
+        ? `State coverage unavailable: ${displayedStateCoverage.error}`
+        : "State filter is source-backed by positive-price exact-product Search distribution.";
+  const stateCoverageDefinition =
+    displayedStateCoverage.data?.definition ??
+    "Positive-price exact-product Search distribution by state; not inventory or in-stock status.";
+  const activeFilterCount = [
+    filters.query.trim(),
+    filters.outcome !== "all",
+    filters.brandType !== "all",
+    filters.benchmarkBrand !== "all",
+    filters.competitorBrand !== "all",
+    filters.competitorRetailerId !== "all",
+    filters.comparisonBasis !== "all",
+    activeStateFilter !== "all",
+    filters.unitBasis !== "all",
+    filters.priceBasis !== "all",
+    filters.minimumWalmartDistribution > 0,
+    filters.sort !== DEFAULT_CANONICAL_RELATIONSHIP_FILTERS.sort,
+  ].filter(Boolean).length;
+
+  return {
+    activeFilterCount,
+    activeStateFilter,
+    benchmarkBrandOptions,
+    comparisonBasisOptions,
+    competitorBrandOptions,
+    competitorOptions,
+    drawerFilters,
+    filterDrawerOpen,
+    filteredGroups,
+    filteredRelationships,
+    filters,
+    resetFilters,
+    setFilterDrawerOpen,
+    stateCoverageDefinition,
+    stateCoverageStatus: displayedStateCoverage.status,
+    stateCoverageStatusLabel,
+    stateOptions,
+    unitBasisOptions,
+    updateFilters,
+  };
+}
+
 function productMonitoringHref(
   analysisId: string,
   product: ReportProduct,
@@ -808,36 +999,31 @@ function ExecutiveSummary({
   brandTypeSummary: ReturnType<typeof summarizeCanonicalBrandTypes>;
   retailerFootprints: Map<string, number>;
 }>) {
-  const actionSort = (left: ProductRelationship, right: ProductRelationship) =>
-    right.benchmark_product.distribution.physical_store_distribution_count -
-      left.benchmark_product.distribution.physical_store_distribution_count ||
-    Math.abs(right.comparison.price_delta_percent) -
-      Math.abs(left.comparison.price_delta_percent) ||
-    left.benchmark_product.title.localeCompare(right.benchmark_product.title);
-  const priorityLosses = [...groups.walmartLosses].sort(actionSort);
-  const priorityWins = [...groups.walmartWins].sort(actionSort);
+  const relationshipBrowser = useCanonicalRelationshipBrowser(dataset);
   const [outcomeMode, setOutcomeMode] =
     useState<ExecutiveOutcomeMode>("losses");
-  const broadLosses = groups.walmartLosses.filter(
+  const broadLosses = relationshipBrowser.filteredGroups.walmartLosses.filter(
     (relationship) =>
       relationship.benchmark_product.distribution
         .physical_store_distribution_count >=
       BROAD_WALMART_DISTRIBUTION_THRESHOLD,
   );
-  const broadWins = groups.walmartWins.filter(
+  const broadWins = relationshipBrowser.filteredGroups.walmartWins.filter(
     (relationship) =>
       relationship.benchmark_product.distribution
         .physical_store_distribution_count >=
       BROAD_WALMART_DISTRIBUTION_THRESHOLD,
   );
   const activeRelationships =
-    outcomeMode === "losses" ? priorityLosses : priorityWins;
+    outcomeMode === "losses"
+      ? relationshipBrowser.filteredGroups.walmartLosses
+      : relationshipBrowser.filteredGroups.walmartWins;
   const activeBroadCount =
     outcomeMode === "losses" ? broadLosses.length : broadWins.length;
   const activeTitle =
     outcomeMode === "losses"
-      ? "Complete Walmart loss action list"
-      : "Complete Walmart win action list";
+      ? `Complete Walmart loss action list (${activeRelationships.length.toLocaleString()})`
+      : `Complete Walmart win action list (${activeRelationships.length.toLocaleString()})`;
   const activeEmptyLabel =
     outcomeMode === "losses"
       ? "No Walmart losses are available in the governed relationship set."
@@ -908,18 +1094,35 @@ function ExecutiveSummary({
           </article>
         </div>
       </section>
-      <section className="workspace-section">
+      <section className="workspace-section canonical-browser-section">
         <header>
           <div>
-            <h2>{activeTitle}</h2>
+            <h2>Executive action board</h2>
             <p>
-              Use the toggle to switch between the complete executive loss and
-              win lists without scrolling past one list to reach the other. Rows
-              are sorted by Walmart product footprint and price gap, and every
-              row exposes Walmart and competitor store evidence.
+              Use the toggle and filters to switch between complete loss and win
+              lists without scrolling past the opposite view. Cards are sorted
+              by the selected action priority, and every card exposes Walmart
+              and competitor store evidence with CSV, Excel, and JSON downloads.
             </p>
           </div>
           <div className="canonical-executive-actions">
+            <button
+              type="button"
+              className="canonical-dataset-link"
+              onClick={() => relationshipBrowser.setFilterDrawerOpen(true)}
+            >
+              Filters
+              {relationshipBrowser.activeFilterCount
+                ? ` (${relationshipBrowser.activeFilterCount})`
+                : ""}
+            </button>
+            <button
+              type="button"
+              className="text-link"
+              onClick={relationshipBrowser.resetFilters}
+            >
+              Reset filters
+            </button>
             <div
               className="canonical-executive-toggle"
               role="group"
@@ -930,14 +1133,18 @@ function ExecutiveSummary({
                 type="button"
                 onClick={() => setOutcomeMode("losses")}
               >
-                Losses ({priorityLosses.length.toLocaleString()})
+                Losses (
+                {relationshipBrowser.filteredGroups.walmartLosses.length.toLocaleString()}
+                )
               </button>
               <button
                 className={outcomeMode === "wins" ? "active" : ""}
                 type="button"
                 onClick={() => setOutcomeMode("wins")}
               >
-                Wins ({priorityWins.length.toLocaleString()})
+                Wins (
+                {relationshipBrowser.filteredGroups.walmartWins.length.toLocaleString()}
+                )
               </button>
             </div>
             <span className="canonical-section-stat">
@@ -946,13 +1153,43 @@ function ExecutiveSummary({
             </span>
           </div>
         </header>
-        <ExecutivePriorityTable
-          analysisId={analysisId}
-          emptyLabel={activeEmptyLabel}
-          relationships={activeRelationships}
-          retailerFootprints={retailerFootprints}
-        />
+        <div className="canonical-filter-summary-row">
+          <label className="canonical-quick-search">
+            <span>Quick search</span>
+            <input
+              type="search"
+              value={relationshipBrowser.filters.query}
+              placeholder="Name, brand, product ID…"
+              onChange={(event) =>
+                relationshipBrowser.updateFilters({
+                  query: event.target.value,
+                })
+              }
+            />
+          </label>
+          <div className="canonical-executive-context">
+            <strong>
+              Showing{" "}
+              {relationshipBrowser.filteredRelationships.length.toLocaleString()}{" "}
+              of {dataset.product_relationships.length.toLocaleString()}{" "}
+              included relationships
+            </strong>
+            <span>{relationshipBrowser.stateCoverageStatusLabel}</span>
+          </div>
+        </div>
       </section>
+      <RelationshipSection
+        analysisId={analysisId}
+        emptyLabel={activeEmptyLabel}
+        note={
+          outcomeMode === "losses"
+            ? "These are all Walmart losses matching the active executive filters, shown as product-image cards rather than illustrative examples."
+            : "These are all Walmart wins matching the active executive filters, shown as product-image cards rather than illustrative examples."
+        }
+        relationships={activeRelationships}
+        retailerFootprints={retailerFootprints}
+        title={activeTitle}
+      />
       <section className="workspace-section">
         <header>
           <div>
@@ -986,153 +1223,21 @@ function ExecutiveSummary({
           </p>
         )}
       </section>
-    </>
-  );
-}
-
-function ExecutivePriorityTable({
-  analysisId,
-  emptyLabel,
-  relationships,
-  retailerFootprints,
-}: Readonly<{
-  analysisId: string;
-  emptyLabel: string;
-  relationships: ProductRelationship[];
-  retailerFootprints: Map<string, number>;
-}>) {
-  const [selectedEvidenceTarget, setSelectedEvidenceTarget] =
-    useState<ProductEvidenceTarget | null>(null);
-  if (!relationships.length) {
-    return <p className="empty-note">{emptyLabel}</p>;
-  }
-  return (
-    <>
-      <div className="canonical-table-wrap">
-        <table className="canonical-insight-table canonical-executive-table">
-          <thead>
-            <tr>
-              <th>Walmart product</th>
-              <th>Competitor product</th>
-              <th>Gap</th>
-              <th>Store footprint</th>
-              <th>Basis</th>
-            </tr>
-          </thead>
-          <tbody>
-            {relationships.map((relationship) => (
-              <tr key={relationship.relationship_id}>
-                <td>
-                  <strong>{relationship.benchmark_product.title}</strong>
-                  <span>
-                    {relationship.benchmark_product.retailer_product_id} ·{" "}
-                    {brandTypeLabels[relationship.benchmark_product.brand_type]}
-                  </span>
-                  <span>
-                    {priceDisplay(relationship.benchmark_product).primary}
-                  </span>
-                  <span className="canonical-price-note">
-                    {priceDisplay(relationship.benchmark_product).secondary}
-                  </span>
-                </td>
-                <td>
-                  <strong>{relationship.competitor_product.title}</strong>
-                  <span>
-                    {displayLabel(relationship.competitor_product.retailer_id)}{" "}
-                    · {relationship.competitor_product.retailer_product_id}
-                  </span>
-                  <span>
-                    {priceDisplay(relationship.competitor_product).primary}
-                  </span>
-                  <span className="canonical-price-note">
-                    {priceDisplay(relationship.competitor_product).secondary}
-                  </span>
-                </td>
-                <td>
-                  <strong>
-                    {relationshipDisplayDelta(relationship).signedValue}
-                  </strong>
-                  <span>
-                    {formatPercent(
-                      Math.abs(relationship.comparison.price_delta_percent),
-                    )}{" "}
-                    {relationship.comparison.outcome === "walmart_wins"
-                      ? "Walmart advantage"
-                      : relationship.comparison.outcome === "competitor_wins"
-                        ? "competitor advantage"
-                        : "gap"}
-                  </span>
-                </td>
-                <td>
-                  <strong>
-                    Walmart:{" "}
-                    {reportFootprintLabel(
-                      relationship.benchmark_product,
-                      reportFootprintCountFor(
-                        relationship.benchmark_product,
-                        retailerFootprints,
-                      ),
-                    )}
-                  </strong>
-                  <span>
-                    Competitor:{" "}
-                    {reportFootprintLabel(
-                      relationship.competitor_product,
-                      reportFootprintCountFor(
-                        relationship.competitor_product,
-                        retailerFootprints,
-                      ),
-                    )}
-                  </span>
-                  <span className="canonical-table-actions">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedEvidenceTarget(
-                          productEvidenceTarget(
-                            relationship.benchmark_product,
-                            "Walmart",
-                            "Walmart store evidence",
-                            retailerFootprints,
-                          ),
-                        )
-                      }
-                    >
-                      Walmart stores
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setSelectedEvidenceTarget(
-                          productEvidenceTarget(
-                            relationship.competitor_product,
-                            displayLabel(
-                              relationship.competitor_product.retailer_id,
-                            ),
-                            "Competitor store evidence",
-                            retailerFootprints,
-                          ),
-                        )
-                      }
-                    >
-                      Competitor stores
-                    </button>
-                  </span>
-                </td>
-                <td>
-                  <strong>{relationship.comparison.unit_basis}</strong>
-                  <span>{relationship.comparison.comparison_basis}</span>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {selectedEvidenceTarget ? (
-        <StoreEvidenceDrawer
-          analysisId={analysisId}
-          target={selectedEvidenceTarget}
-          onClose={() => setSelectedEvidenceTarget(null)}
+      {relationshipBrowser.filterDrawerOpen ? (
+        <RelationshipFilterDrawer
+          benchmarkBrandOptions={relationshipBrowser.benchmarkBrandOptions}
+          categoryLabel={dataset.product_pack.name}
+          comparisonBasisOptions={relationshipBrowser.comparisonBasisOptions}
+          competitorBrandOptions={relationshipBrowser.competitorBrandOptions}
+          competitorOptions={relationshipBrowser.competitorOptions}
+          filters={relationshipBrowser.drawerFilters}
+          onClose={() => relationshipBrowser.setFilterDrawerOpen(false)}
+          onReset={relationshipBrowser.resetFilters}
+          onUpdate={relationshipBrowser.updateFilters}
+          stateCoverageDefinition={relationshipBrowser.stateCoverageDefinition}
+          stateCoverageStatus={relationshipBrowser.stateCoverageStatus}
+          stateOptions={relationshipBrowser.stateOptions}
+          unitBasisOptions={relationshipBrowser.unitBasisOptions}
         />
       ) : null}
     </>
@@ -1146,171 +1251,29 @@ function ProductWinsLosses({
   dataset: CanonicalDataset;
   retailerFootprints: Map<string, number>;
 }>) {
-  const [filters, setFilters] = useState<CanonicalRelationshipFilters>(
-    DEFAULT_CANONICAL_RELATIONSHIP_FILTERS,
-  );
-  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const relationshipBrowser = useCanonicalRelationshipBrowser(dataset);
   const [sectionMode, setSectionMode] =
     useState<RelationshipSectionMode>("losses");
-  const competitorOptions = useMemo(
-    () => canonicalCompetitorOptions(dataset.product_relationships),
-    [dataset.product_relationships],
-  );
-  const benchmarkBrandOptions = useMemo(
-    () => canonicalBenchmarkBrandOptions(dataset.product_relationships),
-    [dataset.product_relationships],
-  );
-  const competitorBrandOptions = useMemo(
-    () => canonicalCompetitorBrandOptions(dataset.product_relationships),
-    [dataset.product_relationships],
-  );
-  const comparisonBasisOptions = useMemo(
-    () => canonicalComparisonBasisOptions(dataset.product_relationships),
-    [dataset.product_relationships],
-  );
-  const unitBasisOptions = useMemo(
-    () => canonicalUnitBasisOptions(dataset.product_relationships),
-    [dataset.product_relationships],
-  );
-  const [stateCoverage, setStateCoverage] = useState<ProductStateCoverageState>(
-    { data: null, error: null, requestKey: "", status: "idle" },
-  );
-  const stateCoverageRequestProducts = useMemo(
-    () => relationshipProducts(dataset.product_relationships),
-    [dataset.product_relationships],
-  );
-  const stateCoverageRequestKey = useMemo(
-    () =>
-      JSON.stringify({
-        analysis_id: dataset.analysis_id,
-        products: stateCoverageRequestProducts,
-      }),
-    [dataset.analysis_id, stateCoverageRequestProducts],
-  );
-  useEffect(() => {
-    const controller = new AbortController();
-    fetch(
-      `/api/price-monitoring/${encodeURIComponent(dataset.analysis_id)}/state-coverage`,
-      {
-        body: JSON.stringify({ products: stateCoverageRequestProducts }),
-        cache: "no-store",
-        headers: { "content-type": "application/json" },
-        method: "POST",
-        signal: controller.signal,
-      },
-    )
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(`State coverage returned ${response.status}`);
-        }
-        const data = (await response.json()) as ProductStateCoverageResponse;
-        setStateCoverage({
-          data,
-          error: null,
-          requestKey: stateCoverageRequestKey,
-          status: "ready",
-        });
-      })
-      .catch((reason: unknown) => {
-        if (reason instanceof DOMException && reason.name === "AbortError")
-          return;
-        setStateCoverage({
-          data: null,
-          error:
-            reason instanceof Error
-              ? reason.message
-              : "State coverage could not be loaded.",
-          requestKey: stateCoverageRequestKey,
-          status: "error",
-        });
-      });
-    return () => controller.abort();
-  }, [
-    dataset.analysis_id,
-    stateCoverageRequestKey,
-    stateCoverageRequestProducts,
-  ]);
-  const displayedStateCoverage =
-    stateCoverage.requestKey === stateCoverageRequestKey
-      ? stateCoverage
-      : {
-          data: null,
-          error: null,
-          requestKey: stateCoverageRequestKey,
-          status: "loading" as const,
-        };
-  const stateCoverageIndex = useMemo(
-    () => stateCoverageProductIndex(displayedStateCoverage.data),
-    [displayedStateCoverage.data],
-  );
-  const stateOptions = useMemo(
-    () =>
-      (displayedStateCoverage.data?.state_options ?? []).map(
-        (row) => row.state,
-      ),
-    [displayedStateCoverage.data],
-  );
-  const selectedStateMissing =
-    filters.state !== "all" &&
-    displayedStateCoverage.status === "ready" &&
-    !stateOptions.includes(filters.state);
-  const activeStateFilter = selectedStateMissing ? "all" : filters.state;
-  const drawerFilters = useMemo(
-    () => ({ ...filters, state: activeStateFilter }),
-    [activeStateFilter, filters],
-  );
-  const filteredRelationships = useMemo(() => {
-    const base = filterCanonicalRelationships(
-      dataset.product_relationships,
-      filters,
-    );
-    if (activeStateFilter === "all") return base;
-    return base.filter((relationship) =>
-      relationshipHasStateCoverage(
-        relationship,
-        activeStateFilter,
-        stateCoverageIndex,
-      ),
-    );
-  }, [
-    activeStateFilter,
-    dataset.product_relationships,
+  const {
+    activeFilterCount,
+    benchmarkBrandOptions,
+    comparisonBasisOptions,
+    competitorBrandOptions,
+    competitorOptions,
+    drawerFilters,
+    filterDrawerOpen,
+    filteredGroups: groups,
+    filteredRelationships,
     filters,
-    stateCoverageIndex,
-  ]);
-  const groups = useMemo(
-    () => groupCanonicalRelationshipsByOutcome(filteredRelationships),
-    [filteredRelationships],
-  );
-  const updateFilters = (
-    patch: Partial<CanonicalRelationshipFilters>,
-  ): void => {
-    setFilters((current) => ({ ...current, ...patch }));
-  };
-  const resetFilters = () => setFilters(DEFAULT_CANONICAL_RELATIONSHIP_FILTERS);
-  const stateCoverageStatusLabel =
-    displayedStateCoverage.status === "loading"
-      ? "Loading state coverage…"
-      : displayedStateCoverage.status === "error"
-        ? `State coverage unavailable: ${displayedStateCoverage.error}`
-        : "State filter is source-backed by positive-price exact-product Search distribution.";
-  const stateCoverageDefinition =
-    displayedStateCoverage.data?.definition ??
-    "Positive-price exact-product Search distribution by state; not inventory or in-stock status.";
-  const activeFilterCount = [
-    filters.query.trim(),
-    filters.outcome !== "all",
-    filters.brandType !== "all",
-    filters.benchmarkBrand !== "all",
-    filters.competitorBrand !== "all",
-    filters.competitorRetailerId !== "all",
-    filters.comparisonBasis !== "all",
-    activeStateFilter !== "all",
-    filters.unitBasis !== "all",
-    filters.priceBasis !== "all",
-    filters.minimumWalmartDistribution > 0,
-    filters.sort !== DEFAULT_CANONICAL_RELATIONSHIP_FILTERS.sort,
-  ].filter(Boolean).length;
+    resetFilters,
+    setFilterDrawerOpen,
+    stateCoverageDefinition,
+    stateCoverageStatus,
+    stateCoverageStatusLabel,
+    stateOptions,
+    unitBasisOptions,
+    updateFilters,
+  } = relationshipBrowser;
   const activeSection =
     sectionMode === "losses"
       ? {
@@ -1422,7 +1385,7 @@ function ProductWinsLosses({
           onReset={resetFilters}
           onUpdate={updateFilters}
           stateCoverageDefinition={stateCoverageDefinition}
-          stateCoverageStatus={displayedStateCoverage.status}
+          stateCoverageStatus={stateCoverageStatus}
           stateOptions={stateOptions}
           unitBasisOptions={unitBasisOptions}
         />
@@ -3213,12 +3176,14 @@ function EvidenceQa({
 
 function RelationshipSection({
   analysisId,
+  emptyLabel = "No included relationships in this section.",
   title,
   note,
   relationships,
   retailerFootprints,
 }: Readonly<{
   analysisId: string;
+  emptyLabel?: string;
   title: string;
   note: string;
   relationships: ProductRelationship[];
@@ -3298,6 +3263,7 @@ function RelationshipSection({
             <div className="canonical-product-grid">
               {visibleRelationships.map((relationship) => (
                 <RelationshipCard
+                  analysisId={analysisId}
                   key={relationship.relationship_id}
                   onSelectEvidenceTarget={setSelectedEvidenceTarget}
                   relationship={relationship}
@@ -3338,9 +3304,7 @@ function RelationshipSection({
             ) : null}
           </>
         ) : (
-          <p className="empty-note">
-            No included relationships in this section.
-          </p>
+          <p className="empty-note">{emptyLabel}</p>
         )}
       </section>
       {selectedEvidenceTarget ? (
@@ -3355,10 +3319,12 @@ function RelationshipSection({
 }
 
 function RelationshipCard({
+  analysisId,
   onSelectEvidenceTarget,
   relationship,
   retailerFootprints,
 }: Readonly<{
+  analysisId: string;
   onSelectEvidenceTarget: (target: ProductEvidenceTarget) => void;
   relationship: ProductRelationship;
   retailerFootprints: Map<string, number>;
@@ -3375,6 +3341,7 @@ function RelationshipCard({
           href={benchmarkHref}
           title={relationship.benchmark_product.title}
           imageUrl={relationship.benchmark_product.image_url}
+          productId={relationship.benchmark_product.retailer_product_id}
           retailer="Walmart"
           price={priceDisplay(relationship.benchmark_product)}
           distribution={reportFootprintLabel(
@@ -3390,6 +3357,7 @@ function RelationshipCard({
           href={competitorHref}
           title={relationship.competitor_product.title}
           imageUrl={relationship.competitor_product.image_url}
+          productId={relationship.competitor_product.retailer_product_id}
           retailer={displayLabel(relationship.competitor_product.retailer_id)}
           price={priceDisplay(relationship.competitor_product)}
           distribution={reportFootprintLabel(
@@ -3414,6 +3382,16 @@ function RelationshipCard({
         </p>
         <small>{deltaDisplay.explanation}</small>
         <div className="canonical-product-card-actions">
+          <Link
+            href={productMonitoringHref(
+              analysisId,
+              relationship.benchmark_product,
+            )}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Walmart map
+          </Link>
           <button
             type="button"
             onClick={() =>
@@ -3429,6 +3407,16 @@ function RelationshipCard({
           >
             Walmart store list
           </button>
+          <Link
+            href={productMonitoringHref(
+              analysisId,
+              relationship.competitor_product,
+            )}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Competitor map
+          </Link>
           <button
             type="button"
             onClick={() =>
@@ -3454,6 +3442,7 @@ function ProductTile({
   href,
   title,
   imageUrl,
+  productId,
   retailer,
   price,
   distribution,
@@ -3461,6 +3450,7 @@ function ProductTile({
   href: string | null;
   title: string;
   imageUrl: string | null;
+  productId: string;
   retailer: string;
   price: ReturnType<typeof priceDisplay>;
   distribution: string;
@@ -3478,6 +3468,7 @@ function ProductTile({
       <span className="canonical-product-detail">
         <i>{retailer}</i>
         <strong>{title}</strong>
+        <small>{productId}</small>
         <em>{price.primary}</em>
         <small className="canonical-price-note">{price.secondary}</small>
         <small>{distribution}</small>

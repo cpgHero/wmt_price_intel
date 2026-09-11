@@ -3371,6 +3371,25 @@ a.product-highlight:hover {
   font-size: 0.72rem;
   margin: 0.75rem 0 0;
 }
+.canonical-executive-context {
+  align-self: stretch;
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.25rem;
+  min-width: 300px;
+  padding: 0.65rem 0.8rem;
+}
+.canonical-executive-context strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+}
+.canonical-executive-context span {
+  color: var(--muted);
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
 .canonical-section-stat {
   align-self: start;
   background: color-mix(in srgb, var(--green) 12%, transparent);
@@ -3972,6 +3991,7 @@ a.canonical-product-tile:hover {
   gap: 0.45rem;
   margin-top: 0.7rem;
 }
+.canonical-product-card-actions a,
 .canonical-product-card-actions button {
   background: color-mix(in srgb, var(--green) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--green) 35%, transparent);
@@ -3981,7 +4001,9 @@ a.canonical-product-tile:hover {
   font-size: 0.68rem;
   font-weight: 800;
   padding: 0.38rem 0.62rem;
+  text-decoration: none;
 }
+.canonical-product-card-actions a:hover,
 .canonical-product-card-actions button:hover {
   background: color-mix(in srgb, var(--green) 18%, transparent);
 }
