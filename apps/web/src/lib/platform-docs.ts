@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.125",
+  version: "1.3.126",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2946,6 +2946,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-11",
+              "Implemented in code; CI, merge, and production verification pending",
+              "Proximity analytics redesigned as a map-first explorer.",
+              "The Proximity page now follows the supplied CPGHero proximity-explorer design direction with a full-screen analytical shell, branded top bar, focused KPI strip, left control/list rail, large coordinate map stage, floating map controls and legend, selected-pair detail panel, filter drawer, and comprehensive downloadable location table. The default competitor selection now prioritizes active/catalogued retailers with the largest location footprints instead of the first alphabetical retailer. The underlying evidence remains the location master: Walmart US or Walmart CA compared with exactly one selected competitor using nearest mappable eligible locations and Haversine straight-line distance. This is a Proximity UI, navigation, and default-selection improvement only; it does not change source location rows, coordinates, retailer eligibility, distance math, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-11",
               "Implemented in code; CI, merge, and production verification pending",
