@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.126",
+  version: "1.3.127",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -778,7 +778,7 @@ export const platformDocumentation: PlatformDocumentation = {
             {
               term: "Proximity",
               definition:
-                "Explores location-master store-network distance before a collection or report. The current app page fixes Walmart US or Walmart CA as the benchmark, requires exactly one selected competitor retailer, computes the nearest selected competitor location for every mappable Walmart location, and exposes the same filtered rows through the side list, map, table drawer, CSV, Excel-compatible CSV, and JSON downloads. Counts come from eligible location-master rows with coordinates; they do not claim product availability, current inventory, Search observation, drive time, or sales opportunity.",
+                "Explores location-master store-network distance before a collection or report. The current app page fixes Walmart US or Walmart CA as the benchmark, requires exactly one selected competitor retailer, computes the nearest selected competitor location for every mappable Walmart location, and exposes the same filtered rows through the side list, state-aware map, table drawer, CSV, Excel-compatible CSV, and JSON downloads. The map adds source-controlled US state geometry, visible distance-band counts, covered/gap styling, and selected-relationship detail to make spatial gaps easier to inspect. Counts come from eligible location-master rows with coordinates; they do not claim product availability, current inventory, Search observation, drive time, or sales opportunity.",
             },
           ],
         },
@@ -2946,6 +2946,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-11",
+              "Implemented in code; CI, merge, and production verification pending",
+              "Proximity map receives a second visual and informational polish pass.",
+              "The Proximity page now renders source-controlled US state geometry beneath Walmart and competitor locations, adds a stronger spatial canvas treatment, highlights the selected nearest-store relationship, adds visible 1/3/5/10-mile distance-band counts in the side rail, and adds an in-map covered-versus-gap insight card with the furthest visible Walmart relationship. This is a UI and information-design enhancement only. It uses the same location-master proximity API, nearest-location pairing, Haversine straight-line distance, filters, table drawer, and downloads. It does not introduce a third-party street basemap provider, does not change location rows, coordinates, retailer eligibility, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-11",
               "Implemented in code; CI, merge, and production verification pending",

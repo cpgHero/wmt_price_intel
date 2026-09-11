@@ -3,12 +3,29 @@
 import { useMemo, useState } from "react";
 
 import type { LocationRetailer, ProximityPair, ProximityView } from "@/lib/api";
+import usStatesTopology from "../../../../../config/us-states-10m.json";
 
 import styles from "./proximity-workspace.module.css";
 
 const RADIUS_OPTIONS = [1, 3, 5, 10] as const;
 type RelationFilter = "all" | "within" | "outside";
 type SortMode = "nearest" | "farthest" | "state" | "store";
+
+type Topology = {
+  arcs: number[][][];
+  objects: {
+    states: {
+      geometries: Array<{
+        arcs: number[][] | number[][][];
+        type: "Polygon" | "MultiPolygon";
+      }>;
+    };
+  };
+  transform: {
+    scale: [number, number];
+    translate: [number, number];
+  };
+};
 
 function count(value: number) {
   return new Intl.NumberFormat("en-US").format(value);
@@ -231,6 +248,76 @@ function projection(rows: ProximityPair[]) {
   };
 }
 
+function decodedArc(topology: Topology, arcIndex: number) {
+  const sourceIndex = arcIndex >= 0 ? arcIndex : -arcIndex - 1;
+  const source = topology.arcs[sourceIndex] ?? [];
+  let x = 0;
+  let y = 0;
+  const coordinates = source.map(([deltaX = 0, deltaY = 0]) => {
+    x += deltaX;
+    y += deltaY;
+    return [
+      x * topology.transform.scale[0] + topology.transform.translate[0],
+      y * topology.transform.scale[1] + topology.transform.translate[1],
+    ] as const;
+  });
+  return arcIndex >= 0 ? coordinates : coordinates.reverse();
+}
+
+function ringCoordinates(topology: Topology, ring: number[]) {
+  return ring.flatMap((arcIndex, index) => {
+    const coordinates = decodedArc(topology, arcIndex);
+    return index === 0 ? coordinates : coordinates.slice(1);
+  });
+}
+
+function usStatePaths(
+  point: (
+    longitude: number,
+    latitude: number,
+  ) => {
+    x: number;
+    y: number;
+  },
+) {
+  const topology = usStatesTopology as unknown as Topology;
+  return topology.objects.states.geometries
+    .filter(
+      (geometry) =>
+        geometry.type === "Polygon" || geometry.type === "MultiPolygon",
+    )
+    .flatMap((geometry, geometryIndex) => {
+      const polygons =
+        geometry.type === "Polygon"
+          ? [geometry.arcs as number[][]]
+          : (geometry.arcs as number[][][]);
+      return polygons.map((polygon, polygonIndex) => {
+        const path = polygon
+          .map((ring) => {
+            const coordinates = ringCoordinates(topology, ring);
+            if (!coordinates.length) return "";
+            const [firstLongitude, firstLatitude] = coordinates[0]!;
+            const start = point(firstLongitude, firstLatitude);
+            const segments = coordinates
+              .slice(1)
+              .map(([longitude, latitude]) => {
+                const projected = point(longitude, latitude);
+                return `L${projected.x.toFixed(1)} ${projected.y.toFixed(1)}`;
+              })
+              .join(" ");
+            return `M${start.x.toFixed(1)} ${start.y.toFixed(1)} ${segments} Z`;
+          })
+          .filter(Boolean)
+          .join(" ");
+        return {
+          id: `${geometryIndex}-${polygonIndex}`,
+          path,
+        };
+      });
+    })
+    .filter((shape) => shape.path);
+}
+
 export function ProximityWorkspace({
   initialView,
   initialRetailers,
@@ -401,14 +488,38 @@ export function ProximityWorkspace({
   const filteredWithin = filteredPairs.filter(
     (pair) => pair.distance_miles <= radius,
   ).length;
+  const filteredOutside = Math.max(0, filteredPairs.length - filteredWithin);
   const visibleMedian = median(
     filteredPairs.map((pair) => pair.distance_miles),
+  );
+  const visibleWithin1 = filteredPairs.filter(
+    (pair) => pair.distance_miles <= 1,
+  ).length;
+  const visibleWithin3 = filteredPairs.filter(
+    (pair) => pair.distance_miles <= 3,
+  ).length;
+  const visibleWithin5 = filteredPairs.filter(
+    (pair) => pair.distance_miles <= 5,
+  ).length;
+  const visibleWithin10 = filteredPairs.filter(
+    (pair) => pair.distance_miles <= 10,
+  ).length;
+  const furthestVisiblePair = filteredPairs.reduce<ProximityPair | null>(
+    (current, pair) =>
+      current === null || pair.distance_miles > current.distance_miles
+        ? pair
+        : current,
+    null,
   );
   const visibleCompetitorSites = competitorPoints.length;
   const stateOptions = view?.state_options ?? [];
   const visibleShare = filteredPairs.length
     ? filteredWithin / filteredPairs.length
     : null;
+  const stateShapes = useMemo(
+    () => (country === "USA" ? usStatePaths(map.point) : []),
+    [country, map],
+  );
 
   return (
     <div className={styles.workspace}>
@@ -623,6 +734,25 @@ export function ProximityWorkspace({
             </div>
           </div>
 
+          <div className={styles.bandStack} aria-label="Visible distance bands">
+            {[
+              ["≤1 mi", visibleWithin1],
+              ["≤3 mi", visibleWithin3],
+              ["≤5 mi", visibleWithin5],
+              ["≤10 mi", visibleWithin10],
+            ].map(([label, value]) => (
+              <div className={styles.bandRow} key={label}>
+                <span>{label}</span>
+                <strong>{count(Number(value))}</strong>
+                <i
+                  style={{
+                    width: `${filteredPairs.length ? (Number(value) / filteredPairs.length) * 100 : 0}%`,
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+
           <div className={styles.listTop}>
             <div className={styles.listTabs}>
               <button
@@ -646,10 +776,7 @@ export function ProximityWorkspace({
                 onClick={() => setRelation("outside")}
                 type="button"
               >
-                Gaps{" "}
-                <span>
-                  {count(Math.max(0, filteredPairs.length - filteredWithin))}
-                </span>
+                Gaps <span>{count(filteredOutside)}</span>
               </button>
             </div>
             <div className={styles.sortRow}>
@@ -775,15 +902,49 @@ export function ProximityWorkspace({
             {filteredPairs.length ? (
               <svg className={styles.mapSvg} role="img" viewBox="0 0 1000 640">
                 <title>Retailer proximity map</title>
+                <defs>
+                  <radialGradient id="proximityWater" cx="50%" cy="42%" r="72%">
+                    <stop offset="0%" stopColor="#f9fbfc" />
+                    <stop offset="58%" stopColor="#ecf3f7" />
+                    <stop offset="100%" stopColor="#d8e5ec" />
+                  </radialGradient>
+                  <filter
+                    id="selectedGlow"
+                    height="240%"
+                    width="240%"
+                    x="-70%"
+                    y="-70%"
+                  >
+                    <feDropShadow
+                      dx="0"
+                      dy="0"
+                      floodColor="#087d72"
+                      floodOpacity="0.52"
+                      stdDeviation="4"
+                    />
+                  </filter>
+                </defs>
                 <rect className={styles.water} height="640" width="1000" />
-                <rect
-                  className={styles.landMass}
-                  height="520"
-                  rx="120"
-                  width="850"
-                  x="75"
-                  y="70"
+                <path
+                  className={styles.mapVignette}
+                  d="M60 72 C186 22 304 58 421 38 C564 13 681 31 801 82 C921 133 966 254 940 384 C914 514 779 590 635 601 C502 611 394 569 280 590 C158 613 55 553 44 423 C31 278 -44 145 60 72 Z"
                 />
+                {stateShapes.length ? (
+                  <g className={styles.stateLayer}>
+                    {stateShapes.map((shape) => (
+                      <path d={shape.path} key={shape.id} />
+                    ))}
+                  </g>
+                ) : (
+                  <rect
+                    className={styles.landMass}
+                    height="520"
+                    rx="120"
+                    width="850"
+                    x="75"
+                    y="70"
+                  />
+                )}
                 {map.longitudeTicks.map((longitude) => {
                   const top = map.point(longitude, map.bounds.maxLatitude);
                   const bottom = map.point(longitude, map.bounds.minLatitude);
@@ -918,6 +1079,19 @@ export function ProximityWorkspace({
               </span>
             </div>
 
+            <div className={styles.mapInsightPanel}>
+              <span>Visible network</span>
+              <strong>
+                {count(filteredWithin)} covered / {count(filteredOutside)} gaps
+              </strong>
+              <small>
+                Furthest visible:{" "}
+                {furthestVisiblePair
+                  ? `${miles(furthestVisiblePair.distance_miles)} · #${furthestVisiblePair.benchmark.store_number} ${furthestVisiblePair.benchmark.city || ""} ${furthestVisiblePair.benchmark.state || ""}`.trim()
+                  : "—"}
+              </small>
+            </div>
+
             <div className={styles.zoomControl} aria-hidden="true">
               <button tabIndex={-1} type="button">
                 +
@@ -935,7 +1109,10 @@ export function ProximityWorkspace({
                 </div>
                 <div className={styles.detailStack}>
                   <article>
-                    <b>Walmart</b>
+                    <b>
+                      <i className={styles.walmartDot} />
+                      Walmart
+                    </b>
                     <p>
                       #{selectedPair.benchmark.store_number} ·{" "}
                       {locationLabel(selectedPair.benchmark)}
@@ -952,7 +1129,10 @@ export function ProximityWorkspace({
                     </a>
                   </article>
                   <article>
-                    <b>{selectedPair.competitor.retailer_display_name}</b>
+                    <b>
+                      <i className={styles.competitorDot} />
+                      {selectedPair.competitor.retailer_display_name}
+                    </b>
                     <p>
                       #{selectedPair.competitor.store_number} ·{" "}
                       {locationLabel(selectedPair.competitor)}
