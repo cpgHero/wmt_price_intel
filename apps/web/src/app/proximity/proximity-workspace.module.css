@@ -460,6 +460,42 @@
   padding: 0.5rem 0.6rem;
 }
 
+.bandStack {
+  background:
+    linear-gradient(180deg, rgba(248, 250, 251, 0.92), rgba(255, 255, 255, 1)),
+    var(--surface);
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  flex-shrink: 0;
+  gap: 0.48rem;
+  padding: 0.75rem 0.9rem;
+}
+
+.bandRow {
+  align-items: center;
+  color: var(--sub);
+  display: grid;
+  font-size: 0.67rem;
+  gap: 0.5rem;
+  grid-template-columns: 2.7rem 3.2rem minmax(0, 1fr);
+}
+
+.bandRow strong {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  font-weight: 850;
+  text-align: right;
+}
+
+.bandRow i {
+  background: linear-gradient(90deg, var(--accent), #65dfbf);
+  border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(8, 125, 114, 0.08);
+  display: block;
+  height: 0.42rem;
+  min-width: 0.2rem;
+}
+
 .listTop {
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
@@ -627,7 +663,8 @@
 }
 
 .mapSection {
-  background: #e5edf2;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 38%), #dce8ef;
   position: relative;
 }
 
@@ -638,15 +675,50 @@
   position: relative;
 }
 
+.mapArea::before,
+.mapArea::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  z-index: 1;
+}
+
+.mapArea::before {
+  background:
+    linear-gradient(rgba(121, 145, 160, 0.13) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(121, 145, 160, 0.13) 1px, transparent 1px);
+  background-size: 4.5rem 4.5rem;
+  inset: 0;
+  mask-image: radial-gradient(circle at 52% 50%, black 0 62%, transparent 86%);
+}
+
+.mapArea::after {
+  background:
+    radial-gradient(
+      circle at 30% 26%,
+      rgba(8, 125, 114, 0.16),
+      transparent 14rem
+    ),
+    radial-gradient(
+      circle at 72% 68%,
+      rgba(22, 115, 219, 0.16),
+      transparent 16rem
+    );
+  inset: 0;
+  opacity: 0.8;
+}
+
 .mapSvg {
   display: block;
   height: 100%;
   min-height: 31rem;
+  position: relative;
   width: 100%;
+  z-index: 2;
 }
 
 .water {
-  fill: #e5edf2;
+  fill: url("#proximityWater");
 }
 
 .landMass {
@@ -656,9 +728,23 @@
   stroke-width: 1.1;
 }
 
+.mapVignette {
+  fill: rgba(255, 255, 255, 0.58);
+  stroke: rgba(155, 176, 189, 0.5);
+  stroke-width: 1;
+}
+
+.stateLayer path {
+  fill: rgba(250, 252, 253, 0.72);
+  stroke: rgba(126, 151, 166, 0.5);
+  stroke-linejoin: round;
+  stroke-width: 0.72;
+}
+
 .gridLine {
-  stroke: #dbe5ec;
-  stroke-width: 0.85;
+  stroke: rgba(153, 174, 186, 0.32);
+  stroke-dasharray: 3 5;
+  stroke-width: 0.8;
 }
 
 .gridLabel {
@@ -669,11 +755,11 @@
 }
 
 .mapLabel {
-  fill: #9aabb7;
+  fill: #7d94a3;
   font-size: 18px;
   font-weight: 800;
   letter-spacing: 0.2em;
-  opacity: 0.42;
+  opacity: 0.5;
 }
 
 .coveredLine,
@@ -684,19 +770,20 @@
 }
 
 .coveredLine {
-  stroke: rgba(8, 125, 114, 0.17);
-  stroke-width: 0.75;
+  stroke: rgba(8, 125, 114, 0.2);
+  stroke-width: 0.85;
 }
 
 .gapLine {
-  stroke: rgba(100, 117, 134, 0.22);
+  stroke: rgba(218, 71, 96, 0.2);
   stroke-dasharray: 4 3;
-  stroke-width: 0.75;
+  stroke-width: 0.85;
 }
 
 .selectedLine {
   stroke: #087d72;
   stroke-width: 2.5;
+  filter: url("#selectedGlow");
 }
 
 .competitorPoint {
@@ -725,6 +812,7 @@
 
 .selectedPoint {
   fill: #087d72;
+  filter: url("#selectedGlow");
   opacity: 1;
   stroke: white;
   stroke-width: 2.4;
@@ -783,6 +871,40 @@
   position: absolute;
   top: 3.85rem;
   z-index: 3;
+}
+
+.mapInsightPanel {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 0.18rem;
+  left: 0.85rem;
+  max-width: min(23rem, calc(100% - 2rem));
+  padding: 0.75rem 0.85rem;
+  position: absolute;
+  top: 6.7rem;
+  z-index: 3;
+}
+
+.mapInsightPanel span {
+  color: var(--sub);
+  font-size: 0.62rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.mapInsightPanel strong {
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+
+.mapInsightPanel small {
+  color: var(--sub);
+  font-size: 0.7rem;
+  line-height: 1.35;
 }
 
 .legend span {
@@ -905,8 +1027,10 @@
 }
 
 .detailStack b {
-  display: block;
+  align-items: center;
+  display: flex;
   font-size: 0.78rem;
+  gap: 0.35rem;
   margin-bottom: 0.25rem;
 }
 

@@ -10,6 +10,7 @@ RUN pnpm install --frozen-lockfile
 
 COPY apps/web apps/web
 COPY packages/typescript/contracts packages/typescript/contracts
+COPY config config
 COPY schemas schemas
 RUN pnpm --filter @rci/web build
 
