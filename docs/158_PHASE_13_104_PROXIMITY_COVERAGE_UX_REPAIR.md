@@ -19,6 +19,7 @@ The Proximity page was refocused around the question the page must answer first:
 - The long relationship evidence table now opens in a full-height right-side drawer instead of a bottom drawer that pushes content down the page.
 - The location details drawer includes summary cards for Walmart locations in scope, covered locations, gaps, and coverage rate, plus CSV, Excel-compatible CSV, JSON, and GeoJSON downloads.
 - The map canvas and dark-mode map layers were hardened so map content remains visible in dark mode.
+- Narrow app panes now show the KPI strip and map before the longer control rail so the map is not buried below the sidebar controls.
 
 ## Non-goals and trust boundaries
 
