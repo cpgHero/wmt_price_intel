@@ -1,6 +1,6 @@
 # Phase 13.103 — Proximity reference integration
 
-Status: implementation and release validation
+Status: merged, CI-passed, deployed, and production-verified
 
 The Proximity page was rebuilt to carry more of the supplied CPGHero proximity-explorer interaction model while preserving the platform's source authority boundaries.
 
@@ -33,5 +33,7 @@ The Proximity page was rebuilt to carry more of the supplied CPGHero proximity-e
 - `pnpm --filter @rci/web exec prettier --check src/app/proximity/proximity-workspace.tsx src/app/proximity/proximity-workspace.module.css`
 - `pnpm --filter @rci/web typecheck`
 - `pnpm --filter @rci/web build`
-
-Production CI, deployment, and live browser/API smoke verification remain required before marking the change order deployed.
+- GitHub Actions run `34644834451` passed documentation, TypeScript, Python, e2e, and container-build checks.
+- Pull request `#36` merged to `main` as `4b85d54529e14fb2eee571f47741e15bb62284a9`.
+- Railway served the production Proximity page at `/proximity?refresh=4b85d54`.
+- Production smoke checks confirmed the Proximity API returned source-backed location rows and the live page rendered the rebuilt top bar, filter rail, KPI strip, map controls, layer toggles, selected-pair panel, and evidence-table entry points.

@@ -2948,7 +2948,7 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-11",
-              "Implemented locally; production deployment pending",
+              "Merged, CI-passed, deployed, and production-verified",
               "Proximity reference design is rebuilt as an app-native spatial analysis workspace.",
               "The Proximity page now carries more of the supplied reference explorer's interaction model while staying source-backed: top-bar shortlist, notes, export, and theme controls; app-native light/dark styling; map layer toggles for Walmart, competitor, relationship links, selected-radius ring, clusters, and saved-only scope; actual drag, wheel, keyboard, fit, zoom, and fullscreen controls; hover relationship tooltips; selected-pair save action and peer context; method and usage modals; bottom evidence drawer; and CSV, Excel-compatible CSV, JSON, GeoJSON, and map-SVG exports. The map remains an internal coordinate/SVG visualization using the location-master proximity API rather than an iframe or copied static HTML. This release does not introduce external CDN basemap scripts, does not change location rows, coordinates, retailer eligibility, nearest-location pairing, Haversine distance math, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
             ],
