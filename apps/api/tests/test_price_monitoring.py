@@ -966,146 +966,145 @@ async def test_state_coverage_counts_only_store_distribution_by_state() -> None:
         async def get(self, analysis_id: str) -> SimpleNamespace:
             assert analysis_id == "analysis-1"
             return SimpleNamespace(
+                collection_run_id="run-1",
                 result={
                     "benchmark_retailer": "walmart_us",
                     "competitors": ["aldi_us"],
-                }
+                },
             )
 
-    async def product_observations_for_products(
-        _service: PriceMonitoringService,
-        analysis_id: str,
-        *,
-        retailer_id: str,
-        product_ids: list[str],
-        comparison_metric: str,
-    ) -> dict[str, tuple[ProductPriceObservation, ...]]:
-        assert analysis_id == "analysis-1"
-        assert comparison_metric == "package_price"
-        if retailer_id == "walmart_us":
-            assert product_ids == ["123"]
-            return {
-                "123": (
-                    ProductPriceObservation(
-                        retailer_id="walmart_us",
-                        retailer_name="Walmart (US)",
-                        product_id="123",
-                        product_name="Product 123",
-                        image_url=None,
-                        scope_key="walmart_us|store|1",
-                        location_kind="store",
-                        store_number="1",
-                        store_name="Store One",
-                        zipcode="72712",
-                        city="Bentonville",
-                        state="ar",
-                        country="USA",
-                        latitude=36.37,
-                        longitude=-94.21,
-                        package_price=4.5,
-                        comparison_value=4.5,
-                        observed_at="2026-08-07T06:00:00Z",
-                        is_sponsored=False,
-                    ),
-                    ProductPriceObservation(
-                        retailer_id="walmart_us",
-                        retailer_name="Walmart (US)",
-                        product_id="123",
-                        product_name="Product 123",
-                        image_url=None,
-                        scope_key="walmart_us|store|2",
-                        location_kind="store",
-                        store_number="2",
-                        store_name="Store Two",
-                        zipcode="90210",
-                        city="Beverly Hills",
-                        state="CA",
-                        country="USA",
-                        latitude=34.09,
-                        longitude=-118.41,
-                        package_price=4.75,
-                        comparison_value=4.75,
-                        observed_at="2026-08-07T06:00:00Z",
-                        is_sponsored=False,
-                    ),
-                    ProductPriceObservation(
-                        retailer_id="walmart_us",
-                        retailer_name="Walmart (US)",
-                        product_id="123",
-                        product_name="Product 123",
-                        image_url=None,
-                        scope_key="walmart_us|service_area|ca",
-                        location_kind="service_area",
-                        store_number=None,
-                        store_name=None,
-                        zipcode="90210",
-                        city="Beverly Hills",
-                        state="CA",
-                        country="USA",
-                        latitude=None,
-                        longitude=None,
-                        package_price=4.75,
-                        comparison_value=4.75,
-                        observed_at="2026-08-07T06:00:00Z",
-                        is_sponsored=False,
-                    ),
-                )
+    artifact = ClassifiedArtifact(
+        storage_uri="s3://bucket/state.parquet",
+        checksum="abc",
+        row_count=6,
+    )
+
+    class Repository:
+        async def artifacts(
+            self, collection_run_id: str, retailer_id: str
+        ) -> list[ClassifiedArtifact]:
+            assert collection_run_id == "run-1"
+            assert retailer_id in {"walmart_us", "aldi_us"}
+            return [artifact]
+
+        async def location_context(
+            self, collection_run_id: str, retailer_id: str
+        ) -> tuple[dict[tuple[str, str], dict[str, object]], dict[object, object], int]:
+            assert collection_run_id == "run-1"
+            locations = {
+                ("walmart_us", "1"): {"state": "ar"},
+                ("walmart_us", "2"): {"state": "CA"},
+                ("walmart_us", "3"): {"state": "CA"},
+                ("walmart_us", "4"): {"state": "CA"},
+                ("aldi_us", "1"): {"state": "TX"},
+                ("aldi_us", "2"): {"state": None},
             }
-        assert retailer_id == "aldi_us"
-        assert product_ids == ["456"]
-        return {
-            "456": (
-                ProductPriceObservation(
-                    retailer_id="aldi_us",
-                    retailer_name="ALDI",
-                    product_id="456",
-                    product_name="Product 456",
-                    image_url=None,
-                    scope_key="aldi_us|store|1",
-                    location_kind="store",
-                    store_number="1",
-                    store_name="ALDI One",
-                    zipcode="75201",
-                    city="Dallas",
-                    state="TX",
-                    country="USA",
-                    latitude=32.78,
-                    longitude=-96.8,
-                    package_price=3.5,
-                    comparison_value=3.5,
-                    observed_at="2026-08-07T06:00:00Z",
-                    is_sponsored=False,
-                ),
-                ProductPriceObservation(
-                    retailer_id="aldi_us",
-                    retailer_name="ALDI",
-                    product_id="456",
-                    product_name="Product 456",
-                    image_url=None,
-                    scope_key="aldi_us|store|2",
-                    location_kind="store",
-                    store_number="2",
-                    store_name="ALDI Missing State",
-                    zipcode="75001",
-                    city="Addison",
-                    state=None,
-                    country="USA",
-                    latitude=32.96,
-                    longitude=-96.84,
-                    package_price=3.75,
-                    comparison_value=3.75,
-                    observed_at="2026-08-07T06:00:00Z",
-                    is_sponsored=False,
-                ),
-            )
-        }
+            return locations, {}, len(locations)
+
+    class Reader:
+        async def read_state_coverage_rows(
+            self,
+            _artifact: ClassifiedArtifact,
+            *,
+            retailer_id: str,
+            product_ids: list[str],
+        ) -> list[dict[str, object]]:
+            if retailer_id == "walmart_us":
+                assert product_ids == ["123"]
+                return [
+                    {
+                        "offer_id": "wmt-1",
+                        "retailer_product_id": "123",
+                        "price": 4.5,
+                        "currency": "USD",
+                        "store_number": "1",
+                        "collected_at": "2026-08-07T06:00:00Z",
+                        "in_scope": True,
+                        "scope_reason": "included",
+                    },
+                    {
+                        "offer_id": "wmt-2",
+                        "retailer_product_id": "123",
+                        "price": 4.75,
+                        "currency": "USD",
+                        "store_number": "2",
+                        "collected_at": "2026-08-07T06:00:00Z",
+                        "in_scope": True,
+                        "scope_reason": "included",
+                    },
+                    {
+                        "offer_id": "wmt-service-area",
+                        "retailer_product_id": "123",
+                        "price": 4.75,
+                        "currency": "USD",
+                        "store_number": "",
+                        "zipcode": "90210",
+                        "collected_at": "2026-08-07T06:00:00Z",
+                        "in_scope": True,
+                        "scope_reason": "included",
+                    },
+                    {
+                        "offer_id": "wmt-zero-price",
+                        "retailer_product_id": "123",
+                        "price": 0,
+                        "currency": "USD",
+                        "store_number": "4",
+                        "collected_at": "2026-08-07T06:00:00Z",
+                        "in_scope": True,
+                        "scope_reason": "included",
+                    },
+                    {
+                        "offer_id": "wmt-older-positive",
+                        "retailer_product_id": "123",
+                        "price": 4.75,
+                        "currency": "USD",
+                        "store_number": "3",
+                        "collected_at": "2026-08-07T06:00:00Z",
+                        "in_scope": True,
+                        "scope_reason": "included",
+                    },
+                    {
+                        "offer_id": "wmt-later-seller-retraction",
+                        "retailer_product_id": "123",
+                        "price": 4.75,
+                        "currency": "USD",
+                        "store_number": "3",
+                        "collected_at": "2026-08-08T06:00:00Z",
+                        "in_scope": False,
+                        "scope_reason": (
+                            "known third-party marketplace seller excluded by Retailer Pack policy"
+                        ),
+                    },
+                ]
+            assert retailer_id == "aldi_us"
+            assert product_ids == ["456"]
+            return [
+                {
+                    "offer_id": "aldi-1",
+                    "retailer_product_id": "456",
+                    "price": 3.5,
+                    "currency": "USD",
+                    "store_number": "1",
+                    "collected_at": "2026-08-07T06:00:00Z",
+                    "in_scope": True,
+                    "scope_reason": "included",
+                },
+                {
+                    "offer_id": "aldi-missing-state",
+                    "retailer_product_id": "456",
+                    "price": 3.75,
+                    "currency": "USD",
+                    "store_number": "2",
+                    "collected_at": "2026-08-07T06:00:00Z",
+                    "in_scope": True,
+                    "scope_reason": "included",
+                },
+            ]
 
     service = object.__new__(PriceMonitoringService)
     service._analyses = Analyses()
-    service.product_observations_for_products = MethodType(  # type: ignore[method-assign]
-        product_observations_for_products,
-        service,
-    )
+    service._repository = Repository()
+    service._reader = Reader()
 
     result = await service.state_coverage(
         "analysis-1",

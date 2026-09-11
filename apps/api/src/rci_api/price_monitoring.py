@@ -30,6 +30,10 @@ from rci_analytics import (
     classified_offer_from_record,
     store_search_distribution_contract,
 )
+from rci_analytics.latest_product_location import (
+    SELLER_POLICY_EXCLUSION_REASON,
+    LatestProductLocationSelector,
+)
 from rci_analytics.product_location import ProductLocationPopulation
 from rci_api.analyses import PublicAnalysisDependency, get_analysis_service
 from rci_contracts import validate_instance
@@ -296,6 +300,52 @@ class S3ParquetReader:
             )
 
         return await asyncio.to_thread(lambda: decode_products().to_dicts())
+
+    async def read_state_coverage_rows(
+        self,
+        artifact: ClassifiedArtifact,
+        *,
+        retailer_id: str,
+        product_ids: list[str],
+    ) -> list[dict[str, Any]]:
+        """Read only raw fields needed for exact-product store state coverage."""
+
+        if not product_ids:
+            return []
+        body = await self._body(artifact)
+
+        def decode_rows() -> pl.DataFrame:
+            schema = pl.read_parquet_schema(BytesIO(body))
+            required = {"retailer_id", "retailer_product_id", "price", "store_number"}
+            if not required.issubset(schema):
+                return pl.DataFrame()
+            wanted = [
+                "offer_id",
+                "retailer_id",
+                "retailer_product_id",
+                "price",
+                "currency",
+                "store_number",
+                "zipcode",
+                "in_stock",
+                "is_sponsored",
+                "collected_at",
+                "in_scope",
+                "scope_reason",
+            ]
+            available = [column for column in wanted if column in schema]
+            return (
+                pl.scan_parquet(BytesIO(body))
+                .filter(
+                    (pl.col("retailer_id") == retailer_id)
+                    & pl.col("retailer_product_id").is_in(product_ids)
+                    & pl.col("store_number").is_not_null()
+                )
+                .select(available)
+                .collect()
+            )
+
+        return await asyncio.to_thread(lambda: decode_rows().to_dicts())
 
     async def _body(self, artifact: ClassifiedArtifact) -> bytes:
         cached = self._body_cache.get(artifact.checksum)
@@ -1688,6 +1738,102 @@ class PriceMonitoringService:
             self._product_observation_cache[cache_key] = grouped
             return grouped
 
+    @staticmethod
+    def _positive_state_price(value: Any) -> bool:
+        try:
+            price = float(value)
+        except (TypeError, ValueError):
+            return False
+        return price > 0
+
+    async def _state_coverage_for_retailer(
+        self,
+        analysis: Any,
+        *,
+        retailer_id: str,
+        product_ids: list[str],
+    ) -> dict[str, dict[str, set[str]]]:
+        selected_product_ids = sorted({product_id for product_id in product_ids if product_id})
+        if not selected_product_ids:
+            return {}
+        artifacts = await self._repository.artifacts(
+            analysis.collection_run_id,
+            retailer_id,
+        )
+        if not artifacts:
+            raise LookupError(f"classified Search evidence for {retailer_id!r} is unavailable")
+        artifacts = select_evidence_artifacts(
+            artifacts,
+            _classified_evidence_set(analysis.result, retailer_id),
+        )
+        row_groups, location_context = await asyncio.gather(
+            asyncio.gather(
+                *(
+                    self._reader.read_state_coverage_rows(
+                        artifact,
+                        retailer_id=retailer_id,
+                        product_ids=selected_product_ids,
+                    )
+                    for artifact in artifacts
+                )
+            ),
+            self._repository.location_context(analysis.collection_run_id, retailer_id),
+        )
+        location_index = location_context[0]
+        selector: LatestProductLocationSelector[dict[str, str] | None] = (
+            LatestProductLocationSelector()
+        )
+        for row in (record for group in row_groups for record in group):
+            product_id = str(row.get("retailer_product_id") or "").strip()
+            store_number = str(row.get("store_number") or "").strip()
+            if not product_id or not store_number:
+                continue
+            location = location_index.get((retailer_id, store_number)) or {}
+            state = str(location.get("state") or "").strip().upper()
+            if not state:
+                continue
+            scope_reason = str(row.get("scope_reason") or "")
+            is_seller_policy_exclusion = scope_reason == SELLER_POLICY_EXCLUSION_REASON
+            is_positive_package_price = self._positive_state_price(row.get("price"))
+            is_eligible_search_state = bool(row.get("in_scope")) or (
+                scope_reason == "explicitly out of stock" and is_positive_package_price
+            )
+            currency = str(row.get("currency") or "USD")
+            if is_seller_policy_exclusion:
+                selected_value: dict[str, str] | None = None
+            elif is_eligible_search_state and is_positive_package_price and currency == "USD":
+                selected_value = {
+                    "product_id": product_id,
+                    "scope_key": f"{retailer_id}|store|{store_number}",
+                    "state": state,
+                }
+            else:
+                continue
+            selector.add(
+                selected_value,
+                retailer_id=retailer_id,
+                product_id=product_id,
+                store_number=store_number,
+                zipcode=None,
+                observed_at=str(row.get("collected_at") or ""),
+                in_stock=row.get("in_stock") if isinstance(row.get("in_stock"), bool) else None,
+                is_sponsored=(
+                    row.get("is_sponsored") if isinstance(row.get("is_sponsored"), bool) else None
+                ),
+                tie_breaker=str(row.get("offer_id") or ""),
+            )
+
+        coverage: dict[str, dict[str, set[str]]] = {}
+        for value in selector.values():
+            if value is None:
+                continue
+            product_id = value["product_id"]
+            state = value["state"]
+            scope_key = value["scope_key"]
+            product_states = coverage.setdefault(product_id, {})
+            product_states.setdefault(state, set()).add(scope_key)
+        return coverage
+
     async def state_coverage(
         self,
         analysis_id: str,
@@ -1714,13 +1860,12 @@ class PriceMonitoringService:
                 raise ValueError(f"retailer {retailer_id!r} is not in this analysis")
             grouped_product_ids[retailer_id].add(product_id)
 
-        grouped_observations = await asyncio.gather(
+        grouped_coverage = await asyncio.gather(
             *(
-                self.product_observations_for_products(
-                    analysis_id,
+                self._state_coverage_for_retailer(
+                    analysis,
                     retailer_id=retailer_id,
-                    product_ids=sorted(product_ids),
-                    comparison_metric="package_price",
+                    product_ids=list(product_ids),
                 )
                 for retailer_id, product_ids in sorted(grouped_product_ids.items())
             )
@@ -1729,19 +1874,13 @@ class PriceMonitoringService:
         product_rows: list[dict[str, Any]] = []
         state_product_counts: dict[str, int] = defaultdict(int)
         state_store_counts: dict[str, int] = defaultdict(int)
-        for (retailer_id, product_ids), observations_by_product in zip(
+        for (retailer_id, product_ids), coverage_by_product in zip(
             sorted(grouped_product_ids.items()),
-            grouped_observations,
+            grouped_coverage,
             strict=True,
         ):
             for product_id in sorted(product_ids):
-                rows = observations_by_product.get(product_id, ())
-                stores_by_state: dict[str, set[str]] = defaultdict(set)
-                for row in rows:
-                    state = (row.state or "").strip().upper()
-                    if not state or row.location_kind != "store":
-                        continue
-                    stores_by_state[state].add(row.scope_key)
+                stores_by_state = coverage_by_product.get(product_id, {})
                 state_rows: list[dict[str, Any]] = []
                 distribution_store_count = 0
                 for state, store_keys in sorted(stores_by_state.items()):

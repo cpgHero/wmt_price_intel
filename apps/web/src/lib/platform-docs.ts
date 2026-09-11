@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.116",
+  version: "1.3.117",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2937,6 +2937,12 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "2026-09-10",
               "Implemented in code; CI, merge, and production verification pending",
+              "Canonical report state coverage now uses a direct exact-product store-state index instead of the full product projector.",
+              "Production smoke testing found that the first report-level state filter implementation could return 503 for a large full-report request. The optimized read path scans only raw Search fields needed for state membership, applies the positive package-price and store-location rules, preserves latest product-location selection, and keeps seller-policy retractions. This is a read-model performance and reliability change only; it does not call providers, PDP, or AI, does not change source evidence, matching-v2 certification, price calculations, seller rules, distribution definitions, report replay, PDF export, or historical artifacts.",
+            ],
+            [
+              "2026-09-10",
+              "Merged and deployed; production smoke found full-report 503, optimized follow-up pending",
               "Canonical report Product Wins & Losses now has a compact source-backed state distribution filter.",
               "The price-monitoring API exposes a product-scoped state-coverage read model derived from exact-product positive-price Search observations. The canonical report filter drawer consumes that compact index so state filtering is fast and does not load full store rows into the main board. Selecting a state keeps relationships where either product has observed store distribution in that state, and the UI states that the displayed price gap is not state-specific. Store-list drawers remain the place for full location rows and CSV, Excel-compatible, and JSON exports. This is a read-model and UI filtering change only; it does not call providers, PDP, or AI, does not change source evidence, matching-v2 certification, price calculations, seller rules, distribution definitions, report replay, PDF export, or historical artifacts.",
             ],
