@@ -2936,9 +2936,9 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-11",
-              "Follow-up implemented in code; CI, merge, deployment, and production verification pending",
+              "Merged, CI-passed, deployed, and production-verified",
               "Canonical report dataset now preserves source-backed package facts from governed match attributes.",
-              "The canonical dataset projection carries explicit fluid-ounce and ounce package measures from Matching v2 `match_attributes` into each product package object, such as `volume_oz: 64` becoming `64 fl oz`. This gives the package-equivalent price display trustworthy inputs for normalized gallon comparisons and prevents live reports from falling back to primary normalized `$12.52/gallon` text when package-size evidence is already present. If no source-backed package measure exists, the prior missing-package caveat remains. This is a dataset projection and presentation-input change only; it does not change source evidence, matching-v2 certification, report calculations, stored normalized prices, seller rules, distribution definitions, provider collection, PDP calls, AI calls, report replay, PDF export, or historical artifacts.",
+              "The canonical dataset projection carries explicit fluid-ounce and ounce package measures from Matching v2 `match_attributes` into each product package object, such as `volume_oz: 64` becoming `64 fl oz`. Production smoke testing on Fresh Fluid Milk confirmed Organic Valley 10849883 now renders Package-equivalent $6.26 with normalized $12.52/gallon only in secondary context, and Horizon Organic 19857008 now renders Package-equivalent $6.46 with normalized $12.92/gallon only in secondary context. If no source-backed package measure exists, the prior missing-package caveat remains. This is a dataset projection and presentation-input change only; it does not change source evidence, matching-v2 certification, report calculations, stored normalized prices, seller rules, distribution definitions, provider collection, PDP calls, AI calls, report replay, PDF export, or historical artifacts.",
             ],
             [
               "2026-09-11",
