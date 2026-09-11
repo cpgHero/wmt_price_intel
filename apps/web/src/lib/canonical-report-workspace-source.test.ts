@@ -75,11 +75,14 @@ describe("canonical report workspace source contract", () => {
     expect(stylesSource).toContain(".canonical-brand-role-grid");
   });
 
-  it("keeps Executive Summary, Distribution, and Price Architecture distinct from the card board", () => {
+  it("keeps Executive Summary card-based while Distribution and Price Architecture remain distinct", () => {
+    expect(workspaceSource).toContain("Executive action board");
     expect(workspaceSource).toContain("Complete Walmart loss action list");
     expect(workspaceSource).toContain("setOutcomeMode");
-    expect(workspaceSource).toContain("Use the toggle to switch");
-    expect(workspaceSource).toContain("ExecutivePriorityTable");
+    expect(workspaceSource).toContain("Use the toggle and filters to switch");
+    expect(workspaceSource).toContain("useCanonicalRelationshipBrowser");
+    expect(workspaceSource).toContain("RelationshipSection");
+    expect(workspaceSource).not.toContain("ExecutivePriorityTable");
     expect(workspaceSource).toContain("Product footprint table");
     expect(workspaceSource).toContain("ProductFootprintTable");
     expect(workspaceSource).toContain("Price ladder");
@@ -91,6 +94,7 @@ describe("canonical report workspace source contract", () => {
     expect(workspaceSource).not.toContain("slice(0, 8)");
     expect(workspaceSource).not.toContain("slice(0, 25)");
     expect(stylesSource).toContain(".canonical-insight-table");
+    expect(stylesSource).toContain(".canonical-product-grid");
     expect(stylesSource).toContain(".canonical-executive-toggle");
   });
 
@@ -103,6 +107,8 @@ describe("canonical report workspace source contract", () => {
     expect(workspaceSource).toContain("MappedLocationTable");
     expect(workspaceSource).toContain("Mapped preview");
     expect(workspaceSource).toContain("Store list drawer");
+    expect(workspaceSource).toContain("Walmart map");
+    expect(workspaceSource).toContain("Competitor map");
     expect(workspaceSource).toContain("StoreEvidenceDrawer");
     expect(workspaceSource).toContain("stateOptionsFromPoints");
     expect(workspaceSource).toContain("state_filter");

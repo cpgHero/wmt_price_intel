@@ -2,7 +2,7 @@
 
 Date: 2026-09-10
 
-Status: filter and price-label changes merged, CI-passed, and production-verified; image-card store-list actions merged, CI-passed, and production-verified; compact report-level state filter merged, CI-passed, deployed, and production-verified after direct state-index optimization; image-card pagination merged, CI-passed, deployed, and production-verified; package-equivalent price display merged, CI-passed, deployed, and production-verified after the follow-up package-fact projection fix.
+Status: filter and price-label changes merged, CI-passed, and production-verified; image-card store-list actions merged, CI-passed, and production-verified; compact report-level state filter merged, CI-passed, deployed, and production-verified after direct state-index optimization; image-card pagination merged, CI-passed, deployed, and production-verified; package-equivalent price display merged, CI-passed, deployed, and production-verified after the follow-up package-fact projection fix; executive action-board upgrade implemented and awaiting CI/deployment.
 
 ## Purpose
 
@@ -11,6 +11,8 @@ The canonical report needs fast, source-backed filtering and clearer price prese
 ## Implemented behavior
 
 - Executive Summary shows one comprehensive action list at a time with a Losses / Wins toggle.
+- Executive Summary uses the same source-backed filter drawer, quick search, state coverage, and comprehensive paginated image-card board as Product Wins & Losses, so the VP-facing landing view no longer falls back to table-only relationship rows.
+- Executive Summary image cards expose product IDs plus direct Walmart and competitor map links and store-list drawer actions for every visible relationship.
 - Product Wins & Losses uses a filter drawer for source-backed relationship fields:
   - search text
   - outcome
@@ -27,7 +29,7 @@ The canonical report needs fast, source-backed filtering and clearer price prese
   - sort
 - Product Wins & Losses shows one comprehensive image-card section at a time through Losses / Wins / Parity controls.
 - Product Wins & Losses paginates the active comprehensive image-card set so the browser renders a bounded number of cards while keeping every governed relationship accessible through page controls, filters, and quick search.
-- Each image card exposes Walmart and competitor store-list actions that open the exact-product evidence drawer with state filtering and CSV, Excel-compatible, and JSON downloads.
+- Each image card exposes Walmart and competitor map links plus store-list actions that open the exact-product evidence drawer with state filtering and CSV, Excel-compatible, and JSON downloads.
 - The report-level State filter uses compact source-backed product state coverage derived from exact-product positive-price Search observations. Selecting a state keeps relationships where either product has observed store distribution in that state; it does not make the displayed price gap state-specific.
 - The state coverage read path must remain fast enough for large product-level reports. It should scan only the raw Search fields needed for exact-product store-state membership, positive package-price eligibility, latest product-location selection, and seller-policy retractions; it must not invoke the full price-monitoring product projector just to populate report filter options.
 - Global subcategory is not invented when absent from the canonical relationship dataset.
