@@ -286,7 +286,7 @@ async def retailer_proximity(
     competitor_retailer_id: str,
     country: str = "USA",
     benchmark_retailer_id: str | None = None,
-    selected_radius_miles: RadiusMiles = 10,
+    selected_radius_miles: RadiusMiles = 1,
 ) -> ProximityResponse:
     canonical_country = normalize_country(country)
     try:
