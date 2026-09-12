@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict
+import math
+from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from statistics import median
 from typing import Annotated
@@ -13,6 +14,8 @@ from pydantic import BaseModel, ConfigDict
 from rci_locations.models import (
     ImportState,
     LocationSearchResult,
+    ProximityLocation,
+    ProximityPair,
     ProximityResult,
     RetailerCount,
 )
@@ -105,6 +108,32 @@ class ProximitySummaryResponse(BaseModel):
     nearest_distance_average_miles: float | None
 
 
+class ProximityMapBoundsResponse(BaseModel):
+    min_latitude: float
+    max_latitude: float
+    min_longitude: float
+    max_longitude: float
+
+
+class ProximityMapClusterResponse(BaseModel):
+    role: str
+    latitude: float
+    longitude: float
+    location_count: int
+    covered_locations: int
+    gap_locations: int
+    label: str
+    representative_pair_key: str | None
+
+
+class ProximityMapSummaryResponse(BaseModel):
+    schema_version: str
+    cluster_cell_degrees: float
+    bounds: ProximityMapBoundsResponse | None
+    walmart_clusters: list[ProximityMapClusterResponse]
+    competitor_clusters: list[ProximityMapClusterResponse]
+
+
 class ProximityResponse(BaseModel):
     schema_version: str
     generated_at: datetime
@@ -116,6 +145,7 @@ class ProximityResponse(BaseModel):
     selected_radius_miles: float
     state_options: list[str]
     summary: ProximitySummaryResponse
+    map_summary: ProximityMapSummaryResponse
     pairs: list[ProximityPairResponse]
 
 
@@ -168,6 +198,117 @@ def _rounded(value: float | None) -> float | None:
     if value is None:
         return None
     return round(value, 4)
+
+
+@dataclass(slots=True)
+class _MapClusterBucket:
+    representative_location: ProximityLocation
+    representative_pair_key: str
+    covered_locations: int = 0
+    gap_locations: int = 0
+    latitude_total: float = 0.0
+    location_count: int = 0
+    longitude_total: float = 0.0
+
+
+def _pair_key(pair: ProximityPair) -> str:
+    return f"{pair.benchmark.id}::{pair.competitor.id}"
+
+
+def _cluster_label(location: ProximityLocation, location_count: int) -> str:
+    place = ", ".join(part for part in (location.city, location.state) if part)
+    if location_count == 1:
+        return place or location.store_name or location.store_number
+    return f"{place or location.state or location.country} · {location_count} locations"
+
+
+def _map_clusters(
+    pairs: list[ProximityPair],
+    *,
+    role: str,
+    selected_radius_miles: float,
+    cluster_cell_degrees: float,
+) -> list[ProximityMapClusterResponse]:
+    grouped: dict[tuple[int, int], _MapClusterBucket] = {}
+    represented_competitors: set[str] = set()
+    for pair in pairs:
+        if role == "competitor":
+            if pair.competitor.id in represented_competitors:
+                continue
+            represented_competitors.add(pair.competitor.id)
+            location = pair.competitor
+        else:
+            location = pair.benchmark
+        key = (
+            math.floor(location.latitude / cluster_cell_degrees),
+            math.floor(location.longitude / cluster_cell_degrees),
+        )
+        if key not in grouped:
+            grouped[key] = _MapClusterBucket(
+                representative_location=location,
+                representative_pair_key=_pair_key(pair),
+            )
+        bucket = grouped[key]
+        bucket.latitude_total += location.latitude
+        bucket.longitude_total += location.longitude
+        bucket.location_count += 1
+        if pair.distance_miles <= selected_radius_miles:
+            bucket.covered_locations += 1
+        else:
+            bucket.gap_locations += 1
+
+    clusters: list[ProximityMapClusterResponse] = []
+    for bucket in grouped.values():
+        location_count = bucket.location_count
+        clusters.append(
+            ProximityMapClusterResponse(
+                role=role,
+                latitude=round(bucket.latitude_total / location_count, 4),
+                longitude=round(bucket.longitude_total / location_count, 4),
+                location_count=location_count,
+                covered_locations=bucket.covered_locations,
+                gap_locations=bucket.gap_locations,
+                label=_cluster_label(bucket.representative_location, location_count),
+                representative_pair_key=bucket.representative_pair_key,
+            )
+        )
+    return sorted(clusters, key=lambda cluster: (-cluster.location_count, cluster.label))
+
+
+def _proximity_map_summary(
+    pairs: list[ProximityPair],
+    *,
+    selected_radius_miles: float,
+) -> ProximityMapSummaryResponse:
+    cluster_cell_degrees = 2.0
+    points = [location for pair in pairs for location in (pair.benchmark, pair.competitor)]
+    bounds = (
+        ProximityMapBoundsResponse(
+            min_latitude=round(min(location.latitude for location in points), 4),
+            max_latitude=round(max(location.latitude for location in points), 4),
+            min_longitude=round(min(location.longitude for location in points), 4),
+            max_longitude=round(max(location.longitude for location in points), 4),
+        )
+        if points
+        else None
+    )
+    return ProximityMapSummaryResponse(
+        schema_version="1.0.0-proximity-map-summary",
+        cluster_cell_degrees=cluster_cell_degrees,
+        bounds=bounds,
+        walmart_clusters=_map_clusters(
+            pairs,
+            role="walmart",
+            selected_radius_miles=selected_radius_miles,
+            cluster_cell_degrees=cluster_cell_degrees,
+        ),
+        competitor_clusters=_map_clusters(
+            pairs,
+            role="competitor",
+            selected_radius_miles=selected_radius_miles,
+            cluster_cell_degrees=cluster_cell_degrees,
+        ),
+    )
 
 
 def _proximity_response(
@@ -227,6 +368,10 @@ def _proximity_response(
             nearest_distance_average_miles=(
                 _rounded(sum(distances) / len(distances)) if distances else None
             ),
+        ),
+        map_summary=_proximity_map_summary(
+            list(result.pairs),
+            selected_radius_miles=selected_radius_miles,
         ),
         pairs=pairs,
     )

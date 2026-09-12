@@ -721,6 +721,30 @@ export interface ProximityPair {
   within_10_miles: boolean;
 }
 
+export interface ProximityMapCluster {
+  role: string;
+  latitude: number;
+  longitude: number;
+  location_count: number;
+  covered_locations: number;
+  gap_locations: number;
+  label: string;
+  representative_pair_key: string | null;
+}
+
+export interface ProximityMapSummary {
+  schema_version: string;
+  cluster_cell_degrees: number;
+  bounds: {
+    min_latitude: number;
+    max_latitude: number;
+    min_longitude: number;
+    max_longitude: number;
+  } | null;
+  walmart_clusters: ProximityMapCluster[];
+  competitor_clusters: ProximityMapCluster[];
+}
+
 export interface ProximityView {
   schema_version: string;
   generated_at: string;
@@ -757,6 +781,7 @@ export interface ProximityView {
     nearest_distance_median_miles: number | null;
     nearest_distance_average_miles: number | null;
   };
+  map_summary?: ProximityMapSummary;
   pairs: ProximityPair[];
 }
 
