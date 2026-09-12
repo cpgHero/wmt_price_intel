@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.134",
+  version: "1.3.135",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2946,6 +2946,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-12",
+              "Local verification passed; production deployment pending",
+              "Proximity moves radius coverage into the summary layer and adds selected-network radius overlays.",
+              "Coverage by radius is now a top summary card rather than a floating map overlay, preserving map real estate while keeping 1/3/5/10-mile coverage immediately visible. The map legend now describes the actual rendered marks: Walmart clusters, represented competitor clusters, selected-network links, and the selected competitor radius. Selecting a store relationship now centers the radius on the selected competitor site, draws links to the visible Walmart stores assigned to that competitor, shows those links in the fast source-backed fallback map, and limits rendered relationship lines to the selected network instead of thousands of countrywide links. This is a Proximity UI, information hierarchy, legend accuracy, selected-network visualization, and performance refinement only; it does not change location rows, coordinates, retailer eligibility, nearest-location pairing, Haversine distance math, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-12",
               "Local verification passed; production deployment pending",
