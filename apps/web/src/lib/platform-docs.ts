@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.131",
+  version: "1.3.132",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2946,6 +2946,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-12",
+              "Local verification passed; production deployment pending",
+              "Proximity switches to the shared OpenFreeMap basemap and clarifies Walmart-centered coverage metrics.",
+              "The Proximity page now renders with MapLibre using the shared OpenFreeMap style backed by OpenMapTiles and OpenStreetMap contributors instead of the prior internal SVG/state-outline map treatment, removing the decorative radius/vignette shape that could be mistaken for data. The default selected radius is now 1 mile in both the web page and proximity API. KPI cards now use explicit metric definitions with clickable info dialogs: total Walmart stores in the selected country from the location master, paired Walmart coverage within the selected radius, paired Walmart white-space beyond the selected radius, and selected competitor locations represented as nearest neighbors to at least one Walmart. The competitor-site metric intentionally distinguishes represented nearest-neighbor sites from all mappable competitor locations so readers understand why the represented count can be lower than the retailer's full location footprint. Page controls keep native shell placement and every button/icon has hover title text. This is a Proximity UI, basemap, default-radius, denominator-labeling, and metric-explanation change only; it does not change location rows, coordinates, retailer eligibility, nearest-location pairing, Haversine distance math, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-12",
               "Local verification passed; production deployment pending",

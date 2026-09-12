@@ -4,6 +4,7 @@ import { getApi, type LocationRetailer, type ProximityView } from "@/lib/api";
 import { ProximityWorkspace } from "./proximity-workspace";
 
 export const dynamic = "force-dynamic";
+const DEFAULT_RADIUS_MILES = 1;
 
 interface ProximitySearchParams {
   country?: string;
@@ -24,8 +25,8 @@ function normalizeCountry(country: string | undefined) {
 }
 
 function normalizeRadius(radius: string | undefined) {
-  const value = Number(radius ?? 10);
-  return Number.isFinite(value) && value > 0 ? value : 10;
+  const value = Number(radius ?? DEFAULT_RADIUS_MILES);
+  return Number.isFinite(value) && value > 0 ? value : DEFAULT_RADIUS_MILES;
 }
 
 function defaultCompetitor(retailers: LocationRetailer[], country: string) {
