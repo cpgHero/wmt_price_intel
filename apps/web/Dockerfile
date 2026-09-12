@@ -1,4 +1,4 @@
-FROM node:24.18.0-slim AS build
+FROM public.ecr.aws/docker/library/node:24.18.0-slim AS build
 
 RUN npm install --global pnpm@11.20.0
 WORKDIR /app
@@ -14,7 +14,7 @@ COPY config config
 COPY schemas schemas
 RUN pnpm --filter @rci/web build
 
-FROM node:24.18.0-slim AS runtime
+FROM public.ecr.aws/docker/library/node:24.18.0-slim AS runtime
 WORKDIR /app
 ENV HOSTNAME=0.0.0.0 NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 PORT=3000
 RUN groupadd --system --gid 1001 nodejs \

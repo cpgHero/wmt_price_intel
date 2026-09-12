@@ -44,7 +44,7 @@ def test_production_images_drop_root_and_pin_runtimes() -> None:
         name: (REPOSITORY_ROOT / f"apps/{name}/Dockerfile").read_text()
         for name in ("web", "api", "worker", "scheduler")
     }
-    assert "FROM node:24.18.0-slim" in dockerfiles["web"]
+    assert "node:24.18.0-slim" in dockerfiles["web"]
     assert "USER nextjs" in dockerfiles["web"]
     for service in ("api", "worker", "scheduler"):
         assert "FROM python:3.14.6-slim" in dockerfiles[service]
