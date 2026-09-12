@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.133",
+  version: "1.3.134",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2946,6 +2946,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-12",
+              "Local verification passed; production deployment pending",
+              "Inactive Proximity tile controls are hidden until the enhanced map is rendered.",
+              "The progressive MapLibre/OpenFreeMap tile layer now remains hidden from the visual and accessibility tree until it has reached the rendered idle state, so slow or unavailable tiles cannot expose empty map controls or mask the fast source-backed cluster map. Fast cluster marks also carry accessible labels describing the cluster location count, covered stores, and gap stores. This is a Proximity accessibility and progressive-rendering refinement only; it does not change location rows, coordinates, retailer eligibility, nearest-location pairing, Haversine distance math, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-12",
               "Local verification passed; production deployment pending",

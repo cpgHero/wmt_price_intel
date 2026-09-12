@@ -1533,6 +1533,7 @@ export function ProximityWorkspace({
               summary={compactMapSummary}
             />
             <div
+              aria-hidden={!mapEnhanced}
               className={`${styles.tileMap} ${mapEnhanced ? styles.tileMapEnhanced : ""}`}
               ref={mapContainerRef}
             />
@@ -2189,6 +2190,7 @@ function StaticProximityMap({
     const key = cluster.representative_pair_key;
     return (
       <g
+        aria-label={title}
         className={`${styles.staticCluster} ${className}`}
         key={`${cluster.role}-${index}-${cluster.latitude}-${cluster.longitude}`}
         onClick={() => {
