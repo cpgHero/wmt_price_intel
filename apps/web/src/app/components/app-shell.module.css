@@ -259,6 +259,13 @@
   gap: 0.55rem;
 }
 
+.pageActionsSlot {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
 .statusPill {
   align-items: center;
   border: 1px solid var(--line);
@@ -403,6 +410,10 @@
 
   .topbar {
     padding-inline: 1rem;
+  }
+
+  .pageActionsSlot {
+    display: none;
   }
 
   .pageShell {

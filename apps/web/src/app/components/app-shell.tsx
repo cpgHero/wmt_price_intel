@@ -92,7 +92,8 @@ export function AppShell({
 }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();
   const activeItem = activeNavigationItem(pathname);
-  const { definition: contextDefinition } = useApplicationContext();
+  const { actions: contextActions, definition: contextDefinition } =
+    useApplicationContext();
   const compact = useSyncExternalStore(
     subscribeToSidebarPreference,
     sidebarPreferenceSnapshot,
@@ -244,6 +245,9 @@ export function AppShell({
             </div>
           )}
           <div className={styles.topbarActions}>
+            {contextActions ? (
+              <div className={styles.pageActionsSlot}>{contextActions}</div>
+            ) : null}
             <span className={styles.statusPill}>
               <span className={styles.liveDot} aria-hidden="true" />
               Live

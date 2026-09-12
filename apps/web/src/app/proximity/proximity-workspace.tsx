@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 
+import { useApplicationContextActions } from "@/app/components/application-context";
 import type { LocationRetailer, ProximityPair, ProximityView } from "@/lib/api";
 import usStatesTopology from "../../../../../config/us-states-10m.json";
 
@@ -115,12 +116,6 @@ function initialTheme(): ThemeMode {
   return window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
-}
-
-function setDocumentTheme(theme: ThemeMode) {
-  document.documentElement.dataset.theme = theme;
-  document.documentElement.style.colorScheme = theme;
-  window.localStorage.setItem("rci-theme", theme);
 }
 
 function walmartRetailerId(country: string) {
@@ -537,7 +532,8 @@ export function ProximityWorkspace({
   const [showRings, setShowRings] = useState(true);
   const [showWalmart, setShowWalmart] = useState(true);
   const [showCompetitors, setShowCompetitors] = useState(true);
-  const [showClusters, setShowClusters] = useState(false);
+  const [showClusters, setShowClusters] = useState(true);
+  const [showSelectedDetail, setShowSelectedDetail] = useState(false);
   const [onlySaved, setOnlySaved] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(() => initialTheme());
   const [mapStyle, setMapStyle] = useState<MapStyle>("insight");
@@ -744,6 +740,11 @@ export function ProximityWorkspace({
     [country, filteredPairs, stateFilter],
   );
   const map = useMemo(() => projection(mapPairs), [mapPairs]);
+  const selectedMapPair =
+    selectedPair &&
+    mapPairs.some((pair) => pair.benchmark.id === selectedPair.benchmark.id)
+      ? selectedPair
+      : null;
   const competitorPoints = useMemo(
     () =>
       Array.from(
@@ -813,15 +814,15 @@ export function ProximityWorkspace({
         : [],
     [clusterBucket, competitorPoints, map.point, showClusters],
   );
-  const selectedRadiusPixels = selectedPair
+  const selectedRadiusPixels = selectedMapPair
     ? Math.abs(
         map.point(
-          selectedPair.benchmark.longitude,
-          selectedPair.benchmark.latitude + radius / 69,
+          selectedMapPair.benchmark.longitude,
+          selectedMapPair.benchmark.latitude + radius / 69,
         ).y -
           map.point(
-            selectedPair.benchmark.longitude,
-            selectedPair.benchmark.latitude,
+            selectedMapPair.benchmark.longitude,
+            selectedMapPair.benchmark.latitude,
           ).y,
       )
     : 0;
@@ -978,6 +979,109 @@ export function ProximityWorkspace({
     image.src = sourceUrl;
   }
 
+  const shellActions = useMemo(
+    () => (
+      <div className={styles.shellActions} aria-label="Proximity page actions">
+        <button
+          className={styles.btn}
+          onClick={() => setModal("shortlist")}
+          type="button"
+        >
+          Shortlist <span className={styles.pill}>{savedKeys.size}</span>
+        </button>
+        <button
+          className={styles.btn}
+          onClick={() => setModal("notes")}
+          type="button"
+        >
+          Notes
+        </button>
+        <div className={styles.menuWrap}>
+          <button
+            className={styles.btn}
+            onClick={() => setShowExportMenu((current) => !current)}
+            type="button"
+          >
+            Export ▾
+          </button>
+          {showExportMenu ? (
+            <div className={styles.exportMenu}>
+              <button
+                onClick={() => {
+                  downloadCsv(filteredPairs, radius, "proximity-filtered.csv");
+                  setShowExportMenu(false);
+                }}
+                type="button"
+              >
+                Visible rows · CSV
+              </button>
+              <button
+                onClick={() => {
+                  downloadJson(
+                    filteredPairs,
+                    radius,
+                    "proximity-filtered.json",
+                  );
+                  setShowExportMenu(false);
+                }}
+                type="button"
+              >
+                Visible rows · JSON
+              </button>
+              <button
+                onClick={() => {
+                  downloadGeoJson(
+                    filteredPairs,
+                    radius,
+                    "proximity-filtered.geojson",
+                  );
+                  setShowExportMenu(false);
+                }}
+                type="button"
+              >
+                Map layer · GeoJSON
+              </button>
+              <button
+                onClick={() => {
+                  exportSvg();
+                  setShowExportMenu(false);
+                }}
+                type="button"
+              >
+                Current map · SVG
+              </button>
+              <button
+                onClick={() => {
+                  exportPng();
+                  setShowExportMenu(false);
+                }}
+                type="button"
+              >
+                Current map · PNG
+              </button>
+            </div>
+          ) : null}
+        </div>
+        <button
+          className={styles.btn}
+          onClick={() => setShowFilters(true)}
+          type="button"
+        >
+          Controls
+        </button>
+        <button
+          className={`${styles.btn} ${styles.primary}`}
+          onClick={() => setShowTable(true)}
+          type="button"
+        >
+          Location table
+        </button>
+      </div>
+    ),
+    [filteredPairs, radius, savedKeys.size, showExportMenu],
+  );
+  useApplicationContextActions(shellActions);
+
   return (
     <div
       className={`${styles.workspace} ${theme === "dark" ? styles.dark : ""}`}
@@ -1006,115 +1110,6 @@ export function ProximityWorkspace({
             Straight-line Haversine miles; not drive time, inventory,
             assortment, or product distribution.
           </p>
-        </div>
-        <div className={styles.actions}>
-          <button
-            className={styles.btn}
-            onClick={() => setModal("shortlist")}
-            type="button"
-          >
-            Shortlist <span className={styles.pill}>{savedKeys.size}</span>
-          </button>
-          <button
-            className={styles.btn}
-            onClick={() => setModal("notes")}
-            type="button"
-          >
-            Notes
-          </button>
-          <div className={styles.menuWrap}>
-            <button
-              className={styles.btn}
-              onClick={() => setShowExportMenu((current) => !current)}
-              type="button"
-            >
-              Export ▾
-            </button>
-            {showExportMenu ? (
-              <div className={styles.exportMenu}>
-                <button
-                  onClick={() => {
-                    downloadCsv(
-                      filteredPairs,
-                      radius,
-                      "proximity-filtered.csv",
-                    );
-                    setShowExportMenu(false);
-                  }}
-                  type="button"
-                >
-                  Visible rows · CSV
-                </button>
-                <button
-                  onClick={() => {
-                    downloadJson(
-                      filteredPairs,
-                      radius,
-                      "proximity-filtered.json",
-                    );
-                    setShowExportMenu(false);
-                  }}
-                  type="button"
-                >
-                  Visible rows · JSON
-                </button>
-                <button
-                  onClick={() => {
-                    downloadGeoJson(
-                      filteredPairs,
-                      radius,
-                      "proximity-filtered.geojson",
-                    );
-                    setShowExportMenu(false);
-                  }}
-                  type="button"
-                >
-                  Map layer · GeoJSON
-                </button>
-                <button
-                  onClick={() => {
-                    exportSvg();
-                    setShowExportMenu(false);
-                  }}
-                  type="button"
-                >
-                  Current map · SVG
-                </button>
-                <button
-                  onClick={() => {
-                    exportPng();
-                    setShowExportMenu(false);
-                  }}
-                  type="button"
-                >
-                  Current map · PNG
-                </button>
-              </div>
-            ) : null}
-          </div>
-          <button
-            className={styles.btn}
-            onClick={() =>
-              setDocumentTheme(theme === "dark" ? "light" : "dark")
-            }
-            type="button"
-          >
-            {theme === "dark" ? "Light" : "Dark"}
-          </button>
-          <button
-            className={styles.btn}
-            onClick={() => setShowFilters(true)}
-            type="button"
-          >
-            Filters
-          </button>
-          <button
-            className={`${styles.btn} ${styles.primary}`}
-            onClick={() => setShowTable(true)}
-            type="button"
-          >
-            Location table
-          </button>
         </div>
       </header>
 
@@ -1182,149 +1177,6 @@ export function ProximityWorkspace({
       </section>
 
       <section className={styles.explorer}>
-        <aside className={styles.sidebar}>
-          <div className={styles.sideFilter}>
-            <div className={styles.sectionLine}>
-              <h2>Controls</h2>
-              <button
-                className={styles.textButton}
-                onClick={resetView}
-                type="button"
-              >
-                Reset view
-              </button>
-            </div>
-            <label className={styles.field}>
-              <span>Walmart market</span>
-              <select
-                value={country}
-                onChange={(event) => void load({ country: event.target.value })}
-              >
-                <option value="USA">Walmart US</option>
-                <option value="CANADA">Walmart CA</option>
-              </select>
-            </label>
-            <label className={styles.field}>
-              <span>Compare to one retailer</span>
-              <select
-                value={competitorRetailerId}
-                onChange={(event) =>
-                  void load({ competitorRetailerId: event.target.value })
-                }
-              >
-                {competitorOptions.length === 0 ? (
-                  <option value="">No competitor locations</option>
-                ) : null}
-                {competitorOptions.map((retailer) => (
-                  <option key={retailer.id} value={retailer.id}>
-                    {retailer.display_name} · {count(retailer.location_count)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <div className={styles.field}>
-              <span>Radius</span>
-              <div className={styles.radiusSet}>
-                {RADIUS_OPTIONS.map((option) => (
-                  <button
-                    aria-pressed={radius === option}
-                    key={option}
-                    onClick={() => void load({ radius: option })}
-                    type="button"
-                  >
-                    {option} mi
-                  </button>
-                ))}
-              </div>
-            </div>
-            <label className={styles.searchbox}>
-              <span>⌕</span>
-              <input
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search store, city, state, ZIP"
-                type="search"
-                value={query}
-              />
-            </label>
-            <div
-              className={styles.relationSet}
-              aria-label="Relationship filter"
-            >
-              <button
-                className={relation === "all" ? styles.active : undefined}
-                onClick={() => setRelation("all")}
-                type="button"
-              >
-                All
-              </button>
-              <button
-                className={relation === "within" ? styles.active : undefined}
-                onClick={() => setRelation("within")}
-                type="button"
-              >
-                Inside
-              </button>
-              <button
-                className={relation === "outside" ? styles.active : undefined}
-                onClick={() => setRelation("outside")}
-                type="button"
-              >
-                Gaps
-              </button>
-            </div>
-            <div className={styles.scopeChip}>
-              <span>{count(filteredPairs.length)} visible pairs</span>
-              <span>{count(stateOptions.length)} states/provinces</span>
-            </div>
-          </div>
-
-          <div className={styles.layerBox}>
-            <div className={styles.sectionLine}>
-              <h2>Map layers</h2>
-              <button
-                className={styles.textButton}
-                onClick={() => setModal("method")}
-                type="button"
-              >
-                Method
-              </button>
-            </div>
-            <div className={styles.layerGrid}>
-              {[
-                ["Walmart", showWalmart, setShowWalmart],
-                ["Competitor", showCompetitors, setShowCompetitors],
-                ["Links", showLinks, setShowLinks],
-                ["Radius ring", showRings, setShowRings],
-                ["Clusters", showClusters, setShowClusters],
-                ["Saved only", onlySaved, setOnlySaved],
-              ].map(([label, value, setter]) => (
-                <button
-                  aria-pressed={Boolean(value)}
-                  key={String(label)}
-                  onClick={() =>
-                    (setter as (next: boolean) => void)(!Boolean(value))
-                  }
-                  type="button"
-                >
-                  <span>{String(label)}</span>
-                  <i />
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className={styles.sideBottom}>
-            <button
-              className={styles.primarySideAction}
-              onClick={() => setShowTable(true)}
-              type="button"
-            >
-              Open location details
-            </button>
-            <span>{view?.schema_version ?? "No schema"}</span>
-          </div>
-        </aside>
-
         <section className={styles.mapSection} aria-label="Proximity map">
           <div className={styles.mapArea} ref={mapAreaRef}>
             <div className={styles.mapToolbar}>
@@ -1334,24 +1186,34 @@ export function ProximityWorkspace({
                   onClick={() => setRelation("all")}
                   type="button"
                 >
-                  Full network
+                  <strong>All stores</strong>
+                  <small>Show covered and gap locations</small>
                 </button>
                 <button
                   className={relation === "within" ? styles.active : undefined}
                   onClick={() => setRelation("within")}
                   type="button"
                 >
-                  Covered
+                  <strong>Covered stores</strong>
+                  <small>Walmarts with a nearby competitor</small>
                 </button>
                 <button
                   className={relation === "outside" ? styles.active : undefined}
                   onClick={() => setRelation("outside")}
                   type="button"
                 >
-                  White space
+                  <strong>Gap stores</strong>
+                  <small>No selected competitor nearby</small>
                 </button>
               </div>
               <div className={styles.mapTools}>
+                <button
+                  className={styles.mapToolButton}
+                  onClick={() => setShowFilters(true)}
+                  type="button"
+                >
+                  Controls
+                </button>
                 <select
                   aria-label="Map style"
                   className={styles.baseSelect}
@@ -1385,7 +1247,7 @@ export function ProximityWorkspace({
                 <button
                   className={styles.iconButton}
                   onClick={() => setShowFilters(true)}
-                  title="Open filter drawer"
+                  title="Open controls and filters"
                   type="button"
                 >
                   ⚙
@@ -1542,19 +1404,19 @@ export function ProximityWorkspace({
                         );
                       })
                     : null}
-                  {showRings && selectedPair ? (
+                  {showRings && selectedMapPair ? (
                     <circle
                       className={styles.radiusRing}
                       cx={
                         map.point(
-                          selectedPair.benchmark.longitude,
-                          selectedPair.benchmark.latitude,
+                          selectedMapPair.benchmark.longitude,
+                          selectedMapPair.benchmark.latitude,
                         ).x
                       }
                       cy={
                         map.point(
-                          selectedPair.benchmark.longitude,
-                          selectedPair.benchmark.latitude,
+                          selectedMapPair.benchmark.longitude,
+                          selectedMapPair.benchmark.latitude,
                         ).y
                       }
                       r={selectedRadiusPixels}
@@ -1599,7 +1461,10 @@ export function ProximityWorkspace({
                             cx={point.x}
                             cy={point.y}
                             key={pair.benchmark.id}
-                            onClick={() => setSelectedKey(pair.benchmark.id)}
+                            onClick={() => {
+                              setSelectedKey(pair.benchmark.id);
+                              setShowSelectedDetail(true);
+                            }}
                             onPointerEnter={() => setHoveredKey(pairKey(pair))}
                             onPointerLeave={() => setHoveredKey(null)}
                             r={selected ? 7 : 3.6}
@@ -1641,6 +1506,44 @@ export function ProximityWorkspace({
                         </g>
                       ))
                     : null}
+                  {showClusters && selectedMapPair ? (
+                    <g className={styles.selectedPairLayer}>
+                      <rect
+                        className={styles.competitorPoint}
+                        height="8"
+                        rx="2.2"
+                        width="8"
+                        x={
+                          map.point(
+                            selectedMapPair.competitor.longitude,
+                            selectedMapPair.competitor.latitude,
+                          ).x - 4
+                        }
+                        y={
+                          map.point(
+                            selectedMapPair.competitor.longitude,
+                            selectedMapPair.competitor.latitude,
+                          ).y - 4
+                        }
+                      />
+                      <circle
+                        className={styles.selectedPoint}
+                        cx={
+                          map.point(
+                            selectedMapPair.benchmark.longitude,
+                            selectedMapPair.benchmark.latitude,
+                          ).x
+                        }
+                        cy={
+                          map.point(
+                            selectedMapPair.benchmark.longitude,
+                            selectedMapPair.benchmark.latitude,
+                          ).y
+                        }
+                        r="7"
+                      />
+                    </g>
+                  ) : null}
                 </g>
               </svg>
             ) : (
@@ -1757,98 +1660,19 @@ export function ProximityWorkspace({
             </div>
 
             {selectedPair ? (
-              <aside className={styles.detailPanel} aria-label="Selected pair">
-                <div className={styles.detailHeader}>
-                  <span>Selected relationship</span>
-                  <div>
-                    <button
-                      className={styles.saveButton}
-                      onClick={() => toggleSaved(selectedPair)}
-                      type="button"
-                    >
-                      {savedKeys.has(pairKey(selectedPair))
-                        ? "Saved ★"
-                        : "Save ☆"}
-                    </button>
-                    <strong>{miles(selectedPair.distance_miles)}</strong>
-                  </div>
-                </div>
-                <div className={styles.detailStack}>
-                  <article>
-                    <b>
-                      <i className={styles.walmartDot} />
-                      Walmart
-                    </b>
-                    <p>
-                      #{selectedPair.benchmark.store_number} ·{" "}
-                      {locationLabel(selectedPair.benchmark)}
-                    </p>
-                    <a
-                      href={googleMapsUrl(
-                        selectedPair.benchmark.latitude,
-                        selectedPair.benchmark.longitude,
-                      )}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      Open coordinate
-                    </a>
-                  </article>
-                  <article>
-                    <b>
-                      <i className={styles.competitorDot} />
-                      {selectedPair.competitor.retailer_display_name}
-                    </b>
-                    <p>
-                      #{selectedPair.competitor.store_number} ·{" "}
-                      {locationLabel(selectedPair.competitor)}
-                    </p>
-                    <a
-                      href={googleMapsUrl(
-                        selectedPair.competitor.latitude,
-                        selectedPair.competitor.longitude,
-                      )}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      Open coordinate
-                    </a>
-                  </article>
-                </div>
-                <div className={styles.radiusFacts}>
-                  {RADIUS_OPTIONS.map((option) => (
-                    <span
-                      className={
-                        selectedPair.distance_miles <= option
-                          ? styles.inside
-                          : styles.outside
-                      }
-                      key={option}
-                    >
-                      ≤ {option} mi
-                    </span>
-                  ))}
-                </div>
-                {selectedPeers.length ? (
-                  <div className={styles.peerList}>
-                    <span>
-                      Other visible Walmart locations nearest this site
-                    </span>
-                    {selectedPeers.map((pair) => (
-                      <button
-                        key={pair.benchmark.id}
-                        onClick={() => setSelectedKey(pair.benchmark.id)}
-                        type="button"
-                      >
-                        #{pair.benchmark.store_number} ·{" "}
-                        {pair.benchmark.city || "Unknown city"},{" "}
-                        {pair.benchmark.state || "—"}
-                        <b>{miles(pair.distance_miles)}</b>
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </aside>
+              <button
+                className={styles.selectionToast}
+                onClick={() => setShowSelectedDetail(true)}
+                type="button"
+              >
+                <span>Selected relationship</span>
+                <strong>{miles(selectedPair.distance_miles)}</strong>
+                <small>
+                  Walmart #{selectedPair.benchmark.store_number} →{" "}
+                  {selectedPair.competitor.retailer_display_name} #
+                  {selectedPair.competitor.store_number}
+                </small>
+              </button>
             ) : null}
           </div>
           <div className={styles.mapFooter}>
@@ -1868,6 +1692,118 @@ export function ProximityWorkspace({
         </section>
       </section>
 
+      {showSelectedDetail && selectedPair ? (
+        <div
+          className={styles.drawerBackdrop}
+          onClick={() => setShowSelectedDetail(false)}
+          role="presentation"
+        >
+          <aside
+            aria-label="Selected proximity relationship"
+            className={`${styles.drawer} ${styles.detailDrawer}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.drawerHead}>
+              <div>
+                <span>Selected relationship</span>
+                <h2>{miles(selectedPair.distance_miles)} apart</h2>
+                <p>
+                  Walmart #{selectedPair.benchmark.store_number} paired to the
+                  nearest {selectedPair.competitor.retailer_display_name} store
+                  from the location master.
+                </p>
+              </div>
+              <button
+                onClick={() => setShowSelectedDetail(false)}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <button
+              className={styles.saveButton}
+              onClick={() => toggleSaved(selectedPair)}
+              type="button"
+            >
+              {savedKeys.has(pairKey(selectedPair)) ? "Saved ★" : "Save ☆"}
+            </button>
+            <div className={styles.detailStack}>
+              <article>
+                <b>
+                  <i className={styles.walmartDot} />
+                  Walmart
+                </b>
+                <p>
+                  #{selectedPair.benchmark.store_number} ·{" "}
+                  {locationLabel(selectedPair.benchmark)}
+                </p>
+                <a
+                  href={googleMapsUrl(
+                    selectedPair.benchmark.latitude,
+                    selectedPair.benchmark.longitude,
+                  )}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Open Walmart coordinate
+                </a>
+              </article>
+              <article>
+                <b>
+                  <i className={styles.competitorDot} />
+                  {selectedPair.competitor.retailer_display_name}
+                </b>
+                <p>
+                  #{selectedPair.competitor.store_number} ·{" "}
+                  {locationLabel(selectedPair.competitor)}
+                </p>
+                <a
+                  href={googleMapsUrl(
+                    selectedPair.competitor.latitude,
+                    selectedPair.competitor.longitude,
+                  )}
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Open competitor coordinate
+                </a>
+              </article>
+            </div>
+            <div className={styles.radiusFacts}>
+              {RADIUS_OPTIONS.map((option) => (
+                <span
+                  className={
+                    selectedPair.distance_miles <= option
+                      ? styles.inside
+                      : styles.outside
+                  }
+                  key={option}
+                >
+                  ≤ {option} mi
+                </span>
+              ))}
+            </div>
+            {selectedPeers.length ? (
+              <div className={styles.peerList}>
+                <span>Other visible Walmart locations nearest this site</span>
+                {selectedPeers.map((pair) => (
+                  <button
+                    key={pair.benchmark.id}
+                    onClick={() => setSelectedKey(pair.benchmark.id)}
+                    type="button"
+                  >
+                    #{pair.benchmark.store_number} ·{" "}
+                    {pair.benchmark.city || "Unknown city"},{" "}
+                    {pair.benchmark.state || "—"}
+                    <b>{miles(pair.distance_miles)}</b>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </aside>
+        </div>
+      ) : null}
+
       {showFilters ? (
         <div
           className={styles.drawerBackdrop}
@@ -1881,8 +1817,8 @@ export function ProximityWorkspace({
           >
             <div className={styles.drawerHead}>
               <div>
-                <span>Explorer filters</span>
-                <h2>Refine the visible network</h2>
+                <span>Map controls</span>
+                <h2>Choose the retailer, radius, filters, and layers</h2>
               </div>
               <button onClick={() => setShowFilters(false)} type="button">
                 ×
@@ -1915,6 +1851,30 @@ export function ProximityWorkspace({
                   </option>
                 ))}
               </select>
+            </label>
+            <div className={styles.field}>
+              <span>Competition radius</span>
+              <div className={styles.radiusSet}>
+                {RADIUS_OPTIONS.map((option) => (
+                  <button
+                    aria-pressed={radius === option}
+                    key={option}
+                    onClick={() => void load({ radius: option })}
+                    type="button"
+                  >
+                    {option} mi
+                  </button>
+                ))}
+              </div>
+            </div>
+            <label className={styles.searchbox}>
+              <span>⌕</span>
+              <input
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search store, city, state, ZIP"
+                type="search"
+                value={query}
+              />
             </label>
             <label className={styles.field}>
               <span>Walmart state/province</span>
@@ -1963,6 +1923,40 @@ export function ProximityWorkspace({
               />
               <span>Only show shortlisted relationships</span>
             </label>
+            <div className={styles.layerBox}>
+              <div className={styles.sectionLine}>
+                <h2>Map layers</h2>
+                <button
+                  className={styles.textButton}
+                  onClick={() => setModal("method")}
+                  type="button"
+                >
+                  Method
+                </button>
+              </div>
+              <div className={styles.layerGrid}>
+                {[
+                  ["Walmart", showWalmart, setShowWalmart],
+                  ["Competitor", showCompetitors, setShowCompetitors],
+                  ["Links", showLinks, setShowLinks],
+                  ["Radius ring", showRings, setShowRings],
+                  ["Clusters", showClusters, setShowClusters],
+                  ["Saved only", onlySaved, setOnlySaved],
+                ].map(([label, value, setter]) => (
+                  <button
+                    aria-pressed={Boolean(value)}
+                    key={String(label)}
+                    onClick={() =>
+                      (setter as (next: boolean) => void)(!Boolean(value))
+                    }
+                    type="button"
+                  >
+                    <span>{String(label)}</span>
+                    <i />
+                  </button>
+                ))}
+              </div>
+            </div>
             <div className={styles.drawerStats}>
               <span>Visible rows</span>
               <strong>{count(filteredPairs.length)}</strong>

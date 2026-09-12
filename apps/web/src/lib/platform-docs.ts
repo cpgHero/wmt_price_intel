@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.130",
+  version: "1.3.131",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2946,6 +2946,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-12",
+              "Local verification passed; production deployment pending",
+              "Proximity moves page actions into the native app shell and refocuses the workspace around the map.",
+              "The Proximity page now registers Shortlist, Notes, Export, Controls, and Location table as native shell header actions instead of rendering them in the body-level report header. The permanent left controls rail was removed to give the map the full workspace width; retailer, radius, search, relationship, state/province, sort, shortlist, and layer controls now live in one right-side controls drawer. The map view switcher uses plain-language choices—All stores, Covered stores, and Gap stores—with explanatory sublabels. Store clustering is enabled by default, covered/gap relationship lines and selected-radius styling are more legible, and the selected relationship no longer covers map controls: the map shows a compact selected-store chip and opens full relationship details in a drawer. This is a Proximity UI, information hierarchy, shell-action placement, map readability, and drawer-interaction repair only; it does not change location rows, coordinates, retailer eligibility, nearest-location pairing, Haversine distance math, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-12",
               "Local verification passed; production deployment pending",
