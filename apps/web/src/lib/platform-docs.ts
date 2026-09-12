@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.129",
+  version: "1.3.130",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2946,6 +2946,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-12",
+              "Local verification passed; production deployment pending",
+              "Proximity reference-layout fidelity repair removes the dark-shell/light-page mismatch and improves the map viewport.",
+              "The Proximity page now takes the global app theme as the source of truth, listens for shell theme changes, and applies dark-mode tokens from the root theme before React interaction so the workspace no longer persists a stale light Proximity theme inside a dark app. The body-level duplicate title/header was collapsed into the native command strip, preserving one accessible page title and moving the source/method summary next to the retailer comparison. The map defaults to the contiguous U.S. viewport for all-state Walmart US comparisons so Alaska, Hawaii, and Puerto Rico do not shrink the primary mainland view; those locations remain in the KPIs, exports, drawer details, and state-specific map views. Radius coverage moved into a floating in-map coverage card modeled on the supplied reference explorer, and the map status/methodology text moved into a true bottom status bar. This is a Proximity UI, theme, layout, and viewport-fidelity repair only; it does not change location rows, coordinates, retailer eligibility, nearest-location pairing, Haversine distance math, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-11",
               "Local verification passed; production deployment pending",
