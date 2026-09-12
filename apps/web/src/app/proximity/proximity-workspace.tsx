@@ -16,6 +16,8 @@ import usStatesTopology from "../../../../../config/us-states-10m.json";
 import styles from "./proximity-workspace.module.css";
 
 const RADIUS_OPTIONS = [1, 3, 5, 10] as const;
+const NON_CONTIGUOUS_US_STATES = new Set(["AK", "HI", "PR"]);
+const NON_CONTIGUOUS_US_STATE_IDS = new Set(["02", "15", "72"]);
 type RelationFilter = "all" | "within" | "outside";
 type SortMode = "nearest" | "farthest" | "state" | "store";
 type ThemeMode = "light" | "dark";
@@ -49,6 +51,8 @@ type Topology = {
     states: {
       geometries: Array<{
         arcs: number[][] | number[][][];
+        id?: string;
+        properties?: { name?: string };
         type: "Polygon" | "MultiPolygon";
       }>;
     };
@@ -105,16 +109,18 @@ function googleMapsUrl(latitude: number, longitude: number) {
 
 function initialTheme(): ThemeMode {
   if (typeof window === "undefined") return "light";
-  const proximityTheme = window.localStorage.getItem("proximity-theme");
-  if (proximityTheme === "dark" || proximityTheme === "light") {
-    return proximityTheme;
-  }
+  if (document.documentElement.dataset.theme === "dark") return "dark";
   const appTheme = window.localStorage.getItem("rci-theme");
   if (appTheme === "dark" || appTheme === "light") return appTheme;
-  if (document.documentElement.dataset.theme === "dark") return "dark";
   return window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
     : "light";
+}
+
+function setDocumentTheme(theme: ThemeMode) {
+  document.documentElement.dataset.theme = theme;
+  document.documentElement.style.colorScheme = theme;
+  window.localStorage.setItem("rci-theme", theme);
 }
 
 function walmartRetailerId(country: string) {
@@ -427,12 +433,15 @@ function usStatePaths(
     x: number;
     y: number;
   },
+  includeNonContiguous = true,
 ) {
   const topology = usStatesTopology as unknown as Topology;
   return topology.objects.states.geometries
     .filter(
       (geometry) =>
-        geometry.type === "Polygon" || geometry.type === "MultiPolygon",
+        (geometry.type === "Polygon" || geometry.type === "MultiPolygon") &&
+        (includeNonContiguous ||
+          !NON_CONTIGUOUS_US_STATE_IDS.has(String(geometry.id))),
     )
     .flatMap((geometry, geometryIndex) => {
       const polygons =
@@ -572,11 +581,18 @@ export function ProximityWorkspace({
   );
 
   useEffect(() => {
-    window.localStorage.setItem(
-      "proximity-theme",
-      theme === "dark" ? "dark" : "light",
-    );
-  }, [theme]);
+    const syncFromDocument = () =>
+      setTheme(
+        document.documentElement.dataset.theme === "dark" ? "dark" : "light",
+      );
+    syncFromDocument();
+    const observer = new MutationObserver(syncFromDocument);
+    observer.observe(document.documentElement, {
+      attributeFilter: ["data-theme"],
+      attributes: true,
+    });
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     window.localStorage.setItem(
@@ -717,15 +733,25 @@ export function ProximityWorkspace({
     filteredPairs.find((pair) => pair.benchmark.id === selectedKey) ??
     filteredPairs[0] ??
     null;
-  const map = useMemo(() => projection(filteredPairs), [filteredPairs]);
+
+  const mapPairs = useMemo(
+    () =>
+      country === "USA" && stateFilter === "all"
+        ? filteredPairs.filter(
+            (pair) => !NON_CONTIGUOUS_US_STATES.has(pair.benchmark.state ?? ""),
+          )
+        : filteredPairs,
+    [country, filteredPairs, stateFilter],
+  );
+  const map = useMemo(() => projection(mapPairs), [mapPairs]);
   const competitorPoints = useMemo(
     () =>
       Array.from(
         new Map(
-          filteredPairs.map((pair) => [pair.competitor.id, pair.competitor]),
+          mapPairs.map((pair) => [pair.competitor.id, pair.competitor]),
         ).values(),
       ),
-    [filteredPairs],
+    [mapPairs],
   );
   const filteredWithin = filteredPairs.filter(
     (pair) => pair.distance_miles <= radius,
@@ -747,12 +773,16 @@ export function ProximityWorkspace({
   });
   const selectedCoverage =
     coverageBands.find((band) => band.miles === radius) ?? coverageBands.at(-1);
-  const furthestVisiblePair = filteredPairs.reduce<ProximityPair | null>(
+  const furthestVisiblePair = mapPairs.reduce<ProximityPair | null>(
     (current, pair) =>
       current === null || pair.distance_miles > current.distance_miles
         ? pair
         : current,
     null,
+  );
+  const hiddenMapPairCount = Math.max(
+    0,
+    filteredPairs.length - mapPairs.length,
   );
   const visibleCompetitorSites = competitorPoints.length;
   const stateOptions = view?.state_options ?? [];
@@ -760,20 +790,21 @@ export function ProximityWorkspace({
     ? filteredWithin / filteredPairs.length
     : null;
   const stateShapes = useMemo(
-    () => (country === "USA" ? usStatePaths(map.point) : []),
-    [country, map],
+    () =>
+      country === "USA" ? usStatePaths(map.point, stateFilter !== "all") : [],
+    [country, map, stateFilter],
   );
   const clusterBucket = clamp(72 / mapZoom, 24, 90);
   const walmartClusters = useMemo(
     () =>
       showClusters
         ? clusterLocations(
-            filteredPairs.map((pair) => pair.benchmark),
+            mapPairs.map((pair) => pair.benchmark),
             map.point,
             clusterBucket,
           )
         : [],
-    [clusterBucket, filteredPairs, map.point, showClusters],
+    [clusterBucket, mapPairs, map.point, showClusters],
   );
   const competitorClusters = useMemo(
     () =>
@@ -952,25 +983,29 @@ export function ProximityWorkspace({
       className={`${styles.workspace} ${theme === "dark" ? styles.dark : ""}`}
     >
       <header className={styles.topbar}>
-        <div className={styles.brand}>
-          <div className={styles.brandMark}>↔</div>
-          <div>
-            <div className={styles.brandWord}>CPGHero Proximity</div>
-            <div className={styles.brandCaption}>
-              Walmart {country === "CANADA" ? "CA" : "US"} vs one retailer
-            </div>
+        <div className={styles.commandIntro}>
+          <h1>Retailer proximity explorer</h1>
+          <div className={styles.topCenter} aria-label="Retailer comparison">
+            <span className={styles.retailerChip}>
+              <i className={styles.walmartDot} />
+              {view?.benchmark.display_name ?? "Walmart"}
+            </span>
+            <span className={styles.connector}>nearest to</span>
+            <span className={styles.retailerChip}>
+              <i className={styles.competitorDot} />
+              {view?.competitor.display_name ?? "Selected retailer"}
+            </span>
+            <span className={styles.snapshot}>
+              <i />
+              {view ? count(view.summary.paired_locations) : "No"} Walmart
+              locations paired
+            </span>
           </div>
-        </div>
-        <div className={styles.topCenter} aria-label="Retailer comparison">
-          <span className={styles.retailerChip}>
-            <i className={styles.walmartDot} />
-            {view?.benchmark.display_name ?? "Walmart"}
-          </span>
-          <span className={styles.connector}>nearest to</span>
-          <span className={styles.retailerChip}>
-            <i className={styles.competitorDot} />
-            {view?.competitor.display_name ?? "Selected retailer"}
-          </span>
+          <p>
+            Source-backed nearest-store relationships from the location master.
+            Straight-line Haversine miles; not drive time, inventory,
+            assortment, or product distribution.
+          </p>
         </div>
         <div className={styles.actions}>
           <button
@@ -1060,7 +1095,7 @@ export function ProximityWorkspace({
           <button
             className={styles.btn}
             onClick={() =>
-              setTheme((current) => (current === "dark" ? "light" : "dark"))
+              setDocumentTheme(theme === "dark" ? "light" : "dark")
             }
             type="button"
           >
@@ -1082,23 +1117,6 @@ export function ProximityWorkspace({
           </button>
         </div>
       </header>
-
-      <section className={styles.heading}>
-        <div>
-          <p className={styles.eyebrow}>Analytics</p>
-          <h1>Retailer proximity explorer</h1>
-          <p>
-            Source-backed nearest-store relationships from the location master.
-            Distances are Haversine straight-line miles; this is not drive time,
-            inventory, assortment, or product distribution.
-          </p>
-        </div>
-        <div className={styles.snapshot}>
-          <i />
-          {view ? count(view.summary.paired_locations) : "No"} Walmart locations
-          paired
-        </div>
-      </section>
 
       {error ? (
         <div className={`${styles.notice} ${styles.warning}`}>{error}</div>
@@ -1295,61 +1313,6 @@ export function ProximityWorkspace({
             </div>
           </div>
 
-          <div
-            className={styles.coveragePanel}
-            aria-label="Walmart coverage by selected competitor radius"
-          >
-            <div className={styles.sectionLine}>
-              <h2>Coverage by radius</h2>
-              <button
-                className={styles.textButton}
-                onClick={() => setShowTable(true)}
-                type="button"
-              >
-                Store details
-              </button>
-            </div>
-            <p>
-              Percent of Walmart stores in the active country, state, search,
-              and saved scope with at least one selected competitor location
-              within each straight-line radius.
-            </p>
-            <div className={styles.coverageRows}>
-              {coverageBands.map((band) => (
-                <button
-                  aria-pressed={radius === band.miles}
-                  className={styles.coverageRow}
-                  key={band.miles}
-                  onClick={() => void load({ radius: band.miles })}
-                  type="button"
-                >
-                  <span>{band.label}</span>
-                  <strong>{percent(band.share)}</strong>
-                  <small>
-                    {count(band.within)} covered / {count(band.outside)} gaps
-                  </small>
-                  <i
-                    style={{
-                      width: `${band.share === null ? 0 : band.share * 100}%`,
-                    }}
-                  />
-                </button>
-              ))}
-            </div>
-            <div className={styles.coverageCallout}>
-              <span>Selected radius</span>
-              <strong>
-                {count(selectedCoverage?.within ?? filteredWithin)} covered ·{" "}
-                {count(selectedCoverage?.outside ?? filteredOutside)} gaps
-              </strong>
-              <small>
-                Median nearest distance {miles(scopeMedian)}; average
-                full-network distance{" "}
-                {miles(view?.summary.nearest_distance_average_miles ?? null)}.
-              </small>
-            </div>
-          </div>
-
           <div className={styles.sideBottom}>
             <button
               className={styles.primarySideAction}
@@ -1438,7 +1401,7 @@ export function ProximityWorkspace({
               </div>
             </div>
 
-            {filteredPairs.length ? (
+            {mapPairs.length ? (
               <svg
                 className={`${styles.mapSvg} ${
                   mapStyle === "outline" ? styles.outlineMap : ""
@@ -1460,9 +1423,9 @@ export function ProximityWorkspace({
                 <title>Retailer proximity map</title>
                 <defs>
                   <radialGradient id="proximityWater" cx="50%" cy="42%" r="72%">
-                    <stop offset="0%" stopColor="#f9fbfc" />
-                    <stop offset="58%" stopColor="#ecf3f7" />
-                    <stop offset="100%" stopColor="#d8e5ec" />
+                    <stop className={styles.waterStopStart} offset="0%" />
+                    <stop className={styles.waterStopMiddle} offset="58%" />
+                    <stop className={styles.waterStopEnd} offset="100%" />
                   </radialGradient>
                   <filter
                     id="selectedGlow"
@@ -1550,7 +1513,7 @@ export function ProximityWorkspace({
                     {country === "CANADA" ? "CANADA" : "UNITED STATES"}
                   </text>
                   {showLinks
-                    ? filteredPairs.slice(0, 1800).map((pair) => {
+                    ? mapPairs.slice(0, 1800).map((pair) => {
                         const start = map.point(
                           pair.benchmark.longitude,
                           pair.benchmark.latitude,
@@ -1617,7 +1580,7 @@ export function ProximityWorkspace({
                       })
                     : null}
                   {showWalmart && !showClusters
-                    ? filteredPairs.map((pair) => {
+                    ? mapPairs.map((pair) => {
                         const point = map.point(
                           pair.benchmark.longitude,
                           pair.benchmark.latitude,
@@ -1727,16 +1690,57 @@ export function ProximityWorkspace({
             </div>
 
             <div className={styles.mapInsightPanel}>
-              <span>Visible network</span>
+              <span>Map view</span>
               <strong>
-                {count(filteredWithin)} covered / {count(filteredOutside)} gaps
+                {count(mapPairs.length)} Walmart locations rendered
               </strong>
               <small>
-                Furthest visible:{" "}
+                {hiddenMapPairCount
+                  ? `${count(hiddenMapPairCount)} non-contiguous U.S. locations are in the metrics and available by state filter. `
+                  : ""}
+                Furthest rendered:{" "}
                 {furthestVisiblePair
                   ? `${miles(furthestVisiblePair.distance_miles)} · #${furthestVisiblePair.benchmark.store_number} ${furthestVisiblePair.benchmark.city || ""} ${furthestVisiblePair.benchmark.state || ""}`.trim()
                   : "—"}
               </small>
+            </div>
+
+            <div
+              className={styles.mapCoverageCard}
+              aria-label="Walmart coverage by selected competitor radius"
+            >
+              <div className={styles.coverageHead}>
+                <h2>Radius coverage</h2>
+                <button onClick={() => setShowTable(true)} type="button">
+                  Store details
+                </button>
+              </div>
+              <p>
+                Of {count(scopedPairs.length)} Walmart locations in the current
+                scope before the covered/gap display toggle.
+              </p>
+              <div className={styles.mapCoverageRows}>
+                {coverageBands.map((band) => (
+                  <button
+                    aria-pressed={radius === band.miles}
+                    className={styles.mapCoverageRow}
+                    key={band.miles}
+                    onClick={() => void load({ radius: band.miles })}
+                    type="button"
+                  >
+                    <span>{band.label}</span>
+                    <i>
+                      <b
+                        style={{
+                          width: `${band.share === null ? 0 : band.share * 100}%`,
+                        }}
+                      />
+                    </i>
+                    <strong>{count(band.within)}</strong>
+                    <small>{percent(band.share)}</small>
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className={styles.zoomControl} aria-label="Map zoom controls">
@@ -1747,6 +1751,9 @@ export function ProximityWorkspace({
                 −
               </button>
               <span>{Math.round(mapZoom * 100)}%</span>
+            </div>
+            <div className={styles.northControl} aria-hidden="true">
+              N<i />
             </div>
 
             {selectedPair ? (
@@ -1843,18 +1850,20 @@ export function ProximityWorkspace({
                 ) : null}
               </aside>
             ) : null}
-
-            <div className={styles.mapFooter}>
-              <span>
-                <i />
-                Drag, wheel, keyboard, fit, and fullscreen controls ·
-                location-master source
-              </span>
-              <span>
-                Scope coverage 1/3/5/10 mi:{" "}
-                {coverageBands.map((band) => count(band.within)).join(" / ")}
-              </span>
-            </div>
+          </div>
+          <div className={styles.mapFooter}>
+            <span>
+              <i />
+              Drag, wheel, keyboard, fit, and fullscreen controls ·
+              location-master source
+            </span>
+            <span>
+              Scope coverage 1/3/5/10 mi:{" "}
+              {coverageBands.map((band) => count(band.within)).join(" / ")}
+              {hiddenMapPairCount
+                ? ` · map defaults to continental U.S.; ${count(hiddenMapPairCount)} locations remain in details/filters`
+                : ""}
+            </span>
           </div>
         </section>
       </section>
