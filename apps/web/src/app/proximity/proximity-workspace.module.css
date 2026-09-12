@@ -84,13 +84,13 @@
 
 .topbar {
   align-items: flex-start;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
-  border-bottom: 1px solid var(--line);
+  background: transparent;
+  border-bottom: 0;
   display: flex;
   flex-shrink: 0;
   gap: 1.2rem;
   justify-content: space-between;
-  padding: 1rem 1.55rem 0.9rem;
+  padding: 0.95rem 1.55rem 0.35rem;
 }
 
 .dark .quickViews,
@@ -98,17 +98,19 @@
 .dark .mapInsightPanel,
 .dark .mapCoverageCard,
 .dark .zoomControl,
-.dark .detailPanel,
+.dark .selectionToast,
 .dark .baseSelect,
 .dark .iconButton,
+.dark .mapToolButton,
 :global(:root[data-theme="dark"]) .quickViews,
 :global(:root[data-theme="dark"]) .legend,
 :global(:root[data-theme="dark"]) .mapInsightPanel,
 :global(:root[data-theme="dark"]) .mapCoverageCard,
 :global(:root[data-theme="dark"]) .zoomControl,
-:global(:root[data-theme="dark"]) .detailPanel,
+:global(:root[data-theme="dark"]) .selectionToast,
 :global(:root[data-theme="dark"]) .baseSelect,
-:global(:root[data-theme="dark"]) .iconButton {
+:global(:root[data-theme="dark"]) .iconButton,
+:global(:root[data-theme="dark"]) .mapToolButton {
   background: var(--control);
 }
 
@@ -132,7 +134,7 @@
 
 .commandIntro h1 {
   color: var(--ink);
-  font-size: clamp(1.45rem, 2.2vw, 2rem);
+  font-size: clamp(1.25rem, 1.8vw, 1.65rem);
   font-weight: 780;
   letter-spacing: -0.055em;
   line-height: 1.05;
@@ -141,7 +143,7 @@
 
 .commandIntro p {
   color: var(--sub);
-  font-size: 0.78rem;
+  font-size: 0.74rem;
   line-height: 1.42;
   margin: 0;
   max-width: 56rem;
@@ -207,6 +209,7 @@
 }
 
 .actions,
+.shellActions,
 .mapTools,
 .downloadRow {
   align-items: center;
@@ -214,13 +217,15 @@
   gap: 0.45rem;
 }
 
-.actions {
+.actions,
+.shellActions {
   flex-wrap: wrap;
   justify-content: flex-end;
 }
 
 .btn,
-.iconButton {
+.iconButton,
+.mapToolButton {
   align-items: center;
   background: var(--surface);
   border: 1px solid var(--line);
@@ -234,9 +239,25 @@
 }
 
 .btn:hover,
-.iconButton:hover {
+.iconButton:hover,
+.mapToolButton:hover {
   background: var(--surface2);
   border-color: #b9c8d3;
+}
+
+.shellActions {
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Arial,
+    sans-serif;
+}
+
+.shellActions .btn {
+  min-height: 2rem;
+  padding: 0.4rem 0.62rem;
 }
 
 .btn.primary {
@@ -447,12 +468,11 @@
   display: grid;
   flex: 1;
   gap: 0.85rem;
-  grid-template-columns: 19rem minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   min-height: 0;
   padding: 0 1.55rem 1.25rem;
 }
 
-.sidebar,
 .mapSection {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -460,17 +480,6 @@
   box-shadow: 0 2px 10px rgba(24, 58, 75, 0.03);
   min-height: 0;
   overflow: hidden;
-}
-
-.sidebar {
-  display: flex;
-  flex-direction: column;
-}
-
-.sideFilter {
-  border-bottom: 1px solid var(--line);
-  flex-shrink: 0;
-  padding: 0.9rem;
 }
 
 .sectionLine {
@@ -606,6 +615,12 @@
   padding: 0.78rem 0.9rem;
 }
 
+.drawer .layerBox {
+  border: 1px solid var(--line);
+  border-radius: 0.75rem;
+  padding: 0.85rem;
+}
+
 .layerGrid {
   display: grid;
   gap: 0.42rem;
@@ -646,334 +661,6 @@
   opacity: 1;
 }
 
-.coveragePanel {
-  border-bottom: 1px solid var(--line);
-  display: grid;
-  gap: 0.72rem;
-  padding: 0.85rem 0.9rem;
-}
-
-.coveragePanel p {
-  color: var(--sub);
-  font-size: 0.72rem;
-  line-height: 1.42;
-  margin: -0.25rem 0 0;
-}
-
-.coverageRows {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.coverageRow {
-  background: var(--surface2);
-  border: 1px solid var(--line);
-  border-radius: 0.72rem;
-  color: var(--sub);
-  display: grid;
-  gap: 0.34rem;
-  overflow: hidden;
-  padding: 0.62rem 0.66rem 0.7rem;
-  position: relative;
-  text-align: left;
-}
-
-.coverageRow::after {
-  background: var(--line);
-  border-radius: 999px;
-  bottom: 0.38rem;
-  content: "";
-  height: 0.22rem;
-  left: 0.66rem;
-  opacity: 0.7;
-  position: absolute;
-  right: 0.66rem;
-}
-
-.coverageRow span {
-  color: var(--ink);
-  font-size: 0.72rem;
-  font-weight: 860;
-}
-
-.coverageRow strong {
-  color: var(--ink);
-  font-size: 1.3rem;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.05em;
-  line-height: 0.95;
-}
-
-.coverageRow small {
-  font-size: 0.66rem;
-  line-height: 1.3;
-  padding-bottom: 0.15rem;
-}
-
-.coverageRow i {
-  background: linear-gradient(90deg, var(--accent), #65dfbf);
-  border-radius: 999px;
-  bottom: 0.38rem;
-  box-shadow: 0 0 0 1px rgba(8, 125, 114, 0.08);
-  display: block;
-  height: 0.22rem;
-  left: 0.66rem;
-  max-width: calc(100% - 1.32rem);
-  min-width: 0.24rem;
-  position: absolute;
-  z-index: 1;
-}
-
-.coverageRow:hover,
-.coverageRow[aria-pressed="true"] {
-  background: var(--accent-bg);
-  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
-}
-
-.coverageCallout {
-  background: linear-gradient(135deg, var(--accent-bg), var(--surface));
-  border: 1px solid color-mix(in srgb, var(--accent) 20%, var(--line));
-  border-radius: 0.78rem;
-  display: grid;
-  gap: 0.25rem;
-  padding: 0.75rem;
-}
-
-.coverageCallout span {
-  color: var(--accent);
-  font-size: 0.64rem;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.coverageCallout strong {
-  color: var(--ink);
-  font-size: 0.94rem;
-  line-height: 1.25;
-}
-
-.coverageCallout small {
-  color: var(--sub);
-  font-size: 0.68rem;
-  line-height: 1.35;
-}
-
-.bandStack {
-  background:
-    linear-gradient(180deg, rgba(248, 250, 251, 0.92), rgba(255, 255, 255, 1)),
-    var(--surface);
-  border-bottom: 1px solid var(--line);
-  display: grid;
-  flex-shrink: 0;
-  gap: 0.48rem;
-  padding: 0.75rem 0.9rem;
-}
-
-.bandRow {
-  align-items: center;
-  color: var(--sub);
-  display: grid;
-  font-size: 0.67rem;
-  gap: 0.5rem;
-  grid-template-columns: 2.7rem 3.2rem minmax(0, 1fr);
-}
-
-.bandRow strong {
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  font-weight: 850;
-  text-align: right;
-}
-
-.bandRow i {
-  background: linear-gradient(90deg, var(--accent), #65dfbf);
-  border-radius: 999px;
-  box-shadow: 0 0 0 1px rgba(8, 125, 114, 0.08);
-  display: block;
-  height: 0.42rem;
-  min-width: 0.2rem;
-}
-
-.listTop {
-  border-bottom: 1px solid var(--line);
-  flex-shrink: 0;
-  padding: 0.75rem 0.8rem 0.55rem;
-}
-
-.listTabs {
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  gap: 0.65rem;
-}
-
-.listTabs button {
-  background: transparent;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  color: var(--sub);
-  font-size: 0.7rem;
-  font-weight: 800;
-  margin-bottom: -1px;
-  padding: 0 0.1rem 0.55rem;
-}
-
-.listTabs button span {
-  background: var(--surface2);
-  border-radius: 0.3rem;
-  color: var(--sub);
-  font-size: 0.6rem;
-  margin-left: 0.2rem;
-  padding: 0.08rem 0.26rem;
-}
-
-.listTabs .activeTab {
-  border-color: var(--accent);
-  color: var(--ink);
-}
-
-.sortRow {
-  align-items: center;
-  color: var(--sub);
-  display: flex;
-  font-size: 0.66rem;
-  gap: 0.5rem;
-  justify-content: space-between;
-  margin-top: 0.5rem;
-}
-
-.sortRow select {
-  background: transparent;
-  border: 0;
-  color: var(--sub);
-  font-size: 0.66rem;
-  max-width: 8.75rem;
-}
-
-.pairList {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  padding: 0.42rem;
-  scrollbar-width: thin;
-}
-
-.storeCard {
-  align-items: start;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 0.58rem;
-  display: grid;
-  gap: 0.48rem;
-  grid-template-columns: 1.6rem minmax(0, 1fr) auto;
-  padding: 0.62rem 0.45rem;
-  text-align: left;
-  width: 100%;
-}
-
-.storeCard + .storeCard {
-  border-top-color: var(--line);
-}
-
-.storeCard:hover,
-.storeCard[aria-pressed="true"] {
-  background: var(--accent-bg);
-  border-color: color-mix(in srgb, var(--accent) 28%, white);
-}
-
-.retIcon {
-  align-items: center;
-  background: color-mix(in srgb, var(--blue) 9%, white);
-  border-radius: 0.45rem;
-  color: var(--blue);
-  display: flex;
-  font-size: 0.68rem;
-  font-weight: 900;
-  height: 1.55rem;
-  justify-content: center;
-  margin-top: 0.05rem;
-  width: 1.55rem;
-}
-
-.storeText {
-  display: grid;
-  gap: 0.18rem;
-  min-width: 0;
-}
-
-.storeText strong,
-.storeText small {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.storeText strong {
-  font-size: 0.72rem;
-  line-height: 1.35;
-}
-
-.storeText small {
-  color: var(--sub);
-  font-size: 0.66rem;
-}
-
-.distance {
-  color: var(--accent);
-  font-size: 0.72rem;
-  font-variant-numeric: tabular-nums;
-  font-weight: 850;
-  white-space: nowrap;
-}
-
-.distance.out {
-  color: var(--sub);
-}
-
-.listNote,
-.empty {
-  color: var(--sub);
-  font-size: 0.75rem;
-  line-height: 1.45;
-  padding: 1rem 0.7rem;
-  text-align: center;
-}
-
-.sideBottom {
-  align-items: center;
-  background: var(--surface2);
-  border-top: 1px solid var(--line);
-  color: var(--sub);
-  display: flex;
-  flex-shrink: 0;
-  font-size: 0.64rem;
-  gap: 0.55rem;
-  justify-content: space-between;
-  padding: 0.65rem 0.8rem;
-}
-
-.sideBottom button {
-  background: transparent;
-  border: 0;
-  color: var(--accent);
-  font-size: 0.68rem;
-  font-weight: 800;
-  padding: 0;
-}
-
-.primarySideAction {
-  background: var(--accent) !important;
-  border: 1px solid var(--accent) !important;
-  border-radius: 0.58rem !important;
-  color: white !important;
-  min-height: 2rem;
-  padding: 0.45rem 0.68rem !important;
-}
-
-.dark .primarySideAction {
-  color: #062018 !important;
-}
-
 .mapSection {
   background: var(--mapwater);
   display: flex;
@@ -988,7 +675,7 @@
 
 .mapArea {
   flex: 1;
-  min-height: clamp(32rem, 58dvh, 46rem);
+  min-height: clamp(38rem, 72dvh, 56rem);
   overflow: hidden;
   position: relative;
 }
@@ -1130,14 +817,14 @@
 }
 
 .coveredLine {
-  stroke: color-mix(in srgb, var(--accent) 28%, transparent);
-  stroke-width: 0.85;
+  stroke: color-mix(in srgb, var(--accent) 34%, transparent);
+  stroke-width: 1;
 }
 
 .gapLine {
-  stroke: color-mix(in srgb, var(--red) 24%, transparent);
-  stroke-dasharray: 4 3;
-  stroke-width: 0.85;
+  stroke: color-mix(in srgb, var(--red) 34%, transparent);
+  stroke-dasharray: 5 4;
+  stroke-width: 1;
 }
 
 .selectedLine {
@@ -1148,7 +835,8 @@
 
 .competitorPoint {
   fill: var(--red);
-  opacity: 0.76;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--red) 45%, transparent));
+  opacity: 0.86;
 }
 
 .walmartPoint,
@@ -1160,13 +848,14 @@
 
 .walmartPoint {
   fill: var(--blue);
-  opacity: 0.82;
+  filter: drop-shadow(0 0 3px color-mix(in srgb, var(--blue) 45%, transparent));
+  opacity: 0.9;
   stroke: var(--surface);
 }
 
 .walmartPointOut {
   fill: var(--surface);
-  opacity: 0.92;
+  opacity: 0.96;
   stroke: var(--out);
 }
 
@@ -1179,11 +868,11 @@
 }
 
 .radiusRing {
-  fill: color-mix(in srgb, var(--accent) 8%, transparent);
+  fill: color-mix(in srgb, var(--accent) 13%, transparent);
   pointer-events: none;
-  stroke: color-mix(in srgb, var(--accent) 58%, transparent);
-  stroke-dasharray: 6 4;
-  stroke-width: 1.4;
+  stroke: color-mix(in srgb, var(--accent) 76%, transparent);
+  stroke-dasharray: 7 4;
+  stroke-width: 1.8;
 }
 
 .walmartCluster,
@@ -1193,14 +882,16 @@
 
 .walmartCluster circle {
   fill: rgba(22, 115, 219, 0.82);
-  stroke: white;
-  stroke-width: 2;
+  filter: drop-shadow(0 0 8px rgba(93, 168, 255, 0.38));
+  stroke: color-mix(in srgb, white 76%, var(--blue));
+  stroke-width: 2.2;
 }
 
 .competitorCluster circle {
   fill: rgba(218, 71, 96, 0.82);
-  stroke: white;
-  stroke-width: 2;
+  filter: drop-shadow(0 0 8px rgba(255, 114, 133, 0.34));
+  stroke: color-mix(in srgb, white 72%, var(--red));
+  stroke-width: 2.2;
 }
 
 .walmartCluster text,
@@ -1209,6 +900,10 @@
   font-size: 10px;
   font-weight: 900;
   text-anchor: middle;
+}
+
+.selectedPairLayer {
+  pointer-events: none;
 }
 
 .mapToolbar {
@@ -1229,7 +924,7 @@
 }
 
 .quickViews {
-  align-items: center;
+  align-items: stretch;
   background: var(--control);
   border: 1px solid var(--line);
   border-radius: 0.65rem;
@@ -1244,10 +939,45 @@
   border: 0;
   border-radius: 0.45rem;
   color: var(--sub);
-  font-size: 0.68rem;
-  font-weight: 800;
-  padding: 0.48rem 0.6rem;
+  display: grid;
+  gap: 0.12rem;
+  min-width: 8.8rem;
+  padding: 0.5rem 0.65rem;
+  text-align: left;
   white-space: nowrap;
+}
+
+.quickViews button strong {
+  color: inherit;
+  font-size: 0.72rem;
+  font-weight: 850;
+  line-height: 1.1;
+}
+
+.quickViews button small {
+  color: var(--sub);
+  font-size: 0.58rem;
+  font-weight: 680;
+  line-height: 1.15;
+}
+
+.quickViews button.active small {
+  color: var(--muted);
+}
+
+.mapTools {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.mapToolButton {
+  background: var(--control);
+  box-shadow: var(--shadow);
+  color: var(--sub);
+  font-size: 0.68rem;
+  font-weight: 850;
+  min-height: 2.15rem;
+  padding: 0.38rem 0.65rem;
 }
 
 .baseSelect {
@@ -1552,42 +1282,47 @@
   line-height: 1.35;
 }
 
-.detailPanel {
+.selectionToast {
   background: var(--control);
   border: 1px solid var(--line);
-  border-radius: 0.82rem;
+  border-radius: 0.85rem;
   bottom: 1rem;
   box-shadow: var(--shadow);
-  max-width: min(22rem, calc(100% - 2rem));
-  padding: 0.9rem;
+  color: var(--ink);
+  display: grid;
+  gap: 0.12rem;
+  max-width: min(20rem, calc(100% - 2rem));
+  padding: 0.74rem 0.88rem;
   position: absolute;
-  right: 0.85rem;
-  top: 6.7rem;
-  width: 20rem;
+  right: 1rem;
+  text-align: left;
+  width: max-content;
   z-index: 4;
 }
 
-.detailHeader {
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  display: flex;
-  justify-content: space-between;
-  padding-bottom: 0.6rem;
-}
-
-.detailHeader span {
+.selectionToast span {
   color: var(--sub);
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
+  font-size: 0.6rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
 }
 
-.detailHeader strong {
-  display: block;
+.selectionToast strong {
   color: var(--accent);
-  font-size: 1.25rem;
-  text-align: right;
+  font-size: 1.08rem;
+  line-height: 1;
+}
+
+.selectionToast small {
+  color: var(--sub);
+  font-size: 0.66rem;
+  line-height: 1.35;
+}
+
+.detailDrawer {
+  max-width: min(92vw, 28rem);
+  width: min(92vw, 28rem);
 }
 
 .saveButton {
@@ -1973,24 +1708,6 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .explorer {
-    grid-template-areas:
-      "map"
-      "controls";
-  }
-
-  .sidebar {
-    grid-area: controls;
-  }
-
-  .mapSection {
-    grid-area: map;
-  }
-
-  .sidebar {
-    max-height: none;
-  }
-
   .tableSummary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -2009,9 +1726,9 @@
     min-height: 26rem;
   }
 
-  .detailPanel {
-    bottom: 5.5rem;
+  .selectionToast {
     left: 0.85rem;
+    right: 0.85rem;
     width: auto;
   }
 

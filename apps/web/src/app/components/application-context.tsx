@@ -1,6 +1,13 @@
 "use client";
 
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 
 export type ContextControlTone = "neutral" | "ready" | "attention";
 
@@ -42,7 +49,9 @@ export interface ApplicationContextDefinition {
 }
 
 interface ApplicationContextValue {
+  actions: ReactNode | null;
   definition: ApplicationContextDefinition | null;
+  setActions: (actions: ReactNode | null) => void;
   setDefinition: (definition: ApplicationContextDefinition | null) => void;
 }
 
@@ -53,7 +62,11 @@ export function ApplicationContextProvider({
 }: Readonly<{ children: React.ReactNode }>) {
   const [definition, setDefinition] =
     useState<ApplicationContextDefinition | null>(null);
-  const value = useMemo(() => ({ definition, setDefinition }), [definition]);
+  const [actions, setActions] = useState<ReactNode | null>(null);
+  const value = useMemo(
+    () => ({ actions, definition, setActions, setDefinition }),
+    [actions, definition],
+  );
   return (
     <ApplicationContext.Provider value={value}>
       {children}
@@ -77,4 +90,12 @@ export function useApplicationContextDefinition(
     setDefinition(definition);
     return () => setDefinition(null);
   }, [definition, setDefinition]);
+}
+
+export function useApplicationContextActions(actions: ReactNode | null) {
+  const { setActions } = useApplicationContext();
+  useEffect(() => {
+    setActions(actions);
+    return () => setActions(null);
+  }, [actions, setActions]);
 }
