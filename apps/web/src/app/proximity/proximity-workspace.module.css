@@ -723,12 +723,14 @@
   pointer-events: none;
   position: absolute;
   transition: opacity 180ms ease;
+  visibility: hidden;
   z-index: 2;
 }
 
 .tileMapEnhanced {
   opacity: 1;
   pointer-events: auto;
+  visibility: visible;
 }
 
 .tileMap :global(.maplibregl-canvas) {
