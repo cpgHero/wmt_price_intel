@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.132",
+  version: "1.3.133",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2946,6 +2946,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-12",
+              "Local verification passed; production deployment pending",
+              "Proximity adds a backend-prepared fast map summary and removes duplicated map-surface controls.",
+              "The Proximity API now includes a compact map summary with bounded Walmart and represented-competitor clusters plus map bounds so the page can render a source-backed spatial view immediately without requiring the browser to first load and cluster thousands of store relationships. The web map now displays this fast cluster layer on first paint, keeps the OpenFreeMap/MapLibre tile layer hidden until it reaches an idle rendered state, and shows an explicit status pill while tiles load or if they are unavailable. Duplicate map-surface action buttons for controls, fit, fullscreen, settings, and table export were removed; the native app shell remains the single place for those page actions, while the map surface keeps only the analytical covered/white-space view toggles and evidence overlays. This is a Proximity performance, reliability, map-rendering, and control-hierarchy change only; it does not change location rows, coordinates, retailer eligibility, nearest-location pairing, Haversine distance math, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-12",
               "Local verification passed; production deployment pending",

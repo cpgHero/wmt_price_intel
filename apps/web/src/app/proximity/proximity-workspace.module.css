@@ -719,8 +719,16 @@
 
 .tileMap {
   inset: 0;
+  opacity: 0;
+  pointer-events: none;
   position: absolute;
-  z-index: 1;
+  transition: opacity 180ms ease;
+  z-index: 2;
+}
+
+.tileMapEnhanced {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .tileMap :global(.maplibregl-canvas) {
@@ -802,6 +810,99 @@
   top: 50%;
   transform: translate(-50%, -50%);
   z-index: 8;
+}
+
+.mapStatusPill {
+  background: var(--control);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  color: var(--sub);
+  font-size: 0.68rem;
+  font-weight: 760;
+  padding: 0.45rem 0.68rem;
+  position: absolute;
+  right: 0.85rem;
+  top: 5.2rem;
+  z-index: 5;
+}
+
+.staticMap {
+  display: block;
+  height: 100%;
+  min-height: inherit;
+  position: relative;
+  width: 100%;
+  z-index: 1;
+}
+
+.staticWater {
+  fill: var(--mapwater);
+}
+
+.staticGrid {
+  opacity: 0.26;
+  pointer-events: none;
+  stroke: var(--grid);
+  stroke-dasharray: 3 7;
+  stroke-width: 1;
+}
+
+.staticLandLabel {
+  fill: color-mix(in srgb, var(--sub) 42%, transparent);
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  pointer-events: none;
+  text-anchor: middle;
+}
+
+.staticCluster {
+  cursor: pointer;
+  outline: none;
+}
+
+.staticCluster circle {
+  filter: drop-shadow(0 6px 16px rgba(0, 0, 0, 0.26));
+  transition:
+    opacity 140ms ease,
+    stroke-width 140ms ease,
+    transform 140ms ease;
+}
+
+.staticCluster:hover circle,
+.staticCluster:focus-visible circle {
+  opacity: 1;
+  stroke-width: 3.5;
+}
+
+.staticCluster text {
+  fill: #fff;
+  font-size: 10px;
+  font-weight: 900;
+  pointer-events: none;
+  text-anchor: middle;
+}
+
+.staticWalmart circle {
+  fill: rgba(32, 128, 238, 0.88);
+  stroke: rgba(225, 242, 255, 0.92);
+  stroke-width: 2;
+}
+
+.staticCompetitor circle {
+  fill: rgba(255, 95, 122, 0.78);
+  stroke: rgba(255, 229, 234, 0.9);
+  stroke-width: 2;
+}
+
+.staticSelectedLine {
+  opacity: 0.82;
+  pointer-events: none;
+  stroke: var(--accent);
+  stroke-dasharray: 7 6;
+  stroke-linecap: round;
+  stroke-width: 3;
 }
 
 .mapSvg {
@@ -994,7 +1095,7 @@
   align-items: flex-start;
   display: flex;
   gap: 0.75rem;
-  justify-content: space-between;
+  justify-content: flex-start;
   left: 0.85rem;
   pointer-events: none;
   position: absolute;
@@ -1050,6 +1151,7 @@
 }
 
 .mapTools {
+  display: none;
   flex-wrap: wrap;
   justify-content: flex-end;
 }
@@ -1088,7 +1190,7 @@
   left: 0.85rem;
   padding: 0.5rem 0.72rem;
   position: absolute;
-  right: 12.2rem;
+  right: 0.85rem;
   top: 3.85rem;
   z-index: 3;
 }

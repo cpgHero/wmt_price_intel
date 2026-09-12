@@ -3,7 +3,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useApplicationContextActions } from "@/app/components/application-context";
-import type { LocationRetailer, ProximityPair, ProximityView } from "@/lib/api";
+import type {
+  LocationRetailer,
+  ProximityMapCluster,
+  ProximityMapSummary,
+  ProximityPair,
+  ProximityView,
+} from "@/lib/api";
 
 import styles from "./proximity-workspace.module.css";
 
@@ -59,6 +65,7 @@ interface InteractiveMap {
   ): void;
   getCanvas(): HTMLCanvasElement;
   getSource(id: string): GeoJsonSource | undefined;
+  on(event: "idle", callback: () => void): void;
   on(event: "load", callback: () => void): void;
   on(
     event: string,
@@ -72,6 +79,13 @@ interface InteractiveMap {
   remove(): void;
   resize(): void;
   setLayoutProperty(layerId: string, name: string, value: unknown): void;
+}
+
+interface MapBounds {
+  max_latitude: number;
+  max_longitude: number;
+  min_latitude: number;
+  min_longitude: number;
 }
 
 interface MapPopup {
@@ -508,6 +522,140 @@ function setLayerVisibility(
   }
 }
 
+function mapBoundsForPairs(rows: ProximityPair[], country: string): MapBounds {
+  if (!rows.length) {
+    return country === "CANADA"
+      ? {
+          max_latitude: 72,
+          max_longitude: -52,
+          min_latitude: 41,
+          min_longitude: -142,
+        }
+      : {
+          max_latitude: 50,
+          max_longitude: -66,
+          min_latitude: 24,
+          min_longitude: -125,
+        };
+  }
+  const points = rows.flatMap((pair) => [pair.benchmark, pair.competitor]);
+  const latitudes = points.map((point) => point.latitude);
+  const longitudes = points.map((point) => point.longitude);
+  const minLatitude = Math.min(...latitudes);
+  const maxLatitude = Math.max(...latitudes);
+  const minLongitude = Math.min(...longitudes);
+  const maxLongitude = Math.max(...longitudes);
+  const latitudePadding = Math.max(1.5, (maxLatitude - minLatitude) * 0.08);
+  const longitudePadding = Math.max(2.5, (maxLongitude - minLongitude) * 0.08);
+  return {
+    max_latitude: maxLatitude + latitudePadding,
+    max_longitude: maxLongitude + longitudePadding,
+    min_latitude: minLatitude - latitudePadding,
+    min_longitude: minLongitude - longitudePadding,
+  };
+}
+
+function projectToMap(latitude: number, longitude: number, bounds: MapBounds) {
+  const longitudeRange = Math.max(
+    0.0001,
+    bounds.max_longitude - bounds.min_longitude,
+  );
+  const latitudeRange = Math.max(
+    0.0001,
+    bounds.max_latitude - bounds.min_latitude,
+  );
+  const x = ((longitude - bounds.min_longitude) / longitudeRange) * 1000;
+  const y = ((bounds.max_latitude - latitude) / latitudeRange) * 610;
+  return {
+    x: Math.min(982, Math.max(18, x)),
+    y: Math.min(592, Math.max(18, y)),
+  };
+}
+
+function clientClusterRows(
+  rows: ProximityPair[],
+  role: "competitor" | "walmart",
+  selectedRadius: number,
+) {
+  const cellSize = 2;
+  const representedCompetitors = new Set<string>();
+  const buckets = new Map<
+    string,
+    {
+      covered_locations: number;
+      gap_locations: number;
+      latitude_total: number;
+      location_count: number;
+      longitude_total: number;
+      representative_label: string;
+      representative_pair_key: string;
+      role: string;
+    }
+  >();
+  for (const pair of rows) {
+    const location = role === "walmart" ? pair.benchmark : pair.competitor;
+    if (role === "competitor") {
+      if (representedCompetitors.has(location.id)) continue;
+      representedCompetitors.add(location.id);
+    }
+    const key = `${Math.floor(location.latitude / cellSize)}:${Math.floor(
+      location.longitude / cellSize,
+    )}`;
+    const bucket = buckets.get(key) ?? {
+      covered_locations: 0,
+      gap_locations: 0,
+      latitude_total: 0,
+      location_count: 0,
+      longitude_total: 0,
+      representative_label:
+        [location.city, location.state].filter(Boolean).join(", ") ||
+        location.store_name ||
+        location.store_number,
+      representative_pair_key: pairKey(pair),
+      role,
+    };
+    bucket.latitude_total += location.latitude;
+    bucket.longitude_total += location.longitude;
+    bucket.location_count += 1;
+    if (pair.distance_miles <= selectedRadius) bucket.covered_locations += 1;
+    else bucket.gap_locations += 1;
+    buckets.set(key, bucket);
+  }
+  return [...buckets.values()]
+    .map((bucket) => ({
+      covered_locations: bucket.covered_locations,
+      gap_locations: bucket.gap_locations,
+      label:
+        bucket.location_count === 1
+          ? bucket.representative_label
+          : `${bucket.representative_label} · ${bucket.location_count} locations`,
+      latitude: bucket.latitude_total / bucket.location_count,
+      location_count: bucket.location_count,
+      longitude: bucket.longitude_total / bucket.location_count,
+      representative_pair_key: bucket.representative_pair_key,
+      role: bucket.role,
+    }))
+    .sort((left, right) => right.location_count - left.location_count);
+}
+
+function mapSummaryForRows(
+  rows: ProximityPair[],
+  view: ProximityView | null,
+  radius: number,
+  country: string,
+): ProximityMapSummary {
+  if (view?.map_summary && rows.length === view.pairs.length) {
+    return view.map_summary;
+  }
+  return {
+    bounds: mapBoundsForPairs(rows, country),
+    cluster_cell_degrees: 2,
+    competitor_clusters: clientClusterRows(rows, "competitor", radius),
+    schema_version: "1.0.0-proximity-map-summary-client-filtered",
+    walmart_clusters: clientClusterRows(rows, "walmart", radius),
+  };
+}
+
 export function ProximityWorkspace({
   initialView,
   initialRetailers,
@@ -544,6 +692,7 @@ export function ProximityWorkspace({
   const [theme, setTheme] = useState<ThemeMode>(() => initialTheme());
   const [modal, setModal] = useState<ModalKind>(null);
   const [mapReady, setMapReady] = useState(false);
+  const [mapEnhanced, setMapEnhanced] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
   const [savedByComparison, setSavedByComparison] = useState<
     Record<string, string[]>
@@ -803,6 +952,10 @@ export function ProximityWorkspace({
         )
         .slice(0, 4)
     : [];
+  const compactMapSummary = useMemo(
+    () => mapSummaryForRows(filteredPairs, view, radius, country),
+    [country, filteredPairs, radius, view],
+  );
 
   useEffect(() => {
     pairByKeyRef.current = new Map(
@@ -815,6 +968,7 @@ export function ProximityWorkspace({
     let cancelled = false;
     let map: InteractiveMap | null = null;
     setMapReady(false);
+    setMapEnhanced(false);
     setMapError(null);
     loadMapLibrary()
       .then((library) => {
@@ -1084,6 +1238,9 @@ export function ProximityWorkspace({
             map.on("mouseleave", layerId, clearHover);
           }
           setMapReady(true);
+          map.on("idle", () => {
+            if (!cancelled) setMapEnhanced(true);
+          });
         });
       })
       .catch((reason: unknown) => {
@@ -1097,6 +1254,7 @@ export function ProximityWorkspace({
     return () => {
       cancelled = true;
       setMapReady(false);
+      setMapEnhanced(false);
       popupRef.current?.remove();
       popupRef.current = null;
       mapRef.current = null;
@@ -1362,13 +1520,32 @@ export function ProximityWorkspace({
       <section className={styles.explorer}>
         <section className={styles.mapSection} aria-label="Proximity map">
           <div className={styles.mapArea}>
-            <div className={styles.tileMap} ref={mapContainerRef} />
-            {!mapReady ? (
-              <div className={styles.mapBusy}>Loading OpenFreeMap tiles…</div>
+            <StaticProximityMap
+              country={country}
+              onSelect={(key) => {
+                setSelectedKey(key);
+                setShowSelectedDetail(true);
+              }}
+              selectedPair={selectedPair}
+              showCompetitors={showCompetitors}
+              showLinks={showLinks}
+              showWalmart={showWalmart}
+              summary={compactMapSummary}
+            />
+            <div
+              className={`${styles.tileMap} ${mapEnhanced ? styles.tileMapEnhanced : ""}`}
+              ref={mapContainerRef}
+            />
+            {!mapEnhanced ? (
+              <div className={styles.mapStatusPill}>
+                Fast source-backed cluster map shown · OpenFreeMap tiles loading
+                in the background
+              </div>
             ) : null}
             {mapError ? (
               <div className={`${styles.mapBusy} ${styles.warning}`}>
-                {mapError}
+                Tile map unavailable; showing the fast source-backed cluster
+                map. {mapError}
               </div>
             ) : null}
             <div className={styles.mapToolbar}>
@@ -1399,54 +1576,6 @@ export function ProximityWorkspace({
                 >
                   <strong>White-space stores</strong>
                   <small>Nearest competitor is farther away</small>
-                </button>
-              </div>
-              <div className={styles.mapTools}>
-                <button
-                  className={styles.mapToolButton}
-                  onClick={() => setShowFilters(true)}
-                  title="Open retailer, radius, filters, and map layers"
-                  type="button"
-                >
-                  Controls
-                </button>
-                <button
-                  className={styles.iconButton}
-                  onClick={() => {
-                    if (mapRef.current) {
-                      fitToPairs(mapRef.current, filteredPairs, country);
-                    }
-                  }}
-                  title="Fit visible network"
-                  type="button"
-                >
-                  ⤢
-                </button>
-                <button
-                  className={styles.iconButton}
-                  onClick={() =>
-                    void mapContainerRef.current?.requestFullscreen()
-                  }
-                  title="Fullscreen map"
-                  type="button"
-                >
-                  ⛶
-                </button>
-                <button
-                  className={styles.iconButton}
-                  onClick={() => setShowFilters(true)}
-                  title="Open controls and filters"
-                  type="button"
-                >
-                  ⚙
-                </button>
-                <button
-                  className={styles.iconButton}
-                  onClick={() => setShowTable(true)}
-                  title="Open full location table"
-                  type="button"
-                >
-                  ⇩
                 </button>
               </div>
             </div>
@@ -2005,6 +2134,150 @@ export function ProximityWorkspace({
         />
       ) : null}
     </div>
+  );
+}
+
+function StaticProximityMap({
+  onSelect,
+  selectedPair,
+  showCompetitors,
+  showLinks,
+  showWalmart,
+  summary,
+}: Readonly<{
+  country: string;
+  onSelect: (key: string) => void;
+  selectedPair: ProximityPair | null;
+  showCompetitors: boolean;
+  showLinks: boolean;
+  showWalmart: boolean;
+  summary: ProximityMapSummary;
+}>) {
+  const bounds =
+    summary.bounds ??
+    ({
+      max_latitude: 50,
+      max_longitude: -66,
+      min_latitude: 24,
+      min_longitude: -125,
+    } satisfies MapBounds);
+  const selectedStart = selectedPair
+    ? projectToMap(
+        selectedPair.benchmark.latitude,
+        selectedPair.benchmark.longitude,
+        bounds,
+      )
+    : null;
+  const selectedEnd = selectedPair
+    ? projectToMap(
+        selectedPair.competitor.latitude,
+        selectedPair.competitor.longitude,
+        bounds,
+      )
+    : null;
+  const renderCluster = (
+    cluster: ProximityMapCluster,
+    className: string,
+    index: number,
+  ) => {
+    const point = projectToMap(cluster.latitude, cluster.longitude, bounds);
+    const radius = Math.min(
+      34,
+      Math.max(6, 5 + Math.sqrt(cluster.location_count) * 2.2),
+    );
+    const title = `${cluster.label}: ${count(cluster.location_count)} ${cluster.role} location${cluster.location_count === 1 ? "" : "s"}; ${count(cluster.covered_locations)} covered and ${count(cluster.gap_locations)} gaps at the selected radius.`;
+    const key = cluster.representative_pair_key;
+    return (
+      <g
+        className={`${styles.staticCluster} ${className}`}
+        key={`${cluster.role}-${index}-${cluster.latitude}-${cluster.longitude}`}
+        onClick={() => {
+          if (key) onSelect(key);
+        }}
+        onKeyDown={(event) => {
+          if (key && (event.key === "Enter" || event.key === " ")) {
+            event.preventDefault();
+            onSelect(key);
+          }
+        }}
+        role={key ? "button" : "img"}
+        tabIndex={key ? 0 : -1}
+      >
+        <title>{title}</title>
+        <circle cx={point.x} cy={point.y} r={radius} />
+        {cluster.location_count >= 3 ? (
+          <text x={point.x} y={point.y + 3}>
+            {cluster.location_count > 999
+              ? `${Math.round(cluster.location_count / 100) / 10}k`
+              : cluster.location_count}
+          </text>
+        ) : null}
+      </g>
+    );
+  };
+  return (
+    <svg
+      aria-label="Fast source-backed proximity cluster map"
+      className={styles.staticMap}
+      role="img"
+      viewBox="0 0 1000 610"
+    >
+      <defs>
+        <radialGradient id="proximity-static-glow" cx="50%" cy="50%" r="65%">
+          <stop offset="0%" stopColor="rgba(58, 140, 172, 0.34)" />
+          <stop offset="62%" stopColor="rgba(30, 72, 92, 0.24)" />
+          <stop offset="100%" stopColor="rgba(12, 26, 36, 0.06)" />
+        </radialGradient>
+      </defs>
+      <rect className={styles.staticWater} height="610" width="1000" />
+      <rect fill="url(#proximity-static-glow)" height="610" width="1000" />
+      <g className={styles.staticGrid}>
+        {Array.from({ length: 12 }).map((_, index) => (
+          <line
+            key={`v-${index}`}
+            x1={80 + index * 74}
+            x2={80 + index * 74}
+            y1="40"
+            y2="570"
+          />
+        ))}
+        {Array.from({ length: 7 }).map((_, index) => (
+          <line
+            key={`h-${index}`}
+            x1="40"
+            x2="960"
+            y1={70 + index * 78}
+            y2={70 + index * 78}
+          />
+        ))}
+      </g>
+      <text className={styles.staticLandLabel} x="500" y="315">
+        LOCATION MASTER NETWORK
+      </text>
+      {showLinks && selectedStart && selectedEnd ? (
+        <line
+          className={styles.staticSelectedLine}
+          x1={selectedStart.x}
+          x2={selectedEnd.x}
+          y1={selectedStart.y}
+          y2={selectedEnd.y}
+        />
+      ) : null}
+      {showCompetitors
+        ? summary.competitor_clusters
+            .slice(0, 160)
+            .map((cluster, index) =>
+              renderCluster(cluster, styles.staticCompetitor, index),
+            )
+        : null}
+      {showWalmart
+        ? summary.walmart_clusters
+            .slice(0, 180)
+            .map((cluster, index) =>
+              renderCluster(cluster, styles.staticWalmart, index),
+            )
+        : null}
+    </svg>
   );
 }
 

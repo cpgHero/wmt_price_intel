@@ -246,6 +246,15 @@ async def test_retailer_proximity_pairs_walmart_to_one_selected_competitor() -> 
     assert body["summary"]["paired_locations"] == 2
     assert body["summary"]["competitor_mappable_locations"] == 2
     assert body["summary"]["within_selected_radius"] == 1
+    assert body["map_summary"]["schema_version"] == "1.0.0-proximity-map-summary"
+    assert body["map_summary"]["bounds"]["min_latitude"] <= 36.0104
+    assert (
+        sum(cluster["location_count"] for cluster in body["map_summary"]["walmart_clusters"]) == 2
+    )
+    assert (
+        sum(cluster["location_count"] for cluster in body["map_summary"]["competitor_clusters"])
+        == 1
+    )
     assert {pair["competitor"]["store_number"] for pair in body["pairs"]} == {"c-near"}
     assert "not drive time" in body["distance_methodology"]
 
