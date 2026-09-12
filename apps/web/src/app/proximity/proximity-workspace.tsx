@@ -440,8 +440,8 @@ function selectedRadiusFeature(
 ): FeatureCollection {
   if (!pair) return featureCollection([]);
   const earthRadiusMiles = 3958.8;
-  const latitude = (pair.benchmark.latitude * Math.PI) / 180;
-  const longitude = (pair.benchmark.longitude * Math.PI) / 180;
+  const latitude = (pair.competitor.latitude * Math.PI) / 180;
+  const longitude = (pair.competitor.longitude * Math.PI) / 180;
   const angular = radiusMiles / earthRadiusMiles;
   const coordinates: [number, number][] = [];
   for (let step = 0; step <= 96; step += 1) {
@@ -467,11 +467,44 @@ function selectedRadiusFeature(
       properties: {
         key: pairKey(pair),
         radius_miles: radiusMiles,
-        role: "selected_radius",
+        role: "selected_competitor_radius",
       },
       type: "Feature",
     },
   ]);
+}
+
+function radiusEllipse(
+  pair: ProximityPair | null,
+  radiusMiles: number,
+  bounds: MapBounds,
+) {
+  if (!pair) return null;
+  const center = projectToMap(
+    pair.competitor.latitude,
+    pair.competitor.longitude,
+    bounds,
+  );
+  const latitudeMiles = 69.172;
+  const longitudeMiles =
+    latitudeMiles *
+    Math.max(0.14, Math.cos((pair.competitor.latitude * Math.PI) / 180));
+  const north = projectToMap(
+    pair.competitor.latitude + radiusMiles / latitudeMiles,
+    pair.competitor.longitude,
+    bounds,
+  );
+  const east = projectToMap(
+    pair.competitor.latitude,
+    pair.competitor.longitude + radiusMiles / longitudeMiles,
+    bounds,
+  );
+  return {
+    cx: center.x,
+    cy: center.y,
+    rx: Math.max(9, Math.abs(east.x - center.x)),
+    ry: Math.max(9, Math.abs(north.y - center.y)),
+  };
 }
 
 function fitToPairs(
@@ -884,6 +917,22 @@ export function ProximityWorkspace({
     selectedPair ??
     (selectedKey ? scopedPairByKey.get(selectedKey) : null) ??
     null;
+  const selectedCompetitorLocationId =
+    selectedCoveragePair?.competitor.id ?? null;
+  const selectedNetworkPairs = useMemo(
+    () =>
+      selectedCompetitorLocationId
+        ? scopedPairs
+            .filter(
+              (pair) => pair.competitor.id === selectedCompetitorLocationId,
+            )
+            .sort((left, right) => left.distance_miles - right.distance_miles)
+        : [],
+    [scopedPairs, selectedCompetitorLocationId],
+  );
+  const selectedNetworkWithin = selectedNetworkPairs.filter(
+    (pair) => pair.distance_miles <= radius,
+  ).length;
   const filteredWithin = filteredPairs.filter(
     (pair) => pair.distance_miles <= radius,
   ).length;
@@ -932,11 +981,9 @@ export function ProximityWorkspace({
   const relationshipFeatures = useMemo(
     () =>
       featureCollection(
-        filteredPairs
-          .slice(0, 3000)
-          .map((pair) => relationshipFeature(pair, radius)),
+        selectedNetworkPairs.map((pair) => relationshipFeature(pair, radius)),
       ),
-    [filteredPairs, radius],
+    [radius, selectedNetworkPairs],
   );
   const selectedRadiusFeatures = useMemo(
     () =>
@@ -944,7 +991,7 @@ export function ProximityWorkspace({
     [radius, selectedCoveragePair, showRings],
   );
   const selectedPeers = selectedPair
-    ? filteredPairs
+    ? selectedNetworkPairs
         .filter(
           (pair) =>
             pair.competitor.id === selectedPair.competitor.id &&
@@ -1172,6 +1219,11 @@ export function ProximityWorkspace({
             if (!pair) return;
             setSelectedKey(pairKey(pair));
             setShowSelectedDetail(true);
+            map.easeTo({
+              center: [pair.competitor.longitude, pair.competitor.latitude],
+              duration: 420,
+              zoom: 10.8,
+            });
           };
           const expandCluster =
             (sourceId: string, layerId: string) =>
@@ -1285,14 +1337,8 @@ export function ProximityWorkspace({
       ["selected-radius-fill", "selected-radius-line"],
       showRings,
     );
-    window.setTimeout(() => {
-      map.resize();
-      fitToPairs(map, filteredPairs, country);
-    }, 0);
   }, [
     competitorPointFeatures,
-    country,
-    filteredPairs,
     mapReady,
     relationshipFeatures,
     selectedRadiusFeatures,
@@ -1302,6 +1348,15 @@ export function ProximityWorkspace({
     showWalmart,
     walmartPointFeatures,
   ]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    window.setTimeout(() => {
+      map.resize();
+      fitToPairs(map, filteredPairs, country);
+    }, 0);
+  }, [country, filteredPairs, mapReady]);
 
   function resetView() {
     setQuery("");
@@ -1322,6 +1377,23 @@ export function ProximityWorkspace({
         [shortlistStorageKey]: Array.from(currentKeys),
       };
     });
+  }
+
+  function focusMapOnPair(pair: ProximityPair) {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    map.easeTo({
+      center: [pair.competitor.longitude, pair.competitor.latitude],
+      duration: 420,
+      zoom: Math.max(radius <= 1 ? 11.4 : radius <= 3 ? 10.2 : 9.1, 8.5),
+    });
+  }
+
+  function selectRelationship(key: string) {
+    const pair = pairByKeyRef.current.get(key) ?? scopedPairByKey.get(key);
+    setSelectedKey(key);
+    setShowSelectedDetail(true);
+    if (pair) focusMapOnPair(pair);
   }
 
   const shellActions = useMemo(
@@ -1517,20 +1589,63 @@ export function ProximityWorkspace({
         />
       </section>
 
+      <section
+        className={styles.coverageCard}
+        aria-label="Walmart coverage by selected competitor radius"
+      >
+        <div className={styles.coverageHead}>
+          <div>
+            <h2>Coverage by radius</h2>
+            <p>
+              Percent of paired Walmart locations whose nearest{" "}
+              {view?.competitor.display_name ?? "competitor"} is within each
+              straight-line radius.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowTable(true)}
+            title="Open the downloadable location table"
+            type="button"
+          >
+            Store details
+          </button>
+        </div>
+        <div className={styles.coverageRows}>
+          {coverageBands.map((band) => (
+            <button
+              aria-pressed={radius === band.miles}
+              className={styles.coverageRow}
+              key={band.miles}
+              onClick={() => void load({ radius: band.miles })}
+              title={`Switch selected radius to ${band.miles} mile${band.miles === 1 ? "" : "s"}`}
+              type="button"
+            >
+              <span>{band.label}</span>
+              <i>
+                <b style={{ width: percent(band.share) }} />
+              </i>
+              <strong>{count(band.within)}</strong>
+              <small>{count(band.outside)} gaps</small>
+              <small>{percent(band.share)}</small>
+            </button>
+          ))}
+        </div>
+      </section>
+
       <section className={styles.explorer}>
         <section className={styles.mapSection} aria-label="Proximity map">
           <div className={styles.mapArea}>
             <StaticProximityMap
               country={country}
-              onSelect={(key) => {
-                setSelectedKey(key);
-                setShowSelectedDetail(true);
-              }}
+              onSelect={selectRelationship}
               selectedPair={selectedPair}
               showCompetitors={showCompetitors}
               showLinks={showLinks}
+              showRings={showRings}
               showWalmart={showWalmart}
+              radius={radius}
               summary={compactMapSummary}
+              selectedNetworkPairs={selectedNetworkPairs}
             />
             <div
               aria-hidden={!mapEnhanced}
@@ -1581,21 +1696,21 @@ export function ProximityWorkspace({
               </div>
             </div>
             <div className={styles.legend}>
-              <span>
+              <span title="Blue circles are grouped Walmart locations from the active filtered set.">
                 <i className={styles.walmartDot} />
-                Walmart
+                Walmart clusters
               </span>
-              <span>
+              <span title="Red squares/circles are competitor sites represented as nearest neighbors to at least one Walmart.">
                 <i className={styles.competitorDot} />
-                Competitor
+                Represented competitor clusters
               </span>
-              <span>
+              <span title="Lines show Walmart stores assigned to the selected competitor site. Solid lines are inside the selected radius; dashed lines are outside.">
                 <i className={styles.coveredLineLegend} />
-                within radius
+                selected network links
               </span>
-              <span>
-                <i className={styles.gapLineLegend} />
-                outside radius
+              <span title="The dashed ring is the selected radius around the selected competitor site.">
+                <i className={styles.radiusRingLegend} />
+                selected radius
               </span>
             </div>
             <div className={styles.mapInsightPanel}>
@@ -1608,46 +1723,6 @@ export function ProximityWorkspace({
                     ? `${count(filteredOutside)} locations are white-space at the selected radius.`
                     : `${count(filteredWithin)} covered / ${count(filteredOutside)} white-space at ${radius} mile${radius === 1 ? "" : "s"}.`}
               </small>
-            </div>
-            <div
-              className={styles.mapCoverageCard}
-              aria-label="Walmart coverage by selected competitor radius"
-            >
-              <div className={styles.coverageHead}>
-                <h2>Coverage by radius</h2>
-                <button
-                  onClick={() => setShowTable(true)}
-                  title="Open the downloadable location table"
-                  type="button"
-                >
-                  Store details
-                </button>
-              </div>
-              <p>
-                Percent of paired Walmart locations whose nearest{" "}
-                {view?.competitor.display_name ?? "competitor"} is within each
-                straight-line radius.
-              </p>
-              <div className={styles.mapCoverageRows}>
-                {coverageBands.map((band) => (
-                  <button
-                    aria-pressed={radius === band.miles}
-                    className={styles.mapCoverageRow}
-                    key={band.miles}
-                    onClick={() => void load({ radius: band.miles })}
-                    title={`Switch selected radius to ${band.miles} mile${band.miles === 1 ? "" : "s"}`}
-                    type="button"
-                  >
-                    <span>{band.label}</span>
-                    <i>
-                      <b style={{ width: percent(band.share) }} />
-                    </i>
-                    <strong>{count(band.within)}</strong>
-                    <small>{count(band.outside)} gaps</small>
-                    <small>{percent(band.share)}</small>
-                  </button>
-                ))}
-              </div>
             </div>
             {selectedPair ? (
               <button
@@ -1716,6 +1791,17 @@ export function ProximityWorkspace({
             >
               {savedKeys.has(pairKey(selectedPair)) ? "Saved ★" : "Save ☆"}
             </button>
+            <div className={styles.drawerStats}>
+              <span>Selected competitor network</span>
+              <strong>{count(selectedNetworkPairs.length)}</strong>
+              <small>
+                Visible Walmart locations whose nearest{" "}
+                {selectedPair.competitor.retailer_display_name} site is #
+                {selectedPair.competitor.store_number};{" "}
+                {count(selectedNetworkWithin)} are within {radius} mile
+                {radius === 1 ? "" : "s"}.
+              </small>
+            </div>
             <div className={styles.detailStack}>
               <article>
                 <b>
@@ -1778,7 +1864,10 @@ export function ProximityWorkspace({
                 {selectedPeers.map((pair) => (
                   <button
                     key={pair.benchmark.id}
-                    onClick={() => setSelectedKey(pairKey(pair))}
+                    onClick={() => {
+                      setSelectedKey(pairKey(pair));
+                      focusMapOnPair(pair);
+                    }}
                     title="Select this Walmart relationship"
                     type="button"
                   >
@@ -2140,17 +2229,23 @@ export function ProximityWorkspace({
 
 function StaticProximityMap({
   onSelect,
+  radius,
   selectedPair,
+  selectedNetworkPairs,
   showCompetitors,
   showLinks,
+  showRings,
   showWalmart,
   summary,
 }: Readonly<{
   country: string;
   onSelect: (key: string) => void;
+  radius: number;
   selectedPair: ProximityPair | null;
+  selectedNetworkPairs: ProximityPair[];
   showCompetitors: boolean;
   showLinks: boolean;
+  showRings: boolean;
   showWalmart: boolean;
   summary: ProximityMapSummary;
 }>) {
@@ -2176,6 +2271,21 @@ function StaticProximityMap({
         bounds,
       )
     : null;
+  const selectedRing = radiusEllipse(selectedPair, radius, bounds);
+  const selectedNetwork = selectedNetworkPairs.slice(0, 220).map((pair) => ({
+    end: projectToMap(
+      pair.competitor.latitude,
+      pair.competitor.longitude,
+      bounds,
+    ),
+    key: pairKey(pair),
+    pair,
+    start: projectToMap(
+      pair.benchmark.latitude,
+      pair.benchmark.longitude,
+      bounds,
+    ),
+  }));
   const renderCluster = (
     cluster: ProximityMapCluster,
     className: string,
@@ -2256,14 +2366,43 @@ function StaticProximityMap({
       <text className={styles.staticLandLabel} x="500" y="315">
         LOCATION MASTER NETWORK
       </text>
-      {showLinks && selectedStart && selectedEnd ? (
-        <line
-          className={styles.staticSelectedLine}
-          x1={selectedStart.x}
-          x2={selectedEnd.x}
-          y1={selectedStart.y}
-          y2={selectedEnd.y}
-        />
+      {showRings && selectedRing ? (
+        <ellipse
+          className={styles.staticRadiusRing}
+          cx={selectedRing.cx}
+          cy={selectedRing.cy}
+          rx={selectedRing.rx}
+          ry={selectedRing.ry}
+        >
+          <title>
+            Selected {radius} mile radius around{" "}
+            {selectedPair?.competitor.retailer_display_name ?? "competitor"} #
+            {selectedPair?.competitor.store_number ?? ""}
+          </title>
+        </ellipse>
+      ) : null}
+      {showLinks && selectedNetwork.length ? (
+        <g className={styles.staticNetworkLayer}>
+          <title>
+            {count(selectedNetwork.length)} Walmart assignment
+            {selectedNetwork.length === 1 ? "" : "s"} to the selected competitor
+            site.
+          </title>
+          {selectedNetwork.map(({ end, key, pair, start }) => (
+            <line
+              className={
+                pair.distance_miles <= radius
+                  ? styles.staticNetworkLine
+                  : styles.staticNetworkLineOut
+              }
+              key={key}
+              x1={start.x}
+              x2={end.x}
+              y1={start.y}
+              y2={end.y}
+            />
+          ))}
+        </g>
       ) : null}
       {showCompetitors
         ? summary.competitor_clusters
@@ -2279,6 +2418,58 @@ function StaticProximityMap({
               renderCluster(cluster, styles.staticWalmart, index),
             )
         : null}
+      {showLinks && selectedNetwork.length ? (
+        <g className={styles.staticNetworkPoints}>
+          {selectedNetwork.map(({ key, pair, start }) => (
+            <circle
+              className={
+                pair.distance_miles <= radius
+                  ? styles.staticNetworkPoint
+                  : styles.staticNetworkPointOut
+              }
+              key={`${key}-walmart`}
+              cx={start.x}
+              cy={start.y}
+              r={
+                selectedPair && pairKey(pair) === pairKey(selectedPair)
+                  ? 4.6
+                  : 3.4
+              }
+            >
+              <title>
+                Walmart #{pair.benchmark.store_number} is{" "}
+                {miles(pair.distance_miles)} from{" "}
+                {pair.competitor.retailer_display_name} #
+                {pair.competitor.store_number}.
+              </title>
+            </circle>
+          ))}
+          {selectedEnd ? (
+            <rect
+              className={styles.staticSelectedCompetitor}
+              height="13"
+              rx="3"
+              width="13"
+              x={selectedEnd.x - 6.5}
+              y={selectedEnd.y - 6.5}
+            >
+              <title>
+                Selected {selectedPair?.competitor.retailer_display_name} #
+                {selectedPair?.competitor.store_number}
+              </title>
+            </rect>
+          ) : null}
+          {selectedStart && selectedEnd ? (
+            <line
+              className={styles.staticSelectedLine}
+              x1={selectedStart.x}
+              x2={selectedEnd.x}
+              y1={selectedStart.y}
+              y2={selectedEnd.y}
+            />
+          ) : null}
+        </g>
+      ) : null}
     </svg>
   );
 }

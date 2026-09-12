@@ -432,7 +432,7 @@
   flex-shrink: 0;
   gap: 0.75rem;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding: 0.85rem 1.55rem 0.9rem;
+  padding: 0.85rem 1.55rem 0.7rem;
 }
 
 .kpi {
@@ -494,6 +494,98 @@
   background: var(--red-bg);
   border-color: color-mix(in srgb, var(--red) 18%, white);
   color: var(--red);
+}
+
+.coverageCard {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  box-shadow: 0 2px 10px rgba(24, 58, 75, 0.03);
+  display: grid;
+  flex-shrink: 0;
+  gap: 0.72rem;
+  margin: 0 1.55rem 0.9rem;
+  padding: 0.86rem 1rem;
+}
+
+.coverageCard .coverageHead {
+  margin: 0;
+}
+
+.coverageHead p {
+  color: var(--sub);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  margin: 0.25rem 0 0;
+}
+
+.coverageRows {
+  display: grid;
+  gap: 0.42rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.coverageRow {
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 0.62rem;
+  color: var(--sub);
+  display: grid;
+  font-size: 0.68rem;
+  gap: 0.38rem;
+  grid-template-columns: 3rem minmax(5rem, 1fr) 3.3rem 4.2rem 3rem;
+  min-height: 3.15rem;
+  padding: 0.56rem 0.62rem;
+  text-align: left;
+}
+
+.coverageRow:hover,
+.coverageRow[aria-pressed="true"] {
+  background: var(--accent-bg);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  color: var(--accent);
+}
+
+.coverageRow span,
+.coverageRow strong,
+.coverageRow small {
+  font-variant-numeric: tabular-nums;
+}
+
+.coverageRow span {
+  color: var(--ink);
+  font-weight: 860;
+}
+
+.coverageRow i {
+  background: var(--line);
+  border-radius: 999px;
+  display: block;
+  height: 0.42rem;
+  overflow: hidden;
+}
+
+.coverageRow i b {
+  background: linear-gradient(90deg, var(--accent), #65dfbf);
+  border-radius: inherit;
+  display: block;
+  height: 100%;
+}
+
+.coverageRow strong {
+  color: var(--ink);
+  font-size: 0.78rem;
+  text-align: right;
+}
+
+.coverageRow small {
+  font-size: 0.62rem;
+  text-align: right;
+}
+
+.coverageRow small:first-of-type {
+  text-align: left;
 }
 
 .explorer {
@@ -905,6 +997,59 @@
   stroke-dasharray: 7 6;
   stroke-linecap: round;
   stroke-width: 3;
+}
+
+.staticRadiusRing {
+  fill: color-mix(in srgb, var(--accent) 16%, transparent);
+  pointer-events: none;
+  stroke: color-mix(in srgb, var(--accent) 84%, transparent);
+  stroke-dasharray: 8 6;
+  stroke-linecap: round;
+  stroke-width: 2.2;
+}
+
+.staticNetworkLayer,
+.staticNetworkPoints {
+  pointer-events: none;
+}
+
+.staticNetworkLine,
+.staticNetworkLineOut {
+  fill: none;
+  opacity: 0.74;
+  stroke-linecap: round;
+  stroke-width: 1.45;
+}
+
+.staticNetworkLine {
+  stroke: color-mix(in srgb, var(--accent) 74%, transparent);
+}
+
+.staticNetworkLineOut {
+  stroke: color-mix(in srgb, var(--out) 68%, transparent);
+  stroke-dasharray: 5 5;
+}
+
+.staticNetworkPoint,
+.staticNetworkPointOut {
+  stroke: var(--surface);
+  stroke-width: 1.4;
+}
+
+.staticNetworkPoint {
+  fill: var(--blue);
+}
+
+.staticNetworkPointOut {
+  fill: var(--surface);
+  stroke: var(--out);
+}
+
+.staticSelectedCompetitor {
+  fill: var(--red);
+  filter: drop-shadow(0 0 8px color-mix(in srgb, var(--red) 48%, transparent));
+  stroke: white;
+  stroke-width: 2;
 }
 
 .mapSvg {
@@ -1351,7 +1496,8 @@
 .walmartDot,
 .competitorDot,
 .coveredLineLegend,
-.gapLineLegend {
+.gapLineLegend,
+.radiusRingLegend {
   display: inline-block;
   flex-shrink: 0;
 }
@@ -1382,6 +1528,13 @@
 
 .gapLineLegend {
   border-top: 2px dashed var(--sub);
+}
+
+.radiusRingLegend {
+  border: 2px dashed var(--accent);
+  border-radius: 50%;
+  height: 0.72rem;
+  width: 0.72rem;
 }
 
 .zoomControl {
@@ -1896,6 +2049,10 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .coverageRows {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .tableSummary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1922,6 +2079,14 @@
 
   .tableSummary {
     grid-template-columns: 1fr;
+  }
+
+  .coverageRows {
+    grid-template-columns: 1fr;
+  }
+
+  .coverageRow {
+    grid-template-columns: 3rem minmax(5rem, 1fr) 3.3rem 4.2rem 3rem;
   }
 }
 
