@@ -251,9 +251,11 @@ MetricsCart uses query-parameter authentication.
    `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, `WORKOS_REDIRECT_URI`, and a Fernet-compatible
    `WORKOS_COOKIE_PASSWORD`. Keep `CPGHERO_CUSTOMER_AUTH_PROVIDER=disabled` until customer users,
    accounts, memberships, entitlements, invitations, signed webhook delivery, and external identity
-   mappings are explicitly provisioned and the customer-auth cutover has passed. Add
-   `WORKOS_WEBHOOK_SECRET` only after a real WorkOS webhook endpoint exists; do not invent or
-   pre-seed a placeholder webhook secret.
+   mappings are explicitly provisioned and the customer-auth cutover has passed. Register WorkOS
+   webhook delivery to the public web URL path
+   `https://web-production-ee2a4.up.railway.app/api/webhooks/workos`; the web service forwards
+   the raw signed payload to the internal API receiver. Add `WORKOS_WEBHOOK_SECRET` only after the
+   real WorkOS webhook endpoint exists; do not invent or pre-seed a placeholder webhook secret.
 5. Deploy `api`. Its pre-deploy log must show Alembic at the repository's single current migration
    head (System Operations currently expects `0056_customer_auth_provisioning`); then verify
    `/health/live` and `/health/ready` inside Railway.

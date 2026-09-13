@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 13, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.147",
+  version: "1.3.148",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -1293,7 +1293,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "CI now includes a customer-visible provider-masking gate for non-admin app routes and current CPGHero platform planning docs. Internal adapters, private admin/operations surfaces, tests, source-material records, and migrations remain separately classified until the broader visibility-boundary cleanup is complete.",
             "The account-access foundation now defines CPGHero accounts, workspaces, memberships, roles, permissions, entitlements, and account/workspace audit-event context. Duplicated admin-token checks for core internal admin paths now resolve through a shared CPGHero system AccessPrincipal. Customer login and account/workspace row-level enforcement remain separate follow-up work.",
             "WorkOS AuthKit/User Management is the selected customer authentication provider. The WorkOS application has callback, homepage, login-initiation, and sign-out URLs configured, and Railway stores WorkOS variables for the web and API services with customer auth still disabled. The API now implements login, callback, logout, /api/v1/me, sealed-session verification, and session-to-CPGHero-principal resolution behind the WorkOS provider flag. CPGHero remains the authorization source of truth for account/workspace membership, roles, permissions, entitlements, projects, report access, Live API usage limits, and billing. Enterprise SSO, Directory Sync, and SCIM are not part of the initial rollout.",
-            "Migration 0056 adds the owner-only customer provisioning and identity-event audit foundation: prepared invitations, account/workspace user mappings, role and entitlement assignment, and a signed WorkOS webhook receiver that can activate CPGHero membership only after a matching invitation is accepted. Customer-facing responses remain CPGHero-facing and do not expose provider subject IDs.",
+            "Migration 0056 adds the owner-only customer provisioning and identity-event audit foundation: prepared invitations, account/workspace user mappings, role and entitlement assignment, and a signed WorkOS webhook receiver that can activate CPGHero membership only after a matching invitation is accepted. The public Next.js route /api/webhooks/workos forwards raw signed WorkOS payloads to the internal API receiver without forwarding customer cookies or authorization headers. Customer-facing responses remain CPGHero-facing and do not expose provider subject IDs.",
             "The non-production customer-principal harness is explicit, opt-in, and header-backed for local/API tests only. Production rejects those headers. Live customer sessions are cryptographically validated through WorkOS and then fail closed unless the WorkOS user and organization subjects are provisioned through CPGHero external-identity and membership rows.",
           ],
         },
@@ -1305,7 +1305,7 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "Customer authentication",
               "WorkOS AuthKit",
-              "Login, callback, logout, PKCE flow state, sealed session cookies, and session validation are implemented behind the provider flag; Railway production still leaves customer login disabled until cutover.",
+              "Login, callback, logout, PKCE flow state, sealed session cookies, session validation, and a same-origin WorkOS webhook ingress route are implemented behind the provider flag; Railway production still leaves customer login disabled until cutover.",
             ],
             [
               "Identity mapping",
@@ -2983,6 +2983,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-13",
+              "Local verification passed; CI verification pending",
+              "WorkOS webhook ingress exposed through the web service.",
+              "Next.js now exposes POST /api/webhooks/workos on the public app host and forwards the raw signed request body plus WorkOS-Signature to the internal API receiver. The proxy intentionally does not forward customer cookies or authorization headers. WorkOS should register the public web URL path while the API remains internal-only and continues to own signature verification, idempotent event recording, and invitation activation. Railway production still leaves CPGHERO_CUSTOMER_AUTH_PROVIDER disabled, so live customer login is not enabled by this change. No reports, proximity metrics, collection requests, provider data calls, PDP calls, AI calls, database migrations, or historical artifacts changed.",
+            ],
             [
               "2026-09-13",
               "Local verification passed; CI verification pending",

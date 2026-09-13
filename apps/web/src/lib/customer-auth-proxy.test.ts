@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { proxyCustomerAuthGet } from "./customer-auth-proxy";
+import {
+  proxyCustomerAuthGet,
+  proxyCustomerAuthWebhookPost,
+} from "./customer-auth-proxy";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -59,6 +62,65 @@ describe("customer auth proxy", () => {
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(await response.json()).toEqual({
       error: "The customer-auth API is not currently reachable.",
+    });
+  });
+
+  it("forwards the raw WorkOS webhook body and signature to the API", async () => {
+    vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue(
+        Response.json({ status: "received" }, { status: 202 }),
+      );
+    const rawPayload = '{"id":"event_123","event":"user.created"}';
+
+    const response = await proxyCustomerAuthWebhookPost(
+      new Request("https://app.cpghero.com/api/webhooks/workos", {
+        method: "POST",
+        body: rawPayload,
+        headers: {
+          cookie: "customer=session",
+          "content-type": "application/json",
+          "user-agent": "workos-webhooks",
+          "workos-signature": "t=1,v1=signature",
+          authorization: "Bearer should-not-forward",
+        },
+      }),
+      "/api/webhooks/workos",
+    );
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url, init] = fetchMock.mock.calls[0];
+    const forwardedHeaders = init?.headers as Headers;
+    expect(String(url)).toBe("http://api.internal/api/webhooks/workos");
+    expect(init?.method).toBe("POST");
+    expect(init?.body).toBe(rawPayload);
+    expect(forwardedHeaders.get("content-type")).toBe("application/json");
+    expect(forwardedHeaders.get("workos-signature")).toBe("t=1,v1=signature");
+    expect(forwardedHeaders.get("cookie")).toBeNull();
+    expect(forwardedHeaders.get("authorization")).toBeNull();
+    expect(response.status).toBe(202);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(await response.json()).toEqual({ status: "received" });
+  });
+
+  it("returns a private no-store outage response when the webhook API cannot be reached", async () => {
+    vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
+
+    const response = await proxyCustomerAuthWebhookPost(
+      new Request("https://app.cpghero.com/api/webhooks/workos", {
+        method: "POST",
+        body: "{}",
+        headers: { "workos-signature": "t=1,v1=signature" },
+      }),
+      "/api/webhooks/workos",
+    );
+
+    expect(response.status).toBe(503);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(await response.json()).toEqual({
+      error: "The customer-auth webhook API is not currently reachable.",
     });
   });
 });
