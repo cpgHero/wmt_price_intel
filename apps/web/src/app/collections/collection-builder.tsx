@@ -1681,11 +1681,11 @@ export function CollectionBuilder({
           <div className="builder-panel approval-panel">
             <header>
               <span className="section-kicker">Step 6</span>
-              <h2>Review and explicitly approve provider spend</h2>
+              <h2>Review and explicitly approve collection spend</h2>
               <p>
-                Estimation itself makes no MetricsCart calls. Launching releases
-                the durable queue up to the approved maximum; billable 200 and
-                404 responses are recorded.
+                Estimation itself makes no live source calls. Launching releases
+                the durable queue up to the approved maximum; billable
+                successful and unavailable-page responses are recorded.
               </p>
             </header>
             {!estimateCurrent || !estimate ? (

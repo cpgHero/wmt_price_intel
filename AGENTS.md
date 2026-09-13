@@ -2,7 +2,11 @@
 
 ## Product boundary
 
-This is a standalone retailer competitive-intelligence product. Do not import CPGHero application assumptions unless explicitly provided later. Walmart is the initial benchmark retailer, but the core engine must support other benchmark retailers in the future.
+This repository is now governed as the CPGHero retailer data and intelligence platform. CPGHero is the product shell and commercial platform for Live APIs, Bulk Projects, and App Analytics. Walmart competitive intelligence remains an important initial analytics module, but it is not the complete product boundary.
+
+The core collection, normalization, matching, analytics, reporting, and geography engines must remain retailer- and category-extensible. Do not hard-code the reusable engine to Walmart, milk, bananas, eggs, strawberries, or any other customer/category example.
+
+Customer-facing UI, docs, browser bundles, exported artifacts, API responses, emails, support-visible logs, and shareable assets must use CPGHero-facing language. Upstream provider brands, credentials, endpoints, provider-specific request parameters, and billing mechanics may appear only in private implementation files, private source-material records, private operations/admin documentation, tests, or migrations that are explicitly classified as internal.
 
 ## Architectural invariants
 
