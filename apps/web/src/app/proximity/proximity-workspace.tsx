@@ -19,6 +19,7 @@ import styles from "./proximity-workspace.module.css";
 
 const RADIUS_OPTIONS = [1, 3, 5, 10] as const;
 const DEFAULT_RADIUS_MILES = 1;
+const DETAIL_ROW_RENDER_LIMIT = 250;
 const MAPLIBRE_VERSION = "5.24.0";
 const MAPLIBRE_SCRIPT = `https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist/maplibre-gl.js`;
 const MAPLIBRE_STYLES = `https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist/maplibre-gl.css`;
@@ -1270,6 +1271,10 @@ export function ProximityWorkspace({
       : competitorStateSummaries.find(
           (state) => state.state === competitorStateDetail,
         );
+  const visibleCompetitorStateDetailRows = competitorStateDetailRows.slice(
+    0,
+    DETAIL_ROW_RENDER_LIMIT,
+  );
   const strongestCompetitorNetworks = [
     ...competitorNetworkSummaries.filter(
       (network) => network.covered_walmart_locations > 0,
@@ -2629,10 +2634,18 @@ export function ProximityWorkspace({
                     : `${competitorStateDetail} competitor white-space`}
                 </h2>
                 <p>
-                  {count(competitorStateDetailRows.length)}{" "}
+                  Showing{" "}
+                  {count(
+                    Math.min(
+                      competitorStateDetailRows.length,
+                      DETAIL_ROW_RENDER_LIMIT,
+                    ),
+                  )}{" "}
+                  of {count(competitorStateDetailRows.length)}{" "}
                   {view?.competitor.display_name ?? "competitor"} locations
-                  paired to their nearest Walmart. Rows outside {radius} mi are
-                  the selected competitor’s white-space locations.
+                  paired to their nearest Walmart. Downloads include the full
+                  list; rows outside {radius} mi are the selected competitor’s
+                  white-space locations.
                 </p>
               </div>
               <button
@@ -2746,7 +2759,7 @@ export function ProximityWorkspace({
                   </tr>
                 </thead>
                 <tbody>
-                  {competitorStateDetailRows.map((pair) => (
+                  {visibleCompetitorStateDetailRows.map((pair) => (
                     <tr key={pair.competitor.id}>
                       <td>{pair.competitor.store_number}</td>
                       <td>{locationLabel(pair.competitor)}</td>
