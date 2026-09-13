@@ -771,6 +771,28 @@ export interface ProximityCompetitorStateSummary {
   median_distance_to_walmart_miles: number | null;
 }
 
+export interface ProximityMarketSummary {
+  market_key: string;
+  city: string;
+  state: string;
+  walmart_locations: number;
+  covered_locations: number;
+  gap_locations: number;
+  coverage_share: number | null;
+  median_distance_miles: number | null;
+}
+
+export interface ProximityCompetitorMarketSummary {
+  market_key: string;
+  city: string;
+  state: string;
+  competitor_locations: number;
+  within_radius_locations: number;
+  gap_locations: number;
+  coverage_share: number | null;
+  median_distance_to_walmart_miles: number | null;
+}
+
 export interface ProximityCompetitorNetworkSummary {
   competitor_location_id: string;
   competitor_store_number: string;
@@ -838,6 +860,8 @@ export interface ProximityView {
   distance_summary?: ProximityDistanceSummary;
   state_summary?: ProximityStateSummary[];
   competitor_state_summary?: ProximityCompetitorStateSummary[];
+  market_summary?: ProximityMarketSummary[];
+  competitor_market_summary?: ProximityCompetitorMarketSummary[];
   competitor_network_summary?: ProximityCompetitorNetworkSummary[];
   map_summary?: ProximityMapSummary;
   pairs: ProximityPair[];

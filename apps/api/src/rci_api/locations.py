@@ -144,6 +144,28 @@ class ProximityCompetitorStateSummaryResponse(BaseModel):
     median_distance_to_walmart_miles: float | None
 
 
+class ProximityMarketSummaryResponse(BaseModel):
+    market_key: str
+    city: str
+    state: str
+    walmart_locations: int
+    covered_locations: int
+    gap_locations: int
+    coverage_share: float | None
+    median_distance_miles: float | None
+
+
+class ProximityCompetitorMarketSummaryResponse(BaseModel):
+    market_key: str
+    city: str
+    state: str
+    competitor_locations: int
+    within_radius_locations: int
+    gap_locations: int
+    coverage_share: float | None
+    median_distance_to_walmart_miles: float | None
+
+
 class ProximityCompetitorNetworkSummaryResponse(BaseModel):
     competitor_location_id: str
     competitor_store_number: str
@@ -202,6 +224,8 @@ class ProximityResponse(BaseModel):
     distance_summary: ProximityDistanceSummaryResponse
     state_summary: list[ProximityStateSummaryResponse]
     competitor_state_summary: list[ProximityCompetitorStateSummaryResponse]
+    market_summary: list[ProximityMarketSummaryResponse]
+    competitor_market_summary: list[ProximityCompetitorMarketSummaryResponse]
     competitor_network_summary: list[ProximityCompetitorNetworkSummaryResponse]
     map_summary: ProximityMapSummaryResponse
     pairs: list[ProximityPairResponse]
@@ -454,6 +478,94 @@ def _proximity_competitor_state_summary(
     return sorted(rows, key=lambda row: (-row.gap_locations, row.state))
 
 
+def _market_key(location: ProximityLocation) -> tuple[str, str, str]:
+    city = location.city or "Unknown city"
+    state = location.state or "Unknown"
+    return f"{state}::{city}", city, state
+
+
+def _proximity_market_summary(
+    pairs: list[ProximityPair],
+    *,
+    selected_radius_miles: float,
+) -> list[ProximityMarketSummaryResponse]:
+    grouped: dict[str, tuple[str, str, list[ProximityPair]]] = {}
+    for pair in pairs:
+        key, city, state = _market_key(pair.benchmark)
+        if key not in grouped:
+            grouped[key] = (city, state, [])
+        grouped[key][2].append(pair)
+
+    rows: list[ProximityMarketSummaryResponse] = []
+    for key, (city, state, market_pairs) in grouped.items():
+        distances = [pair.distance_miles for pair in market_pairs]
+        covered = sum(pair.distance_miles <= selected_radius_miles for pair in market_pairs)
+        total = len(market_pairs)
+        rows.append(
+            ProximityMarketSummaryResponse(
+                market_key=key,
+                city=city,
+                state=state,
+                walmart_locations=total,
+                covered_locations=covered,
+                gap_locations=max(0, total - covered),
+                coverage_share=(covered / total if total else None),
+                median_distance_miles=_rounded(median(distances)) if distances else None,
+            )
+        )
+    return sorted(
+        rows,
+        key=lambda row: (
+            -row.gap_locations,
+            -row.walmart_locations,
+            row.state,
+            row.city,
+        ),
+    )
+
+
+def _proximity_competitor_market_summary(
+    pairs: list[ProximityPair],
+    *,
+    selected_radius_miles: float,
+) -> list[ProximityCompetitorMarketSummaryResponse]:
+    grouped: dict[str, tuple[str, str, list[ProximityPair]]] = {}
+    for pair in pairs:
+        key, city, state = _market_key(pair.benchmark)
+        if key not in grouped:
+            grouped[key] = (city, state, [])
+        grouped[key][2].append(pair)
+
+    rows: list[ProximityCompetitorMarketSummaryResponse] = []
+    for key, (city, state, market_pairs) in grouped.items():
+        distances = [pair.distance_miles for pair in market_pairs]
+        covered = sum(pair.distance_miles <= selected_radius_miles for pair in market_pairs)
+        total = len(market_pairs)
+        rows.append(
+            ProximityCompetitorMarketSummaryResponse(
+                market_key=key,
+                city=city,
+                state=state,
+                competitor_locations=total,
+                within_radius_locations=covered,
+                gap_locations=max(0, total - covered),
+                coverage_share=(covered / total if total else None),
+                median_distance_to_walmart_miles=(
+                    _rounded(median(distances)) if distances else None
+                ),
+            )
+        )
+    return sorted(
+        rows,
+        key=lambda row: (
+            -row.gap_locations,
+            -row.competitor_locations,
+            row.state,
+            row.city,
+        ),
+    )
+
+
 def _proximity_competitor_network_summary(
     pairs: list[ProximityPair],
     *,
@@ -576,6 +688,14 @@ def _proximity_response(
             selected_radius_miles=selected_radius_miles,
         ),
         competitor_state_summary=_proximity_competitor_state_summary(
+            list(result.reverse_pairs),
+            selected_radius_miles=selected_radius_miles,
+        ),
+        market_summary=_proximity_market_summary(
+            list(result.pairs),
+            selected_radius_miles=selected_radius_miles,
+        ),
+        competitor_market_summary=_proximity_competitor_market_summary(
             list(result.reverse_pairs),
             selected_radius_miles=selected_radius_miles,
         ),

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useApplicationContextActions } from "@/app/components/application-context";
 import type {
+  ProximityCompetitorMarketSummary,
   ProximityCompetitorPair,
   ProximityCompetitorNetworkSummary,
   ProximityCompetitorStateSummary,
@@ -11,7 +12,9 @@ import type {
   LocationRetailer,
   ProximityMapCluster,
   ProximityMapSummary,
+  ProximityMarketSummary,
   ProximityPair,
+  ProximityStateSummary,
   ProximityView,
 } from "@/lib/api";
 
@@ -42,6 +45,8 @@ type ModalKind =
   | "metric-coverage"
   | "metric-gap"
   | "metric-competitor-whitespace"
+  | "metric-market"
+  | "metric-pressure"
   | "metric-distance"
   | null;
 
@@ -313,6 +318,121 @@ function competitorStateSummaryForRows(
     );
 }
 
+function walmartStateSummaryForRows(
+  rows: ProximityPair[],
+  selectedRadius: number,
+): ProximityStateSummary[] {
+  const grouped = new Map<string, ProximityPair[]>();
+  for (const pair of rows) {
+    const state = pair.benchmark.state || "Unknown";
+    grouped.set(state, [...(grouped.get(state) ?? []), pair]);
+  }
+  return [...grouped.entries()]
+    .map(([state, statePairs]) => {
+      const covered = statePairs.filter(
+        (pair) => pair.distance_miles <= selectedRadius,
+      ).length;
+      return {
+        coverage_share: statePairs.length ? covered / statePairs.length : null,
+        covered_locations: covered,
+        gap_locations: Math.max(0, statePairs.length - covered),
+        median_distance_miles: median(
+          statePairs.map((pair) => pair.distance_miles),
+        ),
+        state,
+        walmart_locations: statePairs.length,
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.gap_locations - left.gap_locations ||
+        right.walmart_locations - left.walmart_locations ||
+        left.state.localeCompare(right.state),
+    );
+}
+
+function marketKey(
+  location: Pick<ProximityPair["benchmark"], "city" | "state">,
+) {
+  return `${location.state || "Unknown"}::${location.city || "Unknown city"}`;
+}
+
+function walmartMarketSummaryForRows(
+  rows: ProximityPair[],
+  selectedRadius: number,
+): ProximityMarketSummary[] {
+  const grouped = new Map<string, ProximityPair[]>();
+  for (const pair of rows) {
+    const key = marketKey(pair.benchmark);
+    grouped.set(key, [...(grouped.get(key) ?? []), pair]);
+  }
+  return [...grouped.entries()]
+    .map(([key, marketPairs]) => {
+      const location = marketPairs[0]!.benchmark;
+      const covered = marketPairs.filter(
+        (pair) => pair.distance_miles <= selectedRadius,
+      ).length;
+      return {
+        city: location.city || "Unknown city",
+        coverage_share: marketPairs.length
+          ? covered / marketPairs.length
+          : null,
+        covered_locations: covered,
+        gap_locations: Math.max(0, marketPairs.length - covered),
+        market_key: key,
+        median_distance_miles: median(
+          marketPairs.map((pair) => pair.distance_miles),
+        ),
+        state: location.state || "Unknown",
+        walmart_locations: marketPairs.length,
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.gap_locations - left.gap_locations ||
+        right.walmart_locations - left.walmart_locations ||
+        left.state.localeCompare(right.state) ||
+        left.city.localeCompare(right.city),
+    );
+}
+
+function competitorMarketSummaryForRows(
+  rows: ProximityCompetitorPair[],
+  selectedRadius: number,
+): ProximityCompetitorMarketSummary[] {
+  const grouped = new Map<string, ProximityCompetitorPair[]>();
+  for (const pair of rows) {
+    const key = marketKey(pair.competitor);
+    grouped.set(key, [...(grouped.get(key) ?? []), pair]);
+  }
+  return [...grouped.entries()]
+    .map(([key, marketPairs]) => {
+      const location = marketPairs[0]!.competitor;
+      const within = marketPairs.filter(
+        (pair) => pair.distance_miles <= selectedRadius,
+      ).length;
+      return {
+        city: location.city || "Unknown city",
+        competitor_locations: marketPairs.length,
+        coverage_share: marketPairs.length ? within / marketPairs.length : null,
+        gap_locations: Math.max(0, marketPairs.length - within),
+        market_key: key,
+        median_distance_to_walmart_miles: median(
+          marketPairs.map((pair) => pair.distance_miles),
+        ),
+        state: location.state || "Unknown",
+        within_radius_locations: within,
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.gap_locations - left.gap_locations ||
+        right.competitor_locations - left.competitor_locations ||
+        left.state.localeCompare(right.state) ||
+        left.city.localeCompare(right.city),
+    );
+}
+
 function competitorNetworkSummaryForRows(
   rows: ProximityPair[],
   selectedRadius: number,
@@ -383,6 +503,10 @@ function locationLabel(location: ProximityPair["benchmark"]) {
 
 function pairKey(pair: ProximityPair) {
   return `${pair.benchmark.id}::${pair.competitor.id}`;
+}
+
+function competitorPairKey(pair: ProximityCompetitorPair) {
+  return `${pair.nearest_walmart.id}::${pair.competitor.id}`;
 }
 
 function googleMapsUrl(latitude: number, longitude: number) {
@@ -960,6 +1084,9 @@ export function ProximityWorkspace({
   const [competitorStateDetail, setCompetitorStateDetail] = useState<
     string | null
   >(null);
+  const [competitorMarketDetail, setCompetitorMarketDetail] = useState<
+    string | null
+  >(null);
   const [onlySaved, setOnlySaved] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(() => initialTheme());
   const [modal, setModal] = useState<ModalKind>(null);
@@ -1073,6 +1200,8 @@ export function ProximityWorkspace({
       setRelation("all");
       setSort("nearest");
       setOnlySaved(false);
+      setCompetitorStateDetail(null);
+      setCompetitorMarketDetail(null);
     } catch (caught) {
       setError(
         caught instanceof Error
@@ -1226,16 +1355,70 @@ export function ProximityWorkspace({
     }
     return competitorNetworkSummaryForRows(scopedPairs, radius);
   }, [onlySaved, query, radius, scopedPairs, stateFilter, view]);
-  const competitorPerspectivePairs = useMemo(
-    () => view?.competitor_pairs ?? competitorPairsForRows(scopedPairs),
-    [scopedPairs, view?.competitor_pairs],
-  );
-  const competitorStateSummaries = useMemo(
-    () =>
-      view?.competitor_state_summary ??
-      competitorStateSummaryForRows(competitorPerspectivePairs, radius),
-    [competitorPerspectivePairs, radius, view?.competitor_state_summary],
-  );
+  const hasScopedDimensionFilters =
+    stateFilter !== "all" || Boolean(query.trim()) || onlySaved;
+  const competitorPerspectivePairs = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    const sourceRows =
+      view?.competitor_pairs ?? competitorPairsForRows(scopedPairs);
+    return sourceRows
+      .filter((pair) => {
+        if (onlySaved && !savedKeys.has(competitorPairKey(pair))) return false;
+        if (stateFilter !== "all" && pair.competitor.state !== stateFilter) {
+          return false;
+        }
+        if (!normalizedQuery) return true;
+        return [
+          pair.competitor.store_number,
+          pair.competitor.store_name,
+          pair.competitor.city,
+          pair.competitor.state,
+          pair.competitor.zipcode,
+          pair.nearest_walmart.store_number,
+          pair.nearest_walmart.store_name,
+          pair.nearest_walmart.city,
+          pair.nearest_walmart.state,
+          pair.nearest_walmart.zipcode,
+        ]
+          .join(" ")
+          .toLowerCase()
+          .includes(normalizedQuery);
+      })
+      .sort(
+        (left, right) =>
+          right.distance_miles - left.distance_miles ||
+          (left.competitor.state || "").localeCompare(
+            right.competitor.state || "",
+          ) ||
+          left.competitor.store_number.localeCompare(
+            right.competitor.store_number,
+          ),
+      );
+  }, [onlySaved, query, savedKeys, scopedPairs, stateFilter, view]);
+  const competitorStateSummaries = useMemo(() => {
+    if (!hasScopedDimensionFilters && view?.competitor_state_summary) {
+      return view.competitor_state_summary;
+    }
+    return competitorStateSummaryForRows(competitorPerspectivePairs, radius);
+  }, [competitorPerspectivePairs, hasScopedDimensionFilters, radius, view]);
+  const walmartMarketSummaries = useMemo(() => {
+    if (!hasScopedDimensionFilters && view?.market_summary) {
+      return view.market_summary;
+    }
+    return walmartMarketSummaryForRows(scopedPairs, radius);
+  }, [hasScopedDimensionFilters, radius, scopedPairs, view]);
+  const walmartStateSummaries = useMemo(() => {
+    if (!hasScopedDimensionFilters && view?.state_summary) {
+      return view.state_summary;
+    }
+    return walmartStateSummaryForRows(scopedPairs, radius);
+  }, [hasScopedDimensionFilters, radius, scopedPairs, view]);
+  const competitorMarketSummaries = useMemo(() => {
+    if (!hasScopedDimensionFilters && view?.competitor_market_summary) {
+      return view.competitor_market_summary;
+    }
+    return competitorMarketSummaryForRows(competitorPerspectivePairs, radius);
+  }, [competitorPerspectivePairs, hasScopedDimensionFilters, radius, view]);
   const competitorGapLocations = competitorPerspectivePairs.filter(
     (pair) => pair.distance_miles > radius,
   ).length;
@@ -1247,6 +1430,22 @@ export function ProximityWorkspace({
     ? competitorGapLocations / competitorPerspectivePairs.length
     : null;
   const competitorWhiteSpaceStates = competitorStateSummaries.slice(0, 5);
+  const competitorWhiteSpaceMarkets = competitorMarketSummaries
+    .filter((market) => market.gap_locations > 0)
+    .slice(0, 5);
+  const walmartPressureStates = walmartStateSummaries
+    .filter((state) => state.covered_locations > 0)
+    .sort(
+      (left, right) =>
+        (right.coverage_share ?? -1) - (left.coverage_share ?? -1) ||
+        right.covered_locations - left.covered_locations ||
+        right.walmart_locations - left.walmart_locations ||
+        left.state.localeCompare(right.state),
+    )
+    .slice(0, 5);
+  const walmartWhiteSpaceMarkets = walmartMarketSummaries
+    .filter((market) => market.gap_locations > 0)
+    .slice(0, 5);
   const competitorStateDetailRows = competitorPerspectivePairs
     .filter(
       (pair) =>
@@ -1271,6 +1470,48 @@ export function ProximityWorkspace({
       : competitorStateSummaries.find(
           (state) => state.state === competitorStateDetail,
         );
+  const competitorMarketDetailRows = competitorMarketSummaries.filter(
+    (market) =>
+      competitorMarketDetail === "all" ||
+      market.market_key === competitorMarketDetail,
+  );
+  const competitorMarketDetailPairRows = competitorPerspectivePairs
+    .filter(
+      (pair) =>
+        competitorMarketDetail === "all" ||
+        marketKey(pair.competitor) === competitorMarketDetail,
+    )
+    .sort(
+      (left, right) =>
+        Number(right.distance_miles > radius) -
+          Number(left.distance_miles > radius) ||
+        right.distance_miles - left.distance_miles ||
+        (left.competitor.state || "").localeCompare(
+          right.competitor.state || "",
+        ) ||
+        (left.competitor.city || "").localeCompare(
+          right.competitor.city || "",
+        ) ||
+        left.competitor.store_number.localeCompare(
+          right.competitor.store_number,
+        ),
+    );
+  const competitorMarketDetailSummary =
+    competitorMarketDetail === "all" || !competitorMarketDetail
+      ? null
+      : competitorMarketSummaries.find(
+          (market) => market.market_key === competitorMarketDetail,
+        );
+  const competitorMarketDetailGapLocations =
+    competitorMarketDetailPairRows.filter(
+      (pair) => pair.distance_miles > radius,
+    ).length;
+  const competitorMarketDetailWithinLocations = Math.max(
+    0,
+    competitorMarketDetailPairRows.length - competitorMarketDetailGapLocations,
+  );
+  const visibleCompetitorMarketDetailPairRows =
+    competitorMarketDetailPairRows.slice(0, DETAIL_ROW_RENDER_LIMIT);
   const visibleCompetitorStateDetailRows = competitorStateDetailRows.slice(
     0,
     DETAIL_ROW_RENDER_LIMIT,
@@ -1690,6 +1931,7 @@ export function ProximityWorkspace({
     setSort("nearest");
     setOnlySaved(false);
     setCompetitorStateDetail(null);
+    setCompetitorMarketDetail(null);
   }
 
   function toggleSaved(pair: ProximityPair) {
@@ -2015,6 +2257,56 @@ export function ProximityWorkspace({
         <article className={styles.insightPanel}>
           <div className={styles.coverageHead}>
             <div>
+              <h2>Competitor white-space markets</h2>
+              <p>
+                City/state markets where{" "}
+                {view?.competitor.display_name ?? "the competitor"} has
+                locations without Walmart inside {radius} mi.
+              </p>
+            </div>
+            <div className={styles.cardActions}>
+              <button
+                className={styles.cardInfoButton}
+                onClick={() => setModal("metric-market")}
+                title="Open market white-space definition"
+                type="button"
+              >
+                i
+              </button>
+              <button
+                onClick={() => setCompetitorMarketDetail("all")}
+                title="Open the full competitor white-space market list"
+                type="button"
+              >
+                All markets
+              </button>
+            </div>
+          </div>
+          <div className={styles.rankedList}>
+            {competitorWhiteSpaceMarkets.map((market) => (
+              <button
+                key={market.market_key}
+                onClick={() => setCompetitorMarketDetail(market.market_key)}
+                title={`Open ${market.city}, ${market.state} competitor white-space details`}
+                type="button"
+              >
+                <span>
+                  {market.city}, {market.state}
+                </span>
+                <b>{count(market.gap_locations)} gaps</b>
+                <small>
+                  {count(market.competitor_locations)} competitor sites ·{" "}
+                  {percent(market.coverage_share)} near Walmart · median{" "}
+                  {miles(market.median_distance_to_walmart_miles)}
+                </small>
+              </button>
+            ))}
+          </div>
+        </article>
+
+        <article className={styles.insightPanel}>
+          <div className={styles.coverageHead}>
+            <div>
               <h2>Highest-overlap competitor sites</h2>
               <p>
                 Competitor locations with the most Walmart stores inside{" "}
@@ -2041,6 +2333,92 @@ export function ProximityWorkspace({
                 <small>
                   {count(network.assigned_walmart_locations)} total assigned ·
                   median {miles(network.median_distance_miles)}
+                </small>
+              </button>
+            ))}
+          </div>
+        </article>
+
+        <article className={styles.insightPanel}>
+          <div className={styles.coverageHead}>
+            <div>
+              <h2>Walmart competitive pressure states</h2>
+              <p>
+                States where the largest share of Walmart stores has this
+                competitor inside {radius} mi.
+              </p>
+            </div>
+            <button
+              className={styles.cardInfoButton}
+              onClick={() => setModal("metric-pressure")}
+              title="Open competitive pressure definition"
+              type="button"
+            >
+              i
+            </button>
+          </div>
+          <div className={styles.rankedList}>
+            {walmartPressureStates.map((state) => (
+              <button
+                key={state.state}
+                onClick={() => {
+                  setStateFilter(state.state);
+                  setRelation("within");
+                }}
+                title={`Filter to ${state.state} Walmart stores with ${view?.competitor.display_name ?? "the competitor"} inside ${radius} mile${radius === 1 ? "" : "s"}`}
+                type="button"
+              >
+                <span>{state.state}</span>
+                <b>{percent(state.coverage_share)}</b>
+                <small>
+                  {count(state.covered_locations)} of{" "}
+                  {count(state.walmart_locations)} Walmart stores covered ·
+                  median {miles(state.median_distance_miles)}
+                </small>
+              </button>
+            ))}
+          </div>
+        </article>
+
+        <article className={styles.insightPanel}>
+          <div className={styles.coverageHead}>
+            <div>
+              <h2>Walmart white-space markets</h2>
+              <p>
+                City/state Walmart markets whose nearest{" "}
+                {view?.competitor.display_name ?? "competitor"} is farther than{" "}
+                {radius} mi.
+              </p>
+            </div>
+            <button
+              className={styles.cardInfoButton}
+              onClick={() => setModal("metric-gap")}
+              title="Open Walmart white-space definition"
+              type="button"
+            >
+              i
+            </button>
+          </div>
+          <div className={styles.rankedList}>
+            {walmartWhiteSpaceMarkets.map((market) => (
+              <button
+                key={market.market_key}
+                onClick={() => {
+                  setStateFilter(market.state);
+                  setQuery(market.city);
+                  setRelation("outside");
+                }}
+                title={`Filter to ${market.city}, ${market.state} Walmart white-space stores`}
+                type="button"
+              >
+                <span>
+                  {market.city}, {market.state}
+                </span>
+                <b>{count(market.gap_locations)} gaps</b>
+                <small>
+                  {count(market.walmart_locations)} Walmart stores ·{" "}
+                  {percent(market.coverage_share)} covered · median{" "}
+                  {miles(market.median_distance_miles)}
                 </small>
               </button>
             ))}
@@ -2784,6 +3162,147 @@ export function ProximityWorkspace({
         </div>
       ) : null}
 
+      {competitorMarketDetail ? (
+        <div
+          className={styles.drawerBackdrop}
+          onClick={() => setCompetitorMarketDetail(null)}
+          role="presentation"
+        >
+          <section
+            aria-label="Competitor white-space market detail"
+            className={`${styles.drawer} ${styles.tableDrawer}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.drawerHead}>
+              <div>
+                <span>Market-level competitor evidence</span>
+                <h2>
+                  {competitorMarketDetail === "all"
+                    ? "All competitor white-space markets"
+                    : `${competitorMarketDetailSummary?.city ?? "Market"}, ${competitorMarketDetailSummary?.state ?? ""}`}
+                </h2>
+                <p>
+                  Showing{" "}
+                  {count(
+                    Math.min(
+                      competitorMarketDetailPairRows.length,
+                      DETAIL_ROW_RENDER_LIMIT,
+                    ),
+                  )}{" "}
+                  of {count(competitorMarketDetailPairRows.length)}{" "}
+                  {view?.competitor.display_name ?? "competitor"} locations
+                  across {count(competitorMarketDetailRows.length)} market
+                  {competitorMarketDetailRows.length === 1 ? "" : "s"}.
+                  Downloads include the full list.
+                </p>
+              </div>
+              <button
+                onClick={() => setCompetitorMarketDetail(null)}
+                title="Close competitor market detail"
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <div className={styles.tableSummary}>
+              <article>
+                <span>Markets</span>
+                <strong>{count(competitorMarketDetailRows.length)}</strong>
+              </article>
+              <article>
+                <span>Competitor locations</span>
+                <strong>{count(competitorMarketDetailPairRows.length)}</strong>
+              </article>
+              <article>
+                <span>Without Walmart ≤ {radius} mi</span>
+                <strong>{count(competitorMarketDetailGapLocations)}</strong>
+              </article>
+              <article>
+                <span>Near Walmart</span>
+                <strong>{count(competitorMarketDetailWithinLocations)}</strong>
+              </article>
+            </div>
+            <div className={styles.downloadRow}>
+              <button
+                className={styles.btn}
+                onClick={() => setCompetitorMarketDetail("all")}
+                title="Reset the drawer to all competitor markets"
+                type="button"
+              >
+                All markets
+              </button>
+              <button
+                className={styles.btn}
+                onClick={() => setCompetitorMarketDetail(null)}
+                title="Close this market drill-down drawer"
+                type="button"
+              >
+                Reset view
+              </button>
+              <button
+                className={styles.btn}
+                onClick={() =>
+                  downloadCompetitorCsv(
+                    competitorMarketDetailPairRows,
+                    radius,
+                    "proximity-competitor-white-space-markets.csv",
+                  )
+                }
+                title="Download competitor market rows as CSV"
+                type="button"
+              >
+                CSV
+              </button>
+              <button
+                className={styles.btn}
+                onClick={() =>
+                  downloadCompetitorJson(
+                    competitorMarketDetailPairRows,
+                    radius,
+                    "proximity-competitor-white-space-markets.json",
+                  )
+                }
+                title="Download competitor market rows as JSON"
+                type="button"
+              >
+                JSON
+              </button>
+            </div>
+            <div className={styles.tableWrap}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Market</th>
+                    <th>Competitor #</th>
+                    <th>Competitor location</th>
+                    <th>Nearest Walmart #</th>
+                    <th>Nearest Walmart location</th>
+                    <th>Distance to Walmart</th>
+                    <th>Walmart ≤ {radius} mi</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleCompetitorMarketDetailPairRows.map((pair) => (
+                    <tr key={pair.competitor.id}>
+                      <td>
+                        {pair.competitor.city || "Unknown city"},{" "}
+                        {pair.competitor.state || "Unknown"}
+                      </td>
+                      <td>{pair.competitor.store_number}</td>
+                      <td>{locationLabel(pair.competitor)}</td>
+                      <td>{pair.nearest_walmart.store_number}</td>
+                      <td>{locationLabel(pair.nearest_walmart)}</td>
+                      <td>{miles(pair.distance_miles)}</td>
+                      <td>{pair.distance_miles <= radius ? "Yes" : "No"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       {showTable ? (
         <div
           className={styles.drawerBackdrop}
@@ -3277,9 +3796,13 @@ function InfoModal({
                 ? `White-space stores beyond ${radius} mile${radius === 1 ? "" : "s"}`
                 : modal === "metric-competitor-whitespace"
                   ? `Competitor sites beyond ${radius} mile${radius === 1 ? "" : "s"}`
-                  : modal === "metric-distance"
-                    ? "Distance profile"
-                    : "Nearest competitor sites represented";
+                  : modal === "metric-market"
+                    ? "Competitor white-space markets"
+                    : modal === "metric-pressure"
+                      ? "Walmart competitive pressure states"
+                      : modal === "metric-distance"
+                        ? "Distance profile"
+                        : "Nearest competitor sites represented";
   const eyebrow = modal.startsWith("metric-")
     ? "Metric definition"
     : modal === "method"
@@ -3427,6 +3950,48 @@ function InfoModal({
               {count(competitorWithinLocations)} near Walmart;{" "}
               {count(competitorPairCount)} competitor sites total;{" "}
               {percent(competitorGapShare)} white-space.
+            </p>
+          </div>
+        ) : null}
+
+        {modal === "metric-market" ? (
+          <div className={styles.modalBody}>
+            <p>
+              <b>What it represents:</b> city/state markets where the selected
+              competitor has mappable locations whose nearest Walmart is farther
+              away than the selected radius.
+            </p>
+            <p>
+              <b>Calculation:</b> group competitor-to-nearest-Walmart rows by
+              competitor city and state, then count competitor locations with
+              `nearest_walmart_distance_miles &gt; selected_radius_miles`.
+            </p>
+            <p>
+              <b>How to use it:</b> this is the best current location-master
+              view for competitor footprint where Walmart has weaker immediate
+              physical adjacency. It is still straight-line proximity, not drive
+              time, assortment, demand, or sales.
+            </p>
+          </div>
+        ) : null}
+
+        {modal === "metric-pressure" ? (
+          <div className={styles.modalBody}>
+            <p>
+              <b>What it represents:</b> states where Walmart stores are most
+              likely to have the selected competitor nearby at the active
+              radius.
+            </p>
+            <p>
+              <b>Calculation:</b> Walmart stores whose nearest selected
+              competitor is within the selected radius divided by all paired
+              Walmart stores in that state and active filter scope.
+            </p>
+            <p>
+              <b>How to use it:</b> high-pressure states are useful for
+              merchant, broker, and supplier teams evaluating where pricing,
+              merchandising, distribution, and local competitive readouts may
+              deserve extra attention.
             </p>
           </div>
         ) : null}

@@ -274,6 +274,30 @@ async def test_retailer_proximity_pairs_walmart_to_one_selected_competitor() -> 
             "median_distance_miles": body["distance_summary"]["median_miles"],
         }
     ]
+    assert body["market_summary"] == [
+        {
+            "market_key": "AR::Bentonville",
+            "city": "Bentonville",
+            "state": "AR",
+            "walmart_locations": 2,
+            "covered_locations": 1,
+            "gap_locations": 1,
+            "coverage_share": 0.5,
+            "median_distance_miles": body["distance_summary"]["median_miles"],
+        }
+    ]
+    assert body["competitor_market_summary"][0].pop("median_distance_to_walmart_miles") is not None
+    assert body["competitor_market_summary"] == [
+        {
+            "market_key": "AR::Bentonville",
+            "city": "Bentonville",
+            "state": "AR",
+            "competitor_locations": 2,
+            "within_radius_locations": 1,
+            "gap_locations": 1,
+            "coverage_share": 0.5,
+        }
+    ]
     assert body["competitor_network_summary"] == [
         {
             "competitor_location_id": body["pairs"][0]["competitor"]["id"],
