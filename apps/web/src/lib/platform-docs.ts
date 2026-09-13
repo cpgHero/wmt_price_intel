@@ -87,11 +87,12 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 const proximityLastVerified = "September 13, 2026";
 const visibilityBoundaryLastVerified = "September 13, 2026";
 const accountAccessLastVerified = "September 13, 2026";
+const principalEnforcementLastVerified = "September 13, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.142",
-  lastVerified: accountAccessLastVerified,
+  version: "1.3.143",
+  lastVerified: principalEnforcementLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
   maintenanceOwner: "Platform owner and engineering lead",
@@ -1251,7 +1252,7 @@ export const platformDocumentation: PlatformDocumentation = {
         "The controls that prevent metric drift, secret exposure, duplicate work, uncontrolled provider spend, and silent evidence changes.",
       audience: "Platform owner · Platform administrator",
       readingTime: "9 min",
-      lastVerified: accountAccessLastVerified,
+      lastVerified: principalEnforcementLastVerified,
       status: "Current with limitations",
       blocks: [
         {
@@ -1289,14 +1290,14 @@ export const platformDocumentation: PlatformDocumentation = {
             "Administrator sessions are eight-hour, HttpOnly, Secure-in-production, SameSite=Strict, and HMAC-signed. Writes require same-origin validation.",
             "Logs redact provider authentication parameters and record IDs, attempts, statuses, costs, and failure classes without credentials.",
             "CI now includes a customer-visible provider-masking gate for non-admin app routes and current CPGHero platform planning docs. Internal adapters, private admin/operations surfaces, tests, source-material records, and migrations remain separately classified until the broader visibility-boundary cleanup is complete.",
-            "The account-access foundation now defines CPGHero accounts, workspaces, memberships, roles, permissions, entitlements, and account/workspace audit-event context. Route-level enforcement and customer login remain separate follow-up work.",
+            "The account-access foundation now defines CPGHero accounts, workspaces, memberships, roles, permissions, entitlements, and account/workspace audit-event context. Duplicated admin-token checks for core internal admin paths now resolve through a shared CPGHero system AccessPrincipal. Customer login and account/workspace row-level enforcement remain separate follow-up work.",
           ],
         },
         {
           kind: "callout",
           tone: "attention",
           title: "Current access-control limitation",
-          text: "The durable account/RBAC/entitlement foundation exists, but the implemented administrator surface still uses one protected admin session rather than customer login with route-level account enforcement. Customer identity provider selection, individual user login, API keys, and cross-account route enforcement remain future work.",
+          text: "The durable account/RBAC/entitlement foundation exists, and duplicated admin-token checks now use a shared server-side CPGHero system principal. The implemented administrator surface still uses one protected admin session rather than customer login with route-level account enforcement. Customer identity provider selection, individual user login, API keys, account membership lookup, and cross-account route enforcement remain future work.",
         },
       ],
     },
@@ -2200,7 +2201,7 @@ export const platformDocumentation: PlatformDocumentation = {
       audience:
         "Platform owner · Platform administrator · Analyst · Engineering",
       readingTime: "15 min",
-      lastVerified: availabilityEvidenceLastVerified,
+      lastVerified: principalEnforcementLastVerified,
       status: "Current with limitations",
       links: [
         { href: "/price-monitoring", label: "Open Price Intelligence" },
@@ -2951,6 +2952,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-13",
+              "Implemented; CI verification pending",
+              "Shared CPGHero admin principal enforcement slice added.",
+              "Duplicated production admin-token checks for operations, collection recovery controls, PDP evidence export, Product Pack authoring, and Matching v2 review now route through a shared API access helper that returns a typed CPGHero system AccessPrincipal. Feature-enabled admin guards remain feature-flagged, production still requires the existing admin token, and non-production development behavior remains permissive. This is an enforcement-seam improvement only; it does not add customer login, SSO, invitation flows, customer API keys, account membership lookup, account/workspace row-level route enforcement, billing ledgers, report changes, collection-request changes, provider credential changes, paid source calls, or AI calls.",
+            ],
             [
               "2026-09-13",
               "Implemented; CI verification pending",

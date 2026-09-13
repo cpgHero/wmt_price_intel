@@ -6,7 +6,6 @@ import csv
 import io
 import json
 import os
-import secrets
 from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
@@ -17,6 +16,7 @@ from fastapi import APIRouter, Body, Depends, Header, HTTPException, Query, Requ
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field
 
+from rci_api.access import require_platform_admin
 from rci_collections import CollectionPlanner, CollectionRetailerCatalog
 from rci_collections.composite import (
     CompositeInputSetRecord,
@@ -642,14 +642,7 @@ def _not_found(exc: CollectionNotFoundError) -> HTTPException:
 
 
 def _require_recovery_admin(request: Request, provided: str | None) -> None:
-    expected = os.getenv("PRODUCT_PACK_ADMIN_TOKEN", "").strip()
-    if request.app.state.settings.is_production and (
-        not expected or not provided or not secrets.compare_digest(expected, provided)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authenticated administrator access is required.",
-        )
+    require_platform_admin(request, provided)
 
 
 def _recovery_admin_actor() -> str:

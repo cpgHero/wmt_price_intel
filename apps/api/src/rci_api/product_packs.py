@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import secrets
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime
@@ -18,6 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from rci_api.access import require_enabled_platform_admin
 from rci_contracts import validate_instance
 from rci_product_packs import (
     FileProductPackCatalog,
@@ -173,23 +173,14 @@ def _actor(value: str | None) -> str:
 
 
 def _require_authoring_access(request: Request, provided_token: str | None) -> None:
-    enabled = _enabled(
-        os.getenv("PRODUCT_PACK_BUILDER_ENABLED"),
-        default=not request.app.state.settings.is_production,
+    require_enabled_platform_admin(
+        request,
+        provided_token,
+        enabled_flag_name="PRODUCT_PACK_BUILDER_ENABLED",
+        default_enabled=not request.app.state.settings.is_production,
+        disabled_detail="Product Pack authoring is disabled in this environment.",
+        unauthorized_detail="Authenticated Product Pack administrator access is required.",
     )
-    if not enabled:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Product Pack authoring is disabled in this environment.",
-        )
-    expected = os.getenv("PRODUCT_PACK_ADMIN_TOKEN")
-    if request.app.state.settings.is_production and (
-        not expected or not provided_token or not secrets.compare_digest(expected, provided_token)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authenticated Product Pack administrator access is required.",
-        )
 
 
 def _starter_documents(

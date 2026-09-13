@@ -6,7 +6,6 @@ import asyncio
 import json
 import logging
 import os
-import secrets
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -25,6 +24,7 @@ from fastapi import (
 from pydantic import BaseModel, ConfigDict, Field
 
 from rci_analytics import CatalogProductPackLoader
+from rci_api.access import require_platform_admin
 from rci_api.pdp_exports import (
     ProductDetailExportNotFoundError,
     ProductDetailRawExportService,
@@ -356,14 +356,7 @@ PublicArtifactDependency = Annotated[AnalysisRecord, Depends(require_public_arti
 
 
 def _require_evidence_export_access(request: Request, provided_token: str | None) -> None:
-    expected = os.getenv("PRODUCT_PACK_ADMIN_TOKEN")
-    if request.app.state.settings.is_production and (
-        not expected or not provided_token or not secrets.compare_digest(expected, provided_token)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authenticated administrator access is required.",
-        )
+    require_platform_admin(request, provided_token)
 
 
 @router.post(

@@ -4,15 +4,15 @@ from __future__ import annotations
 
 import os
 import re
-import secrets
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Annotated, Any, Protocol
 
-from fastapi import APIRouter, Header, HTTPException, Request, status
+from fastapi import APIRouter, Header, Request
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
+from rci_api.access import require_platform_admin
 from rci_core.observability import redact_secrets
 from rci_product_packs import FileProductPackCatalog
 from rci_retailer_packs import FileRetailerPackCatalog
@@ -25,14 +25,7 @@ class OperationsSnapshotRepository(Protocol):
 
 
 def _require_admin(request: Request, provided: str | None) -> None:
-    expected = os.getenv("PRODUCT_PACK_ADMIN_TOKEN", "").strip()
-    if request.app.state.settings.is_production and (
-        not expected or not provided or not secrets.compare_digest(expected, provided)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authenticated administrator access is required.",
-        )
+    require_platform_admin(request, provided)
 
 
 def _repository_root() -> Path:

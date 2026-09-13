@@ -27,6 +27,7 @@ from rci_analytics.matching_v2 import (
     compile_matching_policy_v2,
 )
 from rci_analytics.product_pack import ProductPackLoader
+from rci_api.access import require_enabled_platform_admin
 from rci_contracts import ContractError, validate_instance
 
 router = APIRouter(prefix="/api/v1/matching-v2", tags=["matching-v2-review"])
@@ -7406,23 +7407,13 @@ class MatchingV2ReviewService:
 
 
 def _require_review_access(request: Request, provided_token: str | None) -> None:
-    enabled = _enabled(
-        os.getenv("MATCHING_V2_REVIEW_API_ENABLED"),
-        default=not request.app.state.settings.is_production,
+    require_enabled_platform_admin(
+        request,
+        provided_token,
+        enabled_flag_name="MATCHING_V2_REVIEW_API_ENABLED",
+        default_enabled=not request.app.state.settings.is_production,
+        disabled_detail="Matching v2 human review is not enabled.",
     )
-    if not enabled:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Matching v2 human review is not enabled.",
-        )
-    expected = os.getenv("PRODUCT_PACK_ADMIN_TOKEN")
-    if request.app.state.settings.is_production and (
-        not expected or not provided_token or not secrets.compare_digest(expected, provided_token)
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authenticated administrator access is required.",
-        )
 
 
 def get_matching_v2_review_service(request: Request) -> MatchingV2ReviewService:
