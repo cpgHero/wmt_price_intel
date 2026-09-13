@@ -2948,6 +2948,12 @@ export const platformDocumentation: PlatformDocumentation = {
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
             [
+              "2026-09-13",
+              "Local verification passed; production deployment pending",
+              "Proximity keeps copied URLs aligned with the selected view state.",
+              "The Proximity page now parses an optional comparison-scope query parameter and writes the active country, competitor retailer, radius, and comparison scope back to the URL after in-page changes. This keeps copied links, reloads, browser troubleshooting, and shared context aligned with the rendered metrics instead of retaining a stale original radius or scope. Invalid or unavailable footprint scope falls back to the deterministic recommendation for the selected competitor. This is a Proximity navigation, sharing, and reproducibility fix only; it does not change location rows, coordinates, retailer eligibility, nearest-location pairing, Haversine distance math, map clustering, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
+            [
               "2026-09-12",
               "Local verification passed; production deployment pending",
               "Proximity adds decision-oriented state and market metrics.",
