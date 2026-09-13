@@ -19,7 +19,7 @@ import styles from "./proximity-workspace.module.css";
 
 const RADIUS_OPTIONS = [1, 3, 5, 10] as const;
 const DEFAULT_RADIUS_MILES = 1;
-const DETAIL_ROW_RENDER_LIMIT = 250;
+const DETAIL_ROW_RENDER_LIMIT = 100;
 const MAPLIBRE_VERSION = "5.24.0";
 const MAPLIBRE_SCRIPT = `https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist/maplibre-gl.js`;
 const MAPLIBRE_STYLES = `https://unpkg.com/maplibre-gl@${MAPLIBRE_VERSION}/dist/maplibre-gl.css`;
