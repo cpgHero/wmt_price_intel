@@ -14,7 +14,7 @@ Proximity received a deeper map-first information-design pass focused on usefuln
 - Added a top insight deck with:
   - 1/3/5/10-mile Walmart coverage by selected competitor radius.
   - largest white-space states for the active Walmart scope.
-  - competitor sites assigned to the most Walmart locations.
+  - highest-overlap competitor sites sorted by Walmart stores inside the selected radius, avoiding misleading regional-retailer catchments where one distant competitor site may be the nearest available location for hundreds of far-away Walmart stores.
   - nearest-distance profile with median, P75, P90, and max.
 - Replaced the small selected-relationship toast with a map-side selected-network panel containing selected-pair distance, selected-radius network coverage, median distance, farthest distance, recenter, detail, and table actions.
 - Moved the map legend away from the top toolbar and repositioned MapLibre controls to reduce panel/control collisions.

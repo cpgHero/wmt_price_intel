@@ -441,6 +441,7 @@ def _proximity_competitor_network_summary(
     return sorted(
         rows,
         key=lambda row: (
+            -row.covered_walmart_locations,
             -row.assigned_walmart_locations,
             row.median_distance_miles if row.median_distance_miles is not None else math.inf,
             row.competitor_store_number,
