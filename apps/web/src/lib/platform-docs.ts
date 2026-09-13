@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 13, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.146",
+  version: "1.3.147",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -1293,6 +1293,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "CI now includes a customer-visible provider-masking gate for non-admin app routes and current CPGHero platform planning docs. Internal adapters, private admin/operations surfaces, tests, source-material records, and migrations remain separately classified until the broader visibility-boundary cleanup is complete.",
             "The account-access foundation now defines CPGHero accounts, workspaces, memberships, roles, permissions, entitlements, and account/workspace audit-event context. Duplicated admin-token checks for core internal admin paths now resolve through a shared CPGHero system AccessPrincipal. Customer login and account/workspace row-level enforcement remain separate follow-up work.",
             "WorkOS AuthKit/User Management is the selected customer authentication provider. The WorkOS application has callback, homepage, login-initiation, and sign-out URLs configured, and Railway stores WorkOS variables for the web and API services with customer auth still disabled. The API now implements login, callback, logout, /api/v1/me, sealed-session verification, and session-to-CPGHero-principal resolution behind the WorkOS provider flag. CPGHero remains the authorization source of truth for account/workspace membership, roles, permissions, entitlements, projects, report access, Live API usage limits, and billing. Enterprise SSO, Directory Sync, and SCIM are not part of the initial rollout.",
+            "Migration 0056 adds the owner-only customer provisioning and identity-event audit foundation: prepared invitations, account/workspace user mappings, role and entitlement assignment, and a signed WorkOS webhook receiver that can activate CPGHero membership only after a matching invitation is accepted. Customer-facing responses remain CPGHero-facing and do not expose provider subject IDs.",
             "The non-production customer-principal harness is explicit, opt-in, and header-backed for local/API tests only. Production rejects those headers. Live customer sessions are cryptographically validated through WorkOS and then fail closed unless the WorkOS user and organization subjects are provisioned through CPGHero external-identity and membership rows.",
           ],
         },
@@ -1309,7 +1310,7 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "Identity mapping",
               "CPGHero",
-              "Migration 0055 maps WorkOS organization subjects to CPGHero accounts and WorkOS user subjects to CPGHero app users.",
+              "Migrations 0055 and 0056 map WorkOS organization/user subjects to CPGHero accounts/app users, store prepared invitations, and audit signed identity events.",
             ],
             [
               "Authorization and commercial access",
@@ -1327,7 +1328,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current access-control limitation",
-          text: "The durable account/RBAC/entitlement foundation exists, WorkOS AuthKit is externally configured, migration 0055 adds external identity mappings, and the API can resolve either a validated non-production test principal or a live WorkOS sealed session into the CPGHero principal model. Railway production still has CPGHERO_CUSTOMER_AUTH_PROVIDER disabled, so customer login is not live. Customer signup/invites, customer API keys, account-administration screens, and cross-account enforcement across existing report and collection routes remain future work.",
+          text: "The durable account/RBAC/entitlement foundation exists, WorkOS AuthKit is externally configured, migration 0055 adds external identity mappings, and migration 0056 adds owner-only invitation/provisioning state plus signed identity webhook audit. The API can resolve either a validated non-production test principal or a live WorkOS sealed session into the CPGHero principal model. Railway production still has CPGHERO_CUSTOMER_AUTH_PROVIDER disabled, so customer login is not live. Customer-facing signup/invite screens, customer API keys, account-administration screens, and cross-account enforcement across existing report and collection routes remain future work.",
         },
       ],
     },
@@ -2982,6 +2983,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-13",
+              "Local verification passed; CI verification pending",
+              "Customer auth provisioning and identity webhook audit foundation added.",
+              "Migration 0056 adds prepared customer-account invitations and signed identity webhook event audit tables. The API adds an owner-only customer provisioning endpoint that creates or reuses CPGHero organization, account, workspace, app-user, membership, role, entitlement, and optional external-identity rows without sending customer email or enabling login. The API also adds /api/webhooks/workos with WorkOS signature verification and idempotent event recording; invitation.accepted events can activate only a matching prepared invitation and then bind CPGHero membership to the mapped identity. Customer-visible responses remain CPGHero-facing and do not expose provider subject IDs. Railway production still leaves CPGHERO_CUSTOMER_AUTH_PROVIDER disabled, so live customer login is not enabled by this change. No reports, proximity metrics, collection requests, provider data calls, PDP calls, AI calls, or historical artifacts changed.",
+            ],
             [
               "2026-09-13",
               "Local verification passed; CI verification pending",

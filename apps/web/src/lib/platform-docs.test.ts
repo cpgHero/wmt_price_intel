@@ -21,7 +21,7 @@ describe("platform owner and administrator documentation", () => {
   it("provides a unique maintained guide in every documentation group", () => {
     const ids = platformDocumentation.guides.map((guide) => guide.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(platformDocumentation.version).toBe("1.3.146");
+    expect(platformDocumentation.version).toBe("1.3.147");
     expect(platformDocumentation.lastVerified).toBeTruthy();
 
     for (const group of platformDocGroups) {
@@ -226,7 +226,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.146");
+    expect(platformDocumentation.version).toBe("1.3.147");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -267,6 +267,10 @@ describe("platform owner and administrator documentation", () => {
       "account/workspace membership",
     );
     expect(guides["trust-governance"]).toContain("migration 0055");
+    expect(guides["trust-governance"]).toContain("migration 0056");
+    expect(guides["trust-governance"]).toContain(
+      "signed workos webhook receiver",
+    );
     expect(guides["trust-governance"]).toContain(
       "enterprise sso, directory sync, and scim are not part of the initial rollout",
     );
@@ -291,6 +295,9 @@ describe("platform owner and administrator documentation", () => {
     );
     expect(guides["change-orders"]).toContain(
       "workos authkit session bridge added behind disabled production flag",
+    );
+    expect(guides["change-orders"]).toContain(
+      "customer auth provisioning and identity webhook audit foundation added",
     );
     expect(guides["change-orders"]).toContain(
       "customer-visible /api/v1/me response remains cpghero-facing",
