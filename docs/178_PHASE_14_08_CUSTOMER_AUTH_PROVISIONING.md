@@ -35,7 +35,9 @@ be safely enabled.
 ## Next cutover prerequisites
 
 1. Deploy the signed webhook endpoint.
-2. Register the Railway webhook URL in WorkOS and store the returned signing secret in Railway.
+2. Register `https://web-production-ee2a4.up.railway.app/api/webhooks/workos` in WorkOS and store
+   the returned signing secret in Railway. The public web route forwards the unmodified signed body
+   to the internal API receiver.
 3. Prepare a single test customer account and invitation through the owner-only API.
 4. Create or invite the matching user in WorkOS.
 5. Confirm the webhook activates only the intended CPGHero membership.
