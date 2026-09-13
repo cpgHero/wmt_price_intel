@@ -17,6 +17,12 @@ from rci_api.collections import router as collection_router
 from rci_api.competitive_leadership import router as competitive_leadership_router
 from rci_api.customer_auth import router as customer_auth_router
 from rci_api.customer_identity import router as customer_identity_router
+from rci_api.customer_provisioning import (
+    router as customer_provisioning_router,
+)
+from rci_api.customer_provisioning import (
+    webhook_router as customer_identity_webhook_router,
+)
 from rci_api.locations import router as location_router
 from rci_api.matching_v2 import router as matching_v2_router
 from rci_api.matching_v2_review import router as matching_v2_review_router
@@ -72,6 +78,8 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     app.include_router(competitive_leadership_router)
     app.include_router(customer_auth_router)
     app.include_router(customer_identity_router)
+    app.include_router(customer_provisioning_router)
+    app.include_router(customer_identity_webhook_router)
     app.include_router(location_router)
     app.include_router(matching_v2_router)
     app.include_router(matching_v2_review_router)

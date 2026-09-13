@@ -250,11 +250,12 @@ MetricsCart uses query-parameter authentication.
    For customer authentication, store WorkOS values only on the `web` and `api` services:
    `WORKOS_CLIENT_ID`, `WORKOS_API_KEY`, `WORKOS_REDIRECT_URI`, and a Fernet-compatible
    `WORKOS_COOKIE_PASSWORD`. Keep `CPGHERO_CUSTOMER_AUTH_PROVIDER=disabled` until customer users,
-   accounts, memberships, entitlements, and external identity mappings are explicitly provisioned
-   and the customer-auth cutover has passed. Add `WORKOS_WEBHOOK_SECRET` only after a real WorkOS
-   webhook endpoint exists; do not invent or pre-seed a placeholder webhook secret.
+   accounts, memberships, entitlements, invitations, signed webhook delivery, and external identity
+   mappings are explicitly provisioned and the customer-auth cutover has passed. Add
+   `WORKOS_WEBHOOK_SECRET` only after a real WorkOS webhook endpoint exists; do not invent or
+   pre-seed a placeholder webhook secret.
 5. Deploy `api`. Its pre-deploy log must show Alembic at the repository's single current migration
-   head (System Operations currently expects `0055_workos_identity_mapping`); then verify
+   head (System Operations currently expects `0056_customer_auth_provisioning`); then verify
    `/health/live` and `/health/ready` inside Railway.
 6. Run the idempotent location import once in the API image:
    `rci-locations --source fixtures/location_master/locations.csv`. Confirm the expected Walmart and
