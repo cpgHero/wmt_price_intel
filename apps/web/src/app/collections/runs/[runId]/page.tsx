@@ -194,11 +194,13 @@ export default async function RunMonitorPage({
         <section className="historical-run-context">
           <div>
             <span className="section-kicker">Historical source import</span>
-            <strong>Provider task metrics do not apply to this run</strong>
+            <strong>
+              Live collection task metrics do not apply to this run
+            </strong>
             <p>
               This analysis was created from supplied source artifacts rather
-              than live MetricsCart collection tasks, so pages, credits,
-              retries, and elapsed provider time are intentionally omitted.
+              than live CPGHero collection tasks, so pages, credits, retries,
+              and elapsed provider time are intentionally omitted.
             </p>
           </div>
           {analysis ? (

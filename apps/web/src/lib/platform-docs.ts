@@ -85,11 +85,12 @@ const integrationLineageLastVerified = "August 30, 2026";
 const productionOperationsLastVerified = "August 29, 2026";
 const availabilityEvidenceLastVerified = "September 10, 2026";
 const proximityLastVerified = "September 13, 2026";
+const visibilityBoundaryLastVerified = "September 13, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.140",
-  lastVerified: proximityLastVerified,
+  version: "1.3.141",
+  lastVerified: visibilityBoundaryLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
   maintenanceOwner: "Platform owner and engineering lead",
@@ -1249,7 +1250,7 @@ export const platformDocumentation: PlatformDocumentation = {
         "The controls that prevent metric drift, secret exposure, duplicate work, uncontrolled provider spend, and silent evidence changes.",
       audience: "Platform owner · Platform administrator",
       readingTime: "9 min",
-      lastVerified,
+      lastVerified: visibilityBoundaryLastVerified,
       status: "Current with limitations",
       blocks: [
         {
@@ -1281,11 +1282,12 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "list",
           title: "Security controls",
           items: [
-            "MetricsCart and OpenAI keys exist only on the worker. Database, bucket, SMTP, admin token, and session secrets remain server-side Railway variables.",
+            "Upstream retailer-data and AI keys exist only on server-side services. Database, bucket, SMTP, admin token, and session secrets remain server-side Railway variables.",
             "The browser talks to same-origin Next.js routes; the API, worker, scheduler, Postgres, and bucket have no public application domain.",
             "The bucket is private and downloads use short-lived signed URLs.",
             "Administrator sessions are eight-hour, HttpOnly, Secure-in-production, SameSite=Strict, and HMAC-signed. Writes require same-origin validation.",
             "Logs redact provider authentication parameters and record IDs, attempts, statuses, costs, and failure classes without credentials.",
+            "CI now includes a customer-visible provider-masking gate for non-admin app routes and current CPGHero platform planning docs. Internal adapters, private admin/operations surfaces, tests, source-material records, and migrations remain separately classified until the broader visibility-boundary cleanup is complete.",
           ],
         },
         {
@@ -2947,6 +2949,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-13",
+              "Implemented; CI verification pending",
+              "CPGHero platform visibility boundary and customer-visible provider-masking gate added.",
+              "The repository product boundary now treats CPGHero as the platform shell for Live APIs, Bulk Projects, and App Analytics while preserving a retailer/category-extensible engine. Customer-facing copy in collection approval and historical import context no longer names the private upstream provider. CI now scans non-admin app routes and current CPGHero platform planning docs for hashed forbidden provider tokens without embedding those private terms in the checker. This is a visibility-boundary, documentation, and guardrail change only; it does not rename internal adapters, change collection requests, alter provider credentials, alter billing formulas, modify raw evidence, change reports, change proximity metrics, make paid source calls, make AI calls, or deploy a customer auth model.",
+            ],
             [
               "2026-09-13",
               "Local verification passed; production deployment pending",
