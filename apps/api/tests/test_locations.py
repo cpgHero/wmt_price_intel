@@ -249,6 +249,21 @@ async def test_retailer_proximity_pairs_walmart_to_one_selected_competitor() -> 
     assert body["distance_summary"]["median_miles"] is not None
     assert body["distance_summary"]["p75_miles"] is not None
     assert body["distance_summary"]["p90_miles"] is not None
+    assert len(body["competitor_pairs"]) == 2
+    assert {pair["competitor"]["store_number"] for pair in body["competitor_pairs"]} == {
+        "c-near",
+        "c-far",
+    }
+    assert body["competitor_state_summary"][0].pop("median_distance_to_walmart_miles") is not None
+    assert body["competitor_state_summary"] == [
+        {
+            "state": "AR",
+            "competitor_locations": 2,
+            "within_radius_locations": 1,
+            "gap_locations": 1,
+            "coverage_share": 0.5,
+        }
+    ]
     assert body["state_summary"] == [
         {
             "state": "AR",

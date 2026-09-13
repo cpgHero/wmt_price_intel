@@ -538,12 +538,42 @@ class PostgresLocationRepository:
                         distance_miles=nearest_distance,
                     )
                 )
+        reverse_pairs: list[ProximityPair] = []
+        if benchmark_locations:
+            benchmark_grid = _build_location_grid(benchmark_locations)
+            for competitor_location in competitor_locations:
+                nearest_result = _nearest_competitor_location(
+                    competitor_location,
+                    benchmark_locations,
+                    benchmark_grid,
+                )
+                if nearest_result is None:
+                    continue
+                nearest, nearest_distance = nearest_result
+                reverse_pairs.append(
+                    ProximityPair(
+                        benchmark=competitor_location,
+                        competitor=nearest,
+                        distance_miles=nearest_distance,
+                    )
+                )
         return ProximityResult(
             benchmark=benchmark,
             competitor=competitor,
             pairs=tuple(
                 sorted(
                     pairs,
+                    key=lambda pair: (
+                        pair.distance_miles,
+                        pair.benchmark.state or "",
+                        pair.benchmark.city or "",
+                        pair.benchmark.store_number,
+                    ),
+                )
+            ),
+            reverse_pairs=tuple(
+                sorted(
+                    reverse_pairs,
                     key=lambda pair: (
                         pair.distance_miles,
                         pair.benchmark.state or "",

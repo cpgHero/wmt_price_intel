@@ -265,12 +265,47 @@ class InMemoryLocationRepository:
                         ),
                     )
                 )
+        reverse_pairs: list[ProximityPair] = []
+        if benchmark_locations:
+            for competitor_location in competitor_locations:
+                nearest = min(
+                    benchmark_locations,
+                    key=lambda benchmark_location: _haversine_miles(
+                        competitor_location.latitude,
+                        competitor_location.longitude,
+                        benchmark_location.latitude,
+                        benchmark_location.longitude,
+                    ),
+                )
+                reverse_pairs.append(
+                    ProximityPair(
+                        benchmark=competitor_location,
+                        competitor=nearest,
+                        distance_miles=_haversine_miles(
+                            competitor_location.latitude,
+                            competitor_location.longitude,
+                            nearest.latitude,
+                            nearest.longitude,
+                        ),
+                    )
+                )
         return ProximityResult(
             benchmark=benchmark,
             competitor=competitor,
             pairs=tuple(
                 sorted(
                     pairs,
+                    key=lambda pair: (
+                        pair.distance_miles,
+                        pair.benchmark.state or "",
+                        pair.benchmark.city or "",
+                        pair.benchmark.store_number,
+                    ),
+                )
+            ),
+            reverse_pairs=tuple(
+                sorted(
+                    reverse_pairs,
                     key=lambda pair: (
                         pair.distance_miles,
                         pair.benchmark.state or "",

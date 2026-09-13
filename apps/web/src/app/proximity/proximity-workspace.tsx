@@ -4,13 +4,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useApplicationContextActions } from "@/app/components/application-context";
 import type {
+  ProximityCompetitorPair,
   ProximityCompetitorNetworkSummary,
+  ProximityCompetitorStateSummary,
   ProximityDistanceSummary,
   LocationRetailer,
   ProximityMapCluster,
   ProximityMapSummary,
   ProximityPair,
-  ProximityStateSummary,
   ProximityView,
 } from "@/lib/api";
 
@@ -39,7 +40,7 @@ type ModalKind =
   | "metric-total"
   | "metric-coverage"
   | "metric-gap"
-  | "metric-competitor"
+  | "metric-competitor-whitespace"
   | "metric-distance"
   | null;
 
@@ -219,34 +220,94 @@ function distanceSummaryForRows(
   };
 }
 
-function stateSummaryForRows(
+function haversineMiles(
+  leftLatitude: number,
+  leftLongitude: number,
+  rightLatitude: number,
+  rightLongitude: number,
+) {
+  const earthRadiusMiles = 3958.7613;
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const latitudeDelta = toRadians(rightLatitude - leftLatitude);
+  const longitudeDelta = toRadians(rightLongitude - leftLongitude);
+  const left = toRadians(leftLatitude);
+  const right = toRadians(rightLatitude);
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(left) * Math.cos(right) * Math.sin(longitudeDelta / 2) ** 2;
+  return 2 * earthRadiusMiles * Math.asin(Math.sqrt(a));
+}
+
+function competitorPairsForRows(
   rows: ProximityPair[],
+): ProximityCompetitorPair[] {
+  const walmartLocations = new Map(
+    rows.map((pair) => [pair.benchmark.id, pair.benchmark]),
+  );
+  const competitorLocations = new Map(
+    rows.map((pair) => [pair.competitor.id, pair.competitor]),
+  );
+  return [...competitorLocations.values()]
+    .flatMap((competitor) => {
+      let nearestWalmart: ProximityPair["benchmark"] | null = null;
+      let nearestDistance = Number.POSITIVE_INFINITY;
+      for (const walmart of walmartLocations.values()) {
+        const distance = haversineMiles(
+          competitor.latitude,
+          competitor.longitude,
+          walmart.latitude,
+          walmart.longitude,
+        );
+        if (distance < nearestDistance) {
+          nearestDistance = distance;
+          nearestWalmart = walmart;
+        }
+      }
+      if (!nearestWalmart) return [];
+      return [
+        {
+          competitor,
+          distance_miles: nearestDistance,
+          nearest_walmart: nearestWalmart,
+          within_1_mile: nearestDistance <= 1,
+          within_3_miles: nearestDistance <= 3,
+          within_5_miles: nearestDistance <= 5,
+          within_10_miles: nearestDistance <= 10,
+        },
+      ];
+    })
+    .sort((left, right) => right.distance_miles - left.distance_miles);
+}
+
+function competitorStateSummaryForRows(
+  rows: ProximityCompetitorPair[],
   selectedRadius: number,
-): ProximityStateSummary[] {
-  const grouped = new Map<string, ProximityPair[]>();
+): ProximityCompetitorStateSummary[] {
+  const grouped = new Map<string, ProximityCompetitorPair[]>();
   for (const pair of rows) {
-    const state = pair.benchmark.state || "Unknown";
+    const state = pair.competitor.state || "Unknown";
     grouped.set(state, [...(grouped.get(state) ?? []), pair]);
   }
   return [...grouped.entries()]
     .map(([state, statePairs]) => {
-      const covered = statePairs.filter(
+      const within = statePairs.filter(
         (pair) => pair.distance_miles <= selectedRadius,
       ).length;
       return {
-        coverage_share: statePairs.length ? covered / statePairs.length : null,
-        covered_locations: covered,
-        gap_locations: Math.max(0, statePairs.length - covered),
-        median_distance_miles: median(
+        competitor_locations: statePairs.length,
+        coverage_share: statePairs.length ? within / statePairs.length : null,
+        gap_locations: Math.max(0, statePairs.length - within),
+        median_distance_to_walmart_miles: median(
           statePairs.map((pair) => pair.distance_miles),
         ),
         state,
-        walmart_locations: statePairs.length,
+        within_radius_locations: within,
       };
     })
     .sort(
       (left, right) =>
         right.gap_locations - left.gap_locations ||
+        right.competitor_locations - left.competitor_locations ||
         left.state.localeCompare(right.state),
     );
 }
@@ -392,6 +453,41 @@ function filteredRowsToRecords(rows: ProximityPair[], selectedRadius: number) {
   }));
 }
 
+function competitorRowsToRecords(
+  rows: ProximityCompetitorPair[],
+  selectedRadius: number,
+) {
+  return rows.map((pair) => ({
+    competitor_retailer_id: pair.competitor.retailer_id,
+    competitor_location_id: pair.competitor.id,
+    competitor_store_number: pair.competitor.store_number,
+    competitor_store_name: pair.competitor.store_name,
+    competitor_city: pair.competitor.city,
+    competitor_state: pair.competitor.state,
+    competitor_zipcode: pair.competitor.zipcode,
+    competitor_country: pair.competitor.country,
+    competitor_latitude: pair.competitor.latitude,
+    competitor_longitude: pair.competitor.longitude,
+    nearest_walmart_retailer_id: pair.nearest_walmart.retailer_id,
+    nearest_walmart_location_id: pair.nearest_walmart.id,
+    nearest_walmart_store_number: pair.nearest_walmart.store_number,
+    nearest_walmart_store_name: pair.nearest_walmart.store_name,
+    nearest_walmart_city: pair.nearest_walmart.city,
+    nearest_walmart_state: pair.nearest_walmart.state,
+    nearest_walmart_zipcode: pair.nearest_walmart.zipcode,
+    nearest_walmart_country: pair.nearest_walmart.country,
+    nearest_walmart_latitude: pair.nearest_walmart.latitude,
+    nearest_walmart_longitude: pair.nearest_walmart.longitude,
+    nearest_walmart_distance_miles: pair.distance_miles,
+    within_1_mile: pair.within_1_mile,
+    within_3_miles: pair.within_3_miles,
+    within_5_miles: pair.within_5_miles,
+    within_10_miles: pair.within_10_miles,
+    selected_radius_miles: selectedRadius,
+    walmart_within_selected_radius: pair.distance_miles <= selectedRadius,
+  }));
+}
+
 function csvCell(value: unknown) {
   const text =
     typeof value === "boolean"
@@ -412,22 +508,26 @@ function download(filename: string, type: string, body: string) {
   URL.revokeObjectURL(url);
 }
 
+function downloadRecordsCsv(
+  records: Array<Record<string, unknown>>,
+  filename: string,
+) {
+  const columns = records.length ? Object.keys(records[0]!) : [];
+  const body = [
+    columns.map(csvCell).join(","),
+    ...records.map((record) =>
+      columns.map((column) => csvCell(record[column])).join(","),
+    ),
+  ].join("\r\n");
+  download(filename, "text/csv;charset=utf-8", `\uFEFF${body}`);
+}
+
 function downloadCsv(
   rows: ProximityPair[],
   selectedRadius: number,
   filename: string,
 ) {
-  const records = filteredRowsToRecords(rows, selectedRadius);
-  const columns = records.length ? Object.keys(records[0]!) : [];
-  const body = [
-    columns.map(csvCell).join(","),
-    ...records.map((record) =>
-      columns
-        .map((column) => csvCell(record[column as keyof typeof record]))
-        .join(","),
-    ),
-  ].join("\r\n");
-  download(filename, "text/csv;charset=utf-8", `\uFEFF${body}`);
+  downloadRecordsCsv(filteredRowsToRecords(rows, selectedRadius), filename);
 }
 
 function downloadJson(
@@ -439,6 +539,26 @@ function downloadJson(
     filename,
     "application/json;charset=utf-8",
     JSON.stringify(filteredRowsToRecords(rows, selectedRadius), null, 2),
+  );
+}
+
+function downloadCompetitorCsv(
+  rows: ProximityCompetitorPair[],
+  selectedRadius: number,
+  filename: string,
+) {
+  downloadRecordsCsv(competitorRowsToRecords(rows, selectedRadius), filename);
+}
+
+function downloadCompetitorJson(
+  rows: ProximityCompetitorPair[],
+  selectedRadius: number,
+  filename: string,
+) {
+  download(
+    filename,
+    "application/json;charset=utf-8",
+    JSON.stringify(competitorRowsToRecords(rows, selectedRadius), null, 2),
   );
 }
 
@@ -836,6 +956,9 @@ export function ProximityWorkspace({
   const [showWalmart, setShowWalmart] = useState(true);
   const [showCompetitors, setShowCompetitors] = useState(true);
   const [showSelectedDetail, setShowSelectedDetail] = useState(false);
+  const [competitorStateDetail, setCompetitorStateDetail] = useState<
+    string | null
+  >(null);
   const [onlySaved, setOnlySaved] = useState(false);
   const [theme, setTheme] = useState<ThemeMode>(() => initialTheme());
   const [modal, setModal] = useState<ModalKind>(null);
@@ -1090,18 +1213,6 @@ export function ProximityWorkspace({
     }
     return distanceSummaryForRows(scopedPairs);
   }, [onlySaved, query, scopedPairs, stateFilter, view]);
-  const stateSummaries = useMemo(() => {
-    if (
-      view?.state_summary &&
-      scopedPairs.length === view.pairs.length &&
-      stateFilter === "all" &&
-      !query.trim() &&
-      !onlySaved
-    ) {
-      return view.state_summary;
-    }
-    return stateSummaryForRows(scopedPairs, radius);
-  }, [onlySaved, query, radius, scopedPairs, stateFilter, view]);
   const competitorNetworkSummaries = useMemo(() => {
     if (
       view?.competitor_network_summary &&
@@ -1114,7 +1225,51 @@ export function ProximityWorkspace({
     }
     return competitorNetworkSummaryForRows(scopedPairs, radius);
   }, [onlySaved, query, radius, scopedPairs, stateFilter, view]);
-  const largestWhiteSpaceStates = stateSummaries.slice(0, 5);
+  const competitorPerspectivePairs = useMemo(
+    () => view?.competitor_pairs ?? competitorPairsForRows(scopedPairs),
+    [scopedPairs, view?.competitor_pairs],
+  );
+  const competitorStateSummaries = useMemo(
+    () =>
+      view?.competitor_state_summary ??
+      competitorStateSummaryForRows(competitorPerspectivePairs, radius),
+    [competitorPerspectivePairs, radius, view?.competitor_state_summary],
+  );
+  const competitorGapLocations = competitorPerspectivePairs.filter(
+    (pair) => pair.distance_miles > radius,
+  ).length;
+  const competitorWithinLocations = Math.max(
+    0,
+    competitorPerspectivePairs.length - competitorGapLocations,
+  );
+  const competitorGapShare = competitorPerspectivePairs.length
+    ? competitorGapLocations / competitorPerspectivePairs.length
+    : null;
+  const competitorWhiteSpaceStates = competitorStateSummaries.slice(0, 5);
+  const competitorStateDetailRows = competitorPerspectivePairs
+    .filter(
+      (pair) =>
+        competitorStateDetail === "all" ||
+        (pair.competitor.state || "Unknown") === competitorStateDetail,
+    )
+    .sort(
+      (left, right) =>
+        Number(right.distance_miles > radius) -
+          Number(left.distance_miles > radius) ||
+        right.distance_miles - left.distance_miles ||
+        (left.competitor.state || "").localeCompare(
+          right.competitor.state || "",
+        ) ||
+        left.competitor.store_number.localeCompare(
+          right.competitor.store_number,
+        ),
+    );
+  const competitorStateDetailSummary =
+    competitorStateDetail === "all"
+      ? null
+      : competitorStateSummaries.find(
+          (state) => state.state === competitorStateDetail,
+        );
   const strongestCompetitorNetworks = [
     ...competitorNetworkSummaries.filter(
       (network) => network.covered_walmart_locations > 0,
@@ -1123,11 +1278,6 @@ export function ProximityWorkspace({
       (network) => network.covered_walmart_locations === 0,
     ),
   ].slice(0, 5);
-  const competitorPoints = useMemo(
-    () => uniqueByLocation(scopedPairs, (pair) => pair.competitor),
-    [scopedPairs],
-  );
-  const visibleCompetitorSites = competitorPoints.length;
   const stateOptions = view?.state_options ?? [];
   const visibleShare = filteredPairs.length
     ? filteredWithin / filteredPairs.length
@@ -1534,6 +1684,7 @@ export function ProximityWorkspace({
     setRelation("all");
     setSort("nearest");
     setOnlySaved(false);
+    setCompetitorStateDetail(null);
   }
 
   function toggleSaved(pair: ProximityPair) {
@@ -1745,17 +1896,13 @@ export function ProximityWorkspace({
           value={count(selectedCoverage?.outside ?? filteredOutside)}
         />
         <MetricCard
-          description={
-            view
-              ? `${count(visibleCompetitorSites)} of ${count(view.summary.competitor_mappable_locations)} mappable ${view.competitor.display_name} sites are nearest to ≥1 Walmart`
-              : "Select a competitor"
-          }
+          description={`${percent(competitorGapShare)} of ${count(competitorPerspectivePairs.length)} mappable ${view?.competitor.display_name ?? "competitor"} sites`}
           icon="C"
           iconClass={styles.red}
-          label="Nearest competitor sites"
-          onInfo={() => setModal("metric-competitor")}
-          title="Open nearest competitor sites definition"
-          value={count(visibleCompetitorSites)}
+          label={`Competitor sites > ${radius} mi`}
+          onInfo={() => setModal("metric-competitor-whitespace")}
+          title="Open competitor white-space definition"
+          value={count(competitorGapLocations)}
         />
       </section>
 
@@ -1773,13 +1920,23 @@ export function ProximityWorkspace({
                 straight-line radius.
               </p>
             </div>
-            <button
-              onClick={() => setShowTable(true)}
-              title="Open the downloadable location table"
-              type="button"
-            >
-              Store details
-            </button>
+            <div className={styles.cardActions}>
+              <button
+                className={styles.cardInfoButton}
+                onClick={() => setModal("metric-coverage")}
+                title="Open radius coverage definition"
+                type="button"
+              >
+                i
+              </button>
+              <button
+                onClick={() => setShowTable(true)}
+                title="Open the downloadable location table"
+                type="button"
+              >
+                Store details
+              </button>
+            </div>
           </div>
           <div className={styles.coverageRows}>
             {coverageBands.map((band) => (
@@ -1806,26 +1963,44 @@ export function ProximityWorkspace({
         <article className={styles.insightPanel}>
           <div className={styles.coverageHead}>
             <div>
-              <h2>Largest white-space states</h2>
-              <p>Where Walmart has the most locations beyond {radius} mi.</p>
+              <h2>Competitor white-space by state</h2>
+              <p>
+                Where {view?.competitor.display_name ?? "the competitor"} has
+                locations without Walmart within {radius} mi.
+              </p>
+            </div>
+            <div className={styles.cardActions}>
+              <button
+                className={styles.cardInfoButton}
+                onClick={() => setModal("metric-competitor-whitespace")}
+                title="Open competitor white-space definition"
+                type="button"
+              >
+                i
+              </button>
+              <button
+                onClick={() => setCompetitorStateDetail("all")}
+                title="Open the full competitor white-space state list"
+                type="button"
+              >
+                All states
+              </button>
             </div>
           </div>
           <div className={styles.rankedList}>
-            {largestWhiteSpaceStates.map((state) => (
+            {competitorWhiteSpaceStates.map((state) => (
               <button
                 key={state.state}
-                onClick={() => {
-                  setStateFilter(state.state);
-                  setRelation("outside");
-                }}
-                title={`Show ${state.state} Walmart stores without ${view?.competitor.display_name ?? "competitor"} within ${radius} mile${radius === 1 ? "" : "s"}`}
+                onClick={() => setCompetitorStateDetail(state.state)}
+                title={`Open ${state.state} ${view?.competitor.display_name ?? "competitor"} locations whose nearest Walmart is beyond ${radius} mile${radius === 1 ? "" : "s"}`}
                 type="button"
               >
                 <span>{state.state}</span>
                 <b>{count(state.gap_locations)} gaps</b>
                 <small>
-                  {percent(state.coverage_share)} covered · median{" "}
-                  {miles(state.median_distance_miles)}
+                  {count(state.competitor_locations)} competitor sites ·{" "}
+                  {percent(state.coverage_share)} near Walmart · median{" "}
+                  {miles(state.median_distance_to_walmart_miles)}
                 </small>
               </button>
             ))}
@@ -1874,11 +2049,12 @@ export function ProximityWorkspace({
               <p>Nearest-competitor distance across active Walmart scope.</p>
             </div>
             <button
+              className={styles.cardInfoButton}
               onClick={() => setModal("metric-distance")}
               title="Open distance profile definition"
               type="button"
             >
-              Info
+              i
             </button>
           </div>
           <div className={styles.distanceGrid}>
@@ -1959,6 +2135,21 @@ export function ProximityWorkspace({
                   <strong>White-space stores</strong>
                   <small>Nearest competitor is farther away</small>
                 </button>
+                {query ||
+                stateFilter !== "all" ||
+                relation !== "all" ||
+                sort !== "nearest" ||
+                onlySaved ? (
+                  <button
+                    className={styles.resetQuickView}
+                    onClick={resetView}
+                    title="Reset search, state, relationship, sort, and shortlist filters"
+                    type="button"
+                  >
+                    <strong>Reset view</strong>
+                    <small>Return to all locations</small>
+                  </button>
+                ) : null}
               </div>
             </div>
             <div className={styles.legend}>
@@ -2418,6 +2609,168 @@ export function ProximityWorkspace({
         </div>
       ) : null}
 
+      {competitorStateDetail ? (
+        <div
+          className={styles.drawerBackdrop}
+          onClick={() => setCompetitorStateDetail(null)}
+          role="presentation"
+        >
+          <section
+            aria-label="Competitor white-space detail"
+            className={`${styles.drawer} ${styles.tableDrawer}`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className={styles.drawerHead}>
+              <div>
+                <span>Competitor-location evidence</span>
+                <h2>
+                  {competitorStateDetail === "all"
+                    ? "All competitor white-space states"
+                    : `${competitorStateDetail} competitor white-space`}
+                </h2>
+                <p>
+                  {count(competitorStateDetailRows.length)}{" "}
+                  {view?.competitor.display_name ?? "competitor"} locations
+                  paired to their nearest Walmart. Rows outside {radius} mi are
+                  the selected competitor’s white-space locations.
+                </p>
+              </div>
+              <button
+                onClick={() => setCompetitorStateDetail(null)}
+                title="Close competitor white-space detail"
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <div className={styles.tableSummary}>
+              <article>
+                <span>Competitor locations</span>
+                <strong>
+                  {count(
+                    competitorStateDetailSummary?.competitor_locations ??
+                      competitorPerspectivePairs.length,
+                  )}
+                </strong>
+              </article>
+              <article>
+                <span>Without Walmart ≤ {radius} mi</span>
+                <strong>
+                  {count(
+                    competitorStateDetailSummary?.gap_locations ??
+                      competitorGapLocations,
+                  )}
+                </strong>
+              </article>
+              <article>
+                <span>Near Walmart</span>
+                <strong>
+                  {count(
+                    competitorStateDetailSummary?.within_radius_locations ??
+                      competitorWithinLocations,
+                  )}
+                </strong>
+              </article>
+              <article>
+                <span>Median to Walmart</span>
+                <strong>
+                  {miles(
+                    competitorStateDetailSummary?.median_distance_to_walmart_miles ??
+                      median(
+                        competitorStateDetailRows.map(
+                          (pair) => pair.distance_miles,
+                        ),
+                      ),
+                  )}
+                </strong>
+              </article>
+            </div>
+            <div className={styles.downloadRow}>
+              <button
+                className={styles.btn}
+                onClick={() => setCompetitorStateDetail("all")}
+                title="Reset the drawer to all competitor states"
+                type="button"
+              >
+                All states
+              </button>
+              <button
+                className={styles.btn}
+                onClick={() => setCompetitorStateDetail(null)}
+                title="Close this drill-down drawer"
+                type="button"
+              >
+                Reset view
+              </button>
+              <button
+                className={styles.btn}
+                onClick={() =>
+                  downloadCompetitorCsv(
+                    competitorStateDetailRows,
+                    radius,
+                    "proximity-competitor-white-space.csv",
+                  )
+                }
+                title="Download competitor white-space rows as CSV"
+                type="button"
+              >
+                CSV
+              </button>
+              <button
+                className={styles.btn}
+                onClick={() =>
+                  downloadCompetitorJson(
+                    competitorStateDetailRows,
+                    radius,
+                    "proximity-competitor-white-space.json",
+                  )
+                }
+                title="Download competitor white-space rows as JSON"
+                type="button"
+              >
+                JSON
+              </button>
+            </div>
+            <div className={styles.tableWrap}>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Competitor #</th>
+                    <th>Competitor location</th>
+                    <th>Nearest Walmart #</th>
+                    <th>Nearest Walmart location</th>
+                    <th>Distance to Walmart</th>
+                    <th>Walmart ≤ {radius} mi</th>
+                    <th>Competitor coordinate</th>
+                    <th>Walmart coordinate</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {competitorStateDetailRows.map((pair) => (
+                    <tr key={pair.competitor.id}>
+                      <td>{pair.competitor.store_number}</td>
+                      <td>{locationLabel(pair.competitor)}</td>
+                      <td>{pair.nearest_walmart.store_number}</td>
+                      <td>{locationLabel(pair.nearest_walmart)}</td>
+                      <td>{miles(pair.distance_miles)}</td>
+                      <td>{pair.distance_miles <= radius ? "Yes" : "No"}</td>
+                      <td>
+                        {pair.competitor.latitude.toFixed(5)},{" "}
+                        {pair.competitor.longitude.toFixed(5)}
+                      </td>
+                      <td>
+                        {pair.nearest_walmart.latitude.toFixed(5)},{" "}
+                        {pair.nearest_walmart.longitude.toFixed(5)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      ) : null}
+
       {showTable ? (
         <div
           className={styles.drawerBackdrop}
@@ -2562,6 +2915,10 @@ export function ProximityWorkspace({
 
       {modal ? (
         <InfoModal
+          competitorGapLocations={competitorGapLocations}
+          competitorGapShare={competitorGapShare}
+          competitorPairCount={competitorPerspectivePairs.length}
+          competitorWithinLocations={competitorWithinLocations}
           distanceSummary={distanceSummary}
           modal={modal}
           radius={radius}
@@ -2570,7 +2927,6 @@ export function ProximityWorkspace({
           selectedCoverage={selectedCoverage}
           setModal={setModal}
           view={view}
-          visibleCompetitorSites={visibleCompetitorSites}
         />
       ) : null}
     </div>
@@ -2859,6 +3215,10 @@ function MetricCard({
 }
 
 function InfoModal({
+  competitorGapLocations,
+  competitorGapShare,
+  competitorPairCount,
+  competitorWithinLocations,
   distanceSummary,
   modal,
   radius,
@@ -2867,8 +3227,11 @@ function InfoModal({
   selectedCoverage,
   setModal,
   view,
-  visibleCompetitorSites,
 }: Readonly<{
+  competitorGapLocations: number;
+  competitorGapShare: number | null;
+  competitorPairCount: number;
+  competitorWithinLocations: number;
   distanceSummary: ProximityDistanceSummary;
   modal: Exclude<ModalKind, null>;
   radius: number;
@@ -2885,7 +3248,6 @@ function InfoModal({
     | undefined;
   setModal: (modal: ModalKind) => void;
   view: ProximityView | null;
-  visibleCompetitorSites: number;
 }>) {
   const title =
     modal === "method"
@@ -2900,9 +3262,11 @@ function InfoModal({
               ? `Coverage within ${radius} mile${radius === 1 ? "" : "s"}`
               : modal === "metric-gap"
                 ? `White-space stores beyond ${radius} mile${radius === 1 ? "" : "s"}`
-                : modal === "metric-distance"
-                  ? "Distance profile"
-                  : "Nearest competitor sites represented";
+                : modal === "metric-competitor-whitespace"
+                  ? `Competitor sites beyond ${radius} mile${radius === 1 ? "" : "s"}`
+                  : modal === "metric-distance"
+                    ? "Distance profile"
+                    : "Nearest competitor sites represented";
   const eyebrow = modal.startsWith("metric-")
     ? "Metric definition"
     : modal === "method"
@@ -3026,24 +3390,30 @@ function InfoModal({
           </div>
         ) : null}
 
-        {modal === "metric-competitor" ? (
+        {modal === "metric-competitor-whitespace" ? (
           <div className={styles.modalBody}>
             <p>
-              <b>What it represents:</b> selected competitor locations that are
-              actually represented in nearest-neighbor pairings.
+              <b>What it represents:</b> selected competitor locations whose
+              nearest Walmart is farther away than the selected radius.
             </p>
             <p>
-              <b>Why it can be lower than total competitor sites:</b> the data
-              is Walmart-centered. Every paired Walmart location contributes one
-              nearest competitor. Competitor locations that are not the nearest
-              selected-competitor site for any Walmart remain valid mappable
-              locations, but they are not represented in the nearest-site pair
-              list.
+              <b>Why this matters:</b> it flips the perspective from
+              Walmart-centered coverage to competitor-centered white space,
+              highlighting markets where the competitor has a physical footprint
+              but no Walmart location inside the selected proximity radius.
             </p>
             <p>
-              Current value: {count(visibleCompetitorSites)} represented of{" "}
-              {count(view?.summary.competitor_mappable_locations ?? 0)} mappable{" "}
-              {view?.competitor.display_name ?? "competitor"} sites.
+              <b>Calculation:</b> every mappable{" "}
+              {view?.competitor.display_name ?? "competitor"} location is paired
+              to its nearest mappable Walmart location. Locations with
+              `nearest_walmart_distance_miles &gt; selected_radius_miles` are
+              counted as competitor white-space sites.
+            </p>
+            <p>
+              Current value: {count(competitorGapLocations)} white-space sites;{" "}
+              {count(competitorWithinLocations)} near Walmart;{" "}
+              {count(competitorPairCount)} competitor sites total;{" "}
+              {percent(competitorGapShare)} white-space.
             </p>
           </div>
         ) : null}

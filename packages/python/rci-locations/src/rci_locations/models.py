@@ -139,6 +139,7 @@ class ProximityResult:
     benchmark: ProximityRetailer
     competitor: ProximityRetailer
     pairs: tuple[ProximityPair, ...]
+    reverse_pairs: tuple[ProximityPair, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
