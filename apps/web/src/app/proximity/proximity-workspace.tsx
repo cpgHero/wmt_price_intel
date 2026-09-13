@@ -294,6 +294,7 @@ function competitorNetworkSummaryForRows(
     })
     .sort(
       (left, right) =>
+        right.covered_walmart_locations - left.covered_walmart_locations ||
         right.assigned_walmart_locations - left.assigned_walmart_locations ||
         (left.median_distance_miles ?? Number.POSITIVE_INFINITY) -
           (right.median_distance_miles ?? Number.POSITIVE_INFINITY) ||
@@ -1114,7 +1115,14 @@ export function ProximityWorkspace({
     return competitorNetworkSummaryForRows(scopedPairs, radius);
   }, [onlySaved, query, radius, scopedPairs, stateFilter, view]);
   const largestWhiteSpaceStates = stateSummaries.slice(0, 5);
-  const strongestCompetitorNetworks = competitorNetworkSummaries.slice(0, 5);
+  const strongestCompetitorNetworks = [
+    ...competitorNetworkSummaries.filter(
+      (network) => network.covered_walmart_locations > 0,
+    ),
+    ...competitorNetworkSummaries.filter(
+      (network) => network.covered_walmart_locations === 0,
+    ),
+  ].slice(0, 5);
   const competitorPoints = useMemo(
     () => uniqueByLocation(scopedPairs, (pair) => pair.competitor),
     [scopedPairs],
@@ -1827,8 +1835,11 @@ export function ProximityWorkspace({
         <article className={styles.insightPanel}>
           <div className={styles.coverageHead}>
             <div>
-              <h2>Concentrated competitor sites</h2>
-              <p>Competitor locations assigned to the most Walmart stores.</p>
+              <h2>Highest-overlap competitor sites</h2>
+              <p>
+                Competitor locations with the most Walmart stores inside{" "}
+                {radius} mi.
+              </p>
             </div>
           </div>
           <div className={styles.rankedList}>
@@ -1838,7 +1849,7 @@ export function ProximityWorkspace({
                 onClick={() =>
                   selectRelationship(network.representative_pair_key)
                 }
-                title={`Inspect ${view?.competitor.display_name ?? "competitor"} #${network.competitor_store_number} and its assigned Walmart network`}
+                title={`Inspect ${view?.competitor.display_name ?? "competitor"} #${network.competitor_store_number} and its nearby Walmart network`}
                 type="button"
               >
                 <span>
@@ -1846,10 +1857,10 @@ export function ProximityWorkspace({
                   {network.city || "Unknown city"}
                   {network.state ? `, ${network.state}` : ""}
                 </span>
-                <b>{count(network.assigned_walmart_locations)} Walmart</b>
+                <b>{count(network.covered_walmart_locations)} nearby</b>
                 <small>
-                  {count(network.covered_walmart_locations)} within {radius} mi
-                  · median {miles(network.median_distance_miles)}
+                  {count(network.assigned_walmart_locations)} total assigned ·
+                  median {miles(network.median_distance_miles)}
                 </small>
               </button>
             ))}
