@@ -4,10 +4,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useApplicationContextActions } from "@/app/components/application-context";
 import type {
+  ProximityCompetitorNetworkSummary,
+  ProximityDistanceSummary,
   LocationRetailer,
   ProximityMapCluster,
   ProximityMapSummary,
   ProximityPair,
+  ProximityStateSummary,
   ProximityView,
 } from "@/lib/api";
 
@@ -37,6 +40,7 @@ type ModalKind =
   | "metric-coverage"
   | "metric-gap"
   | "metric-competitor"
+  | "metric-distance"
   | null;
 
 interface MapMouseEvent {
@@ -187,6 +191,116 @@ function median(values: number[]) {
   return sorted.length % 2
     ? sorted[mid]!
     : (sorted[mid - 1]! + sorted[mid]!) / 2;
+}
+
+function percentileValue(values: number[], percentile: number) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((left, right) => left - right);
+  if (sorted.length === 1) return sorted[0]!;
+  const rank = (sorted.length - 1) * percentile;
+  const lower = Math.floor(rank);
+  const upper = Math.ceil(rank);
+  if (lower === upper) return sorted[lower]!;
+  return sorted[lower]! + (sorted[upper]! - sorted[lower]!) * (rank - lower);
+}
+
+function distanceSummaryForRows(
+  rows: ProximityPair[],
+): ProximityDistanceSummary {
+  const distances = rows.map((pair) => pair.distance_miles);
+  return {
+    average_miles: distances.length
+      ? distances.reduce((total, value) => total + value, 0) / distances.length
+      : null,
+    max_miles: distances.length ? Math.max(...distances) : null,
+    median_miles: median(distances),
+    p75_miles: percentileValue(distances, 0.75),
+    p90_miles: percentileValue(distances, 0.9),
+  };
+}
+
+function stateSummaryForRows(
+  rows: ProximityPair[],
+  selectedRadius: number,
+): ProximityStateSummary[] {
+  const grouped = new Map<string, ProximityPair[]>();
+  for (const pair of rows) {
+    const state = pair.benchmark.state || "Unknown";
+    grouped.set(state, [...(grouped.get(state) ?? []), pair]);
+  }
+  return [...grouped.entries()]
+    .map(([state, statePairs]) => {
+      const covered = statePairs.filter(
+        (pair) => pair.distance_miles <= selectedRadius,
+      ).length;
+      return {
+        coverage_share: statePairs.length ? covered / statePairs.length : null,
+        covered_locations: covered,
+        gap_locations: Math.max(0, statePairs.length - covered),
+        median_distance_miles: median(
+          statePairs.map((pair) => pair.distance_miles),
+        ),
+        state,
+        walmart_locations: statePairs.length,
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.gap_locations - left.gap_locations ||
+        left.state.localeCompare(right.state),
+    );
+}
+
+function competitorNetworkSummaryForRows(
+  rows: ProximityPair[],
+  selectedRadius: number,
+): ProximityCompetitorNetworkSummary[] {
+  const grouped = new Map<string, ProximityPair[]>();
+  for (const pair of rows) {
+    grouped.set(pair.competitor.id, [
+      ...(grouped.get(pair.competitor.id) ?? []),
+      pair,
+    ]);
+  }
+  return [...grouped.entries()]
+    .map(([competitorLocationId, networkPairs]) => {
+      const sortedPairs = [...networkPairs].sort(
+        (left, right) => left.distance_miles - right.distance_miles,
+      );
+      const competitor = sortedPairs[0]!.competitor;
+      const covered = sortedPairs.filter(
+        (pair) => pair.distance_miles <= selectedRadius,
+      ).length;
+      const distances = sortedPairs.map((pair) => pair.distance_miles);
+      return {
+        assigned_walmart_locations: sortedPairs.length,
+        city: competitor.city,
+        competitor_location_id: competitorLocationId,
+        competitor_store_name: competitor.store_name,
+        competitor_store_number: competitor.store_number,
+        coverage_share: sortedPairs.length
+          ? covered / sortedPairs.length
+          : null,
+        covered_walmart_locations: covered,
+        farthest_distance_miles: distances.at(-1) ?? null,
+        gap_walmart_locations: Math.max(0, sortedPairs.length - covered),
+        latitude: competitor.latitude,
+        longitude: competitor.longitude,
+        median_distance_miles: median(distances),
+        nearest_distance_miles: distances[0] ?? null,
+        representative_pair_key: pairKey(sortedPairs[0]!),
+        state: competitor.state,
+      };
+    })
+    .sort(
+      (left, right) =>
+        right.assigned_walmart_locations - left.assigned_walmart_locations ||
+        (left.median_distance_miles ?? Number.POSITIVE_INFINITY) -
+          (right.median_distance_miles ?? Number.POSITIVE_INFINITY) ||
+        left.competitor_store_number.localeCompare(
+          right.competitor_store_number,
+        ),
+    );
 }
 
 function escapeHtml(value: unknown) {
@@ -933,6 +1047,16 @@ export function ProximityWorkspace({
   const selectedNetworkWithin = selectedNetworkPairs.filter(
     (pair) => pair.distance_miles <= radius,
   ).length;
+  const selectedNetworkDistances = selectedNetworkPairs.map(
+    (pair) => pair.distance_miles,
+  );
+  const selectedNetworkMedian = median(selectedNetworkDistances);
+  const selectedNetworkFarthest = selectedNetworkDistances.length
+    ? Math.max(...selectedNetworkDistances)
+    : null;
+  const selectedNetworkCoverageShare = selectedNetworkPairs.length
+    ? selectedNetworkWithin / selectedNetworkPairs.length
+    : null;
   const filteredWithin = filteredPairs.filter(
     (pair) => pair.distance_miles <= radius,
   ).length;
@@ -953,6 +1077,44 @@ export function ProximityWorkspace({
   });
   const selectedCoverage =
     coverageBands.find((band) => band.miles === radius) ?? coverageBands[0];
+  const distanceSummary = useMemo(() => {
+    if (
+      view?.distance_summary &&
+      scopedPairs.length === view.pairs.length &&
+      stateFilter === "all" &&
+      !query.trim() &&
+      !onlySaved
+    ) {
+      return view.distance_summary;
+    }
+    return distanceSummaryForRows(scopedPairs);
+  }, [onlySaved, query, scopedPairs, stateFilter, view]);
+  const stateSummaries = useMemo(() => {
+    if (
+      view?.state_summary &&
+      scopedPairs.length === view.pairs.length &&
+      stateFilter === "all" &&
+      !query.trim() &&
+      !onlySaved
+    ) {
+      return view.state_summary;
+    }
+    return stateSummaryForRows(scopedPairs, radius);
+  }, [onlySaved, query, radius, scopedPairs, stateFilter, view]);
+  const competitorNetworkSummaries = useMemo(() => {
+    if (
+      view?.competitor_network_summary &&
+      scopedPairs.length === view.pairs.length &&
+      stateFilter === "all" &&
+      !query.trim() &&
+      !onlySaved
+    ) {
+      return view.competitor_network_summary;
+    }
+    return competitorNetworkSummaryForRows(scopedPairs, radius);
+  }, [onlySaved, query, radius, scopedPairs, stateFilter, view]);
+  const largestWhiteSpaceStates = stateSummaries.slice(0, 5);
+  const strongestCompetitorNetworks = competitorNetworkSummaries.slice(0, 5);
   const competitorPoints = useMemo(
     () => uniqueByLocation(scopedPairs, (pair) => pair.competitor),
     [scopedPairs],
@@ -1589,47 +1751,140 @@ export function ProximityWorkspace({
         />
       </section>
 
-      <section
-        className={styles.coverageCard}
-        aria-label="Walmart coverage by selected competitor radius"
-      >
-        <div className={styles.coverageHead}>
-          <div>
-            <h2>Coverage by radius</h2>
-            <p>
-              Percent of paired Walmart locations whose nearest{" "}
-              {view?.competitor.display_name ?? "competitor"} is within each
-              straight-line radius.
-            </p>
-          </div>
-          <button
-            onClick={() => setShowTable(true)}
-            title="Open the downloadable location table"
-            type="button"
-          >
-            Store details
-          </button>
-        </div>
-        <div className={styles.coverageRows}>
-          {coverageBands.map((band) => (
+      <section className={styles.insightDeck} aria-label="Proximity insights">
+        <article
+          className={`${styles.coverageCard} ${styles.insightPanelWide}`}
+          aria-label="Walmart coverage by selected competitor radius"
+        >
+          <div className={styles.coverageHead}>
+            <div>
+              <h2>Coverage by radius</h2>
+              <p>
+                Percent of paired Walmart locations whose nearest{" "}
+                {view?.competitor.display_name ?? "competitor"} is within each
+                straight-line radius.
+              </p>
+            </div>
             <button
-              aria-pressed={radius === band.miles}
-              className={styles.coverageRow}
-              key={band.miles}
-              onClick={() => void load({ radius: band.miles })}
-              title={`Switch selected radius to ${band.miles} mile${band.miles === 1 ? "" : "s"}`}
+              onClick={() => setShowTable(true)}
+              title="Open the downloadable location table"
               type="button"
             >
-              <span>{band.label}</span>
-              <i>
-                <b style={{ width: percent(band.share) }} />
-              </i>
-              <strong>{count(band.within)}</strong>
-              <small>{count(band.outside)} gaps</small>
-              <small>{percent(band.share)}</small>
+              Store details
             </button>
-          ))}
-        </div>
+          </div>
+          <div className={styles.coverageRows}>
+            {coverageBands.map((band) => (
+              <button
+                aria-pressed={radius === band.miles}
+                className={styles.coverageRow}
+                key={band.miles}
+                onClick={() => void load({ radius: band.miles })}
+                title={`Switch selected radius to ${band.miles} mile${band.miles === 1 ? "" : "s"}`}
+                type="button"
+              >
+                <span>{band.label}</span>
+                <i>
+                  <b style={{ width: percent(band.share) }} />
+                </i>
+                <strong>{count(band.within)}</strong>
+                <small>{count(band.outside)} gaps</small>
+                <small>{percent(band.share)}</small>
+              </button>
+            ))}
+          </div>
+        </article>
+
+        <article className={styles.insightPanel}>
+          <div className={styles.coverageHead}>
+            <div>
+              <h2>Largest white-space states</h2>
+              <p>Where Walmart has the most locations beyond {radius} mi.</p>
+            </div>
+          </div>
+          <div className={styles.rankedList}>
+            {largestWhiteSpaceStates.map((state) => (
+              <button
+                key={state.state}
+                onClick={() => {
+                  setStateFilter(state.state);
+                  setRelation("outside");
+                }}
+                title={`Show ${state.state} Walmart stores without ${view?.competitor.display_name ?? "competitor"} within ${radius} mile${radius === 1 ? "" : "s"}`}
+                type="button"
+              >
+                <span>{state.state}</span>
+                <b>{count(state.gap_locations)} gaps</b>
+                <small>
+                  {percent(state.coverage_share)} covered · median{" "}
+                  {miles(state.median_distance_miles)}
+                </small>
+              </button>
+            ))}
+          </div>
+        </article>
+
+        <article className={styles.insightPanel}>
+          <div className={styles.coverageHead}>
+            <div>
+              <h2>Concentrated competitor sites</h2>
+              <p>Competitor locations assigned to the most Walmart stores.</p>
+            </div>
+          </div>
+          <div className={styles.rankedList}>
+            {strongestCompetitorNetworks.map((network) => (
+              <button
+                key={network.competitor_location_id}
+                onClick={() =>
+                  selectRelationship(network.representative_pair_key)
+                }
+                title={`Inspect ${view?.competitor.display_name ?? "competitor"} #${network.competitor_store_number} and its assigned Walmart network`}
+                type="button"
+              >
+                <span>
+                  #{network.competitor_store_number} ·{" "}
+                  {network.city || "Unknown city"}
+                  {network.state ? `, ${network.state}` : ""}
+                </span>
+                <b>{count(network.assigned_walmart_locations)} Walmart</b>
+                <small>
+                  {count(network.covered_walmart_locations)} within {radius} mi
+                  · median {miles(network.median_distance_miles)}
+                </small>
+              </button>
+            ))}
+          </div>
+        </article>
+
+        <article className={styles.insightPanel}>
+          <div className={styles.coverageHead}>
+            <div>
+              <h2>Distance profile</h2>
+              <p>Nearest-competitor distance across active Walmart scope.</p>
+            </div>
+            <button
+              onClick={() => setModal("metric-distance")}
+              title="Open distance profile definition"
+              type="button"
+            >
+              Info
+            </button>
+          </div>
+          <div className={styles.distanceGrid}>
+            <span>
+              Median <b>{miles(distanceSummary.median_miles)}</b>
+            </span>
+            <span>
+              P75 <b>{miles(distanceSummary.p75_miles)}</b>
+            </span>
+            <span>
+              P90 <b>{miles(distanceSummary.p90_miles)}</b>
+            </span>
+            <span>
+              Max <b>{miles(distanceSummary.max_miles)}</b>
+            </span>
+          </div>
+        </article>
       </section>
 
       <section className={styles.explorer}>
@@ -1725,20 +1980,103 @@ export function ProximityWorkspace({
               </small>
             </div>
             {selectedPair ? (
-              <button
-                className={styles.selectionToast}
-                onClick={() => setShowSelectedDetail(true)}
-                title="Open selected Walmart-to-competitor relationship details"
-                type="button"
+              <aside
+                aria-label="Selected competitor network"
+                className={styles.selectedNetworkPanel}
               >
-                <span>Selected relationship</span>
-                <strong>{miles(selectedPair.distance_miles)}</strong>
-                <small>
-                  Walmart #{selectedPair.benchmark.store_number} →{" "}
-                  {selectedPair.competitor.retailer_display_name} #
-                  {selectedPair.competitor.store_number}
-                </small>
-              </button>
+                <div className={styles.selectedNetworkHead}>
+                  <div>
+                    <span>Selected network</span>
+                    <h2>
+                      {selectedPair.competitor.retailer_display_name} #
+                      {selectedPair.competitor.store_number}
+                    </h2>
+                    <p>
+                      {selectedPair.competitor.city || "Unknown city"}
+                      {selectedPair.competitor.state
+                        ? `, ${selectedPair.competitor.state}`
+                        : ""}{" "}
+                      · nearest to {count(selectedNetworkPairs.length)} Walmart
+                      locations.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => toggleSaved(selectedPair)}
+                    title="Save or remove this selected competitor network from the shortlist"
+                    type="button"
+                  >
+                    {savedKeys.has(pairKey(selectedPair)) ? "★" : "☆"}
+                  </button>
+                </div>
+                <div className={styles.networkMetrics}>
+                  <span>
+                    Selected pair <b>{miles(selectedPair.distance_miles)}</b>
+                  </span>
+                  <span>
+                    Within {radius} mi{" "}
+                    <b>
+                      {count(selectedNetworkWithin)} /{" "}
+                      {count(selectedNetworkPairs.length)}
+                    </b>
+                  </span>
+                  <span>
+                    Coverage <b>{percent(selectedNetworkCoverageShare)}</b>
+                  </span>
+                  <span>
+                    Median <b>{miles(selectedNetworkMedian)}</b>
+                  </span>
+                  <span>
+                    Farthest <b>{miles(selectedNetworkFarthest)}</b>
+                  </span>
+                </div>
+                <div className={styles.networkActions}>
+                  <button
+                    onClick={() => {
+                      setRelation("all");
+                      focusMapOnPair(selectedPair);
+                    }}
+                    title="Recenter the map on this selected competitor network"
+                    type="button"
+                  >
+                    Recenter
+                  </button>
+                  <button
+                    onClick={() => setShowSelectedDetail(true)}
+                    title="Open the full selected relationship drawer"
+                    type="button"
+                  >
+                    Details
+                  </button>
+                  <button
+                    onClick={() => setShowTable(true)}
+                    title="Open the downloadable location table"
+                    type="button"
+                  >
+                    Table
+                  </button>
+                </div>
+                <div className={styles.networkRows}>
+                  {selectedNetworkPairs.slice(0, 6).map((pair) => (
+                    <button
+                      key={pairKey(pair)}
+                      onClick={() => selectRelationship(pairKey(pair))}
+                      title={`Select Walmart #${pair.benchmark.store_number} in this competitor network`}
+                      type="button"
+                    >
+                      <span>
+                        Walmart #{pair.benchmark.store_number}
+                        <small>
+                          {pair.benchmark.city || "Unknown city"}
+                          {pair.benchmark.state
+                            ? `, ${pair.benchmark.state}`
+                            : ""}
+                        </small>
+                      </span>
+                      <b>{miles(pair.distance_miles)}</b>
+                    </button>
+                  ))}
+                </div>
+              </aside>
             ) : null}
           </div>
           <div className={styles.mapFooter}>
@@ -2213,6 +2551,7 @@ export function ProximityWorkspace({
 
       {modal ? (
         <InfoModal
+          distanceSummary={distanceSummary}
           modal={modal}
           radius={radius}
           scopeMedian={scopeMedian}
@@ -2509,6 +2848,7 @@ function MetricCard({
 }
 
 function InfoModal({
+  distanceSummary,
   modal,
   radius,
   scopeMedian,
@@ -2518,6 +2858,7 @@ function InfoModal({
   view,
   visibleCompetitorSites,
 }: Readonly<{
+  distanceSummary: ProximityDistanceSummary;
   modal: Exclude<ModalKind, null>;
   radius: number;
   scopeMedian: number | null;
@@ -2548,7 +2889,9 @@ function InfoModal({
               ? `Coverage within ${radius} mile${radius === 1 ? "" : "s"}`
               : modal === "metric-gap"
                 ? `White-space stores beyond ${radius} mile${radius === 1 ? "" : "s"}`
-                : "Nearest competitor sites represented";
+                : modal === "metric-distance"
+                  ? "Distance profile"
+                  : "Nearest competitor sites represented";
   const eyebrow = modal.startsWith("metric-")
     ? "Metric definition"
     : modal === "method"
@@ -2690,6 +3033,27 @@ function InfoModal({
               Current value: {count(visibleCompetitorSites)} represented of{" "}
               {count(view?.summary.competitor_mappable_locations ?? 0)} mappable{" "}
               {view?.competitor.display_name ?? "competitor"} sites.
+            </p>
+          </div>
+        ) : null}
+
+        {modal === "metric-distance" ? (
+          <div className={styles.modalBody}>
+            <p>
+              <b>What it represents:</b> the distribution of nearest selected
+              competitor distances for the active Walmart scope.
+            </p>
+            <p>
+              <b>Calculation:</b> sort active Walmart-to-nearest-competitor pair
+              rows by `nearest_distance_miles`, then report the median, 75th
+              percentile, 90th percentile, and maximum straight-line Haversine
+              distance.
+            </p>
+            <p>
+              Current values: median {miles(distanceSummary.median_miles)}, P75{" "}
+              {miles(distanceSummary.p75_miles)}, P90{" "}
+              {miles(distanceSummary.p90_miles)}, max{" "}
+              {miles(distanceSummary.max_miles)}.
             </p>
           </div>
         ) : null}

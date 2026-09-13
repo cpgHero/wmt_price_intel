@@ -745,6 +745,41 @@ export interface ProximityMapSummary {
   competitor_clusters: ProximityMapCluster[];
 }
 
+export interface ProximityDistanceSummary {
+  average_miles: number | null;
+  median_miles: number | null;
+  p75_miles: number | null;
+  p90_miles: number | null;
+  max_miles: number | null;
+}
+
+export interface ProximityStateSummary {
+  state: string;
+  walmart_locations: number;
+  covered_locations: number;
+  gap_locations: number;
+  coverage_share: number | null;
+  median_distance_miles: number | null;
+}
+
+export interface ProximityCompetitorNetworkSummary {
+  competitor_location_id: string;
+  competitor_store_number: string;
+  competitor_store_name: string | null;
+  city: string | null;
+  state: string | null;
+  latitude: number;
+  longitude: number;
+  assigned_walmart_locations: number;
+  covered_walmart_locations: number;
+  gap_walmart_locations: number;
+  coverage_share: number | null;
+  median_distance_miles: number | null;
+  nearest_distance_miles: number | null;
+  farthest_distance_miles: number | null;
+  representative_pair_key: string;
+}
+
 export interface ProximityView {
   schema_version: string;
   generated_at: string;
@@ -781,6 +816,9 @@ export interface ProximityView {
     nearest_distance_median_miles: number | null;
     nearest_distance_average_miles: number | null;
   };
+  distance_summary?: ProximityDistanceSummary;
+  state_summary?: ProximityStateSummary[];
+  competitor_network_summary?: ProximityCompetitorNetworkSummary[];
   map_summary?: ProximityMapSummary;
   pairs: ProximityPair[];
 }
