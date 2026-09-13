@@ -11,6 +11,7 @@ from rci_core.cron import CronExpressionError, CronSchedule
 from rci_core.health import AsyncHealthServer
 from rci_core.identity import (
     WORKOS_AUTH_ENV_VARS,
+    WORKOS_WEBHOOK_ENV_VARS,
     CustomerIdentityProviderConfig,
     ExternalIdentityReference,
 )
@@ -25,6 +26,7 @@ __all__ = [
     "ROLE_PERMISSIONS",
     "ROLE_SCOPES",
     "WORKOS_AUTH_ENV_VARS",
+    "WORKOS_WEBHOOK_ENV_VARS",
     "AccessPrincipal",
     "AppSettings",
     "AsyncHealthServer",

@@ -21,7 +21,7 @@ describe("platform owner and administrator documentation", () => {
   it("provides a unique maintained guide in every documentation group", () => {
     const ids = platformDocumentation.guides.map((guide) => guide.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(platformDocumentation.version).toBe("1.3.145");
+    expect(platformDocumentation.version).toBe("1.3.146");
     expect(platformDocumentation.lastVerified).toBeTruthy();
 
     for (const group of platformDocGroups) {
@@ -226,7 +226,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.145");
+    expect(platformDocumentation.version).toBe("1.3.146");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -271,13 +271,16 @@ describe("platform owner and administrator documentation", () => {
       "enterprise sso, directory sync, and scim are not part of the initial rollout",
     );
     expect(guides["trust-governance"]).toContain(
-      "railway stores preparatory workos variables",
+      "railway stores workos variables",
+    );
+    expect(guides["trust-governance"]).toContain(
+      "login, callback, logout, /api/v1/me, sealed-session verification",
     );
     expect(guides["trust-governance"]).toContain(
       "non-production customer-principal harness",
     );
     expect(guides["trust-governance"]).toContain(
-      "production rejects those headers and fails closed",
+      "live customer sessions are cryptographically validated",
     );
     expect(guides["trust-governance"]).toContain("/api/v1/me");
     expect(guides["change-orders"]).toContain(
@@ -287,10 +290,10 @@ describe("platform owner and administrator documentation", () => {
       "customer-principal harness and workos/railway prep added",
     );
     expect(guides["change-orders"]).toContain(
-      "leaves customer auth disabled by default",
+      "workos authkit session bridge added behind disabled production flag",
     );
     expect(guides["change-orders"]).toContain(
-      "does not create a workos app, store credentials, enable production customer login",
+      "customer-visible /api/v1/me response remains cpghero-facing",
     );
   });
 

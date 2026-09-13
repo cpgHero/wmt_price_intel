@@ -18,8 +18,9 @@ WORKOS_AUTH_ENV_VARS: tuple[str, ...] = (
     "WORKOS_API_KEY",
     "WORKOS_COOKIE_PASSWORD",
     "WORKOS_REDIRECT_URI",
-    "WORKOS_WEBHOOK_SECRET",
 )
+
+WORKOS_WEBHOOK_ENV_VARS: tuple[str, ...] = ("WORKOS_WEBHOOK_SECRET",)
 
 
 @dataclass(frozen=True, slots=True)
