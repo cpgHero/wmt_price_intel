@@ -17,7 +17,7 @@ Proximity received a deeper map-first information-design pass focused on usefuln
   - highest-overlap competitor sites sorted by Walmart stores inside the selected radius, avoiding misleading regional-retailer catchments where one distant competitor site may be the nearest available location for hundreds of far-away Walmart stores.
   - nearest-distance profile with median, P75, P90, and max.
 - Replaced the represented-nearest-competitor KPI with a competitor-side white-space KPI that uses all mappable selected-competitor locations as the denominator.
-- Added a competitor white-space state drawer with full state/all-state row details, reset affordance, and CSV/JSON downloads.
+- Added a competitor white-space state drawer with state/all-state row details, a capped in-browser preview for performance, reset affordance, and full CSV/JSON downloads.
 - Restyled the coverage-by-radius card to prevent cramped desktop values and pinned metric-style info buttons to the top right of their cards.
 - Replaced the small selected-relationship toast with a map-side selected-network panel containing selected-pair distance, selected-radius network coverage, median distance, farthest distance, recenter, detail, and table actions.
 - Moved the map legend away from the top toolbar and repositioned MapLibre controls to reduce panel/control collisions.
