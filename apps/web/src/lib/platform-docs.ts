@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 13, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.145",
+  version: "1.3.146",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -1292,8 +1292,8 @@ export const platformDocumentation: PlatformDocumentation = {
             "Logs redact provider authentication parameters and record IDs, attempts, statuses, costs, and failure classes without credentials.",
             "CI now includes a customer-visible provider-masking gate for non-admin app routes and current CPGHero platform planning docs. Internal adapters, private admin/operations surfaces, tests, source-material records, and migrations remain separately classified until the broader visibility-boundary cleanup is complete.",
             "The account-access foundation now defines CPGHero accounts, workspaces, memberships, roles, permissions, entitlements, and account/workspace audit-event context. Duplicated admin-token checks for core internal admin paths now resolve through a shared CPGHero system AccessPrincipal. Customer login and account/workspace row-level enforcement remain separate follow-up work.",
-            "WorkOS AuthKit/User Management is the selected customer authentication provider. The WorkOS application has callback, homepage, login-initiation, and sign-out URLs configured, and Railway stores preparatory WorkOS variables for the web and API services with customer auth still disabled. CPGHero remains the authorization source of truth for account/workspace membership, roles, permissions, entitlements, projects, report access, Live API usage limits, and billing. Enterprise SSO, Directory Sync, and SCIM are not part of the initial rollout.",
-            "The non-production customer-principal harness is explicit, opt-in, and header-backed for local/API tests only. Production rejects those headers and fails closed until the real WorkOS callback, session verification, identity mapping lookup, and account/workspace route enforcement are shipped.",
+            "WorkOS AuthKit/User Management is the selected customer authentication provider. The WorkOS application has callback, homepage, login-initiation, and sign-out URLs configured, and Railway stores WorkOS variables for the web and API services with customer auth still disabled. The API now implements login, callback, logout, /api/v1/me, sealed-session verification, and session-to-CPGHero-principal resolution behind the WorkOS provider flag. CPGHero remains the authorization source of truth for account/workspace membership, roles, permissions, entitlements, projects, report access, Live API usage limits, and billing. Enterprise SSO, Directory Sync, and SCIM are not part of the initial rollout.",
+            "The non-production customer-principal harness is explicit, opt-in, and header-backed for local/API tests only. Production rejects those headers. Live customer sessions are cryptographically validated through WorkOS and then fail closed unless the WorkOS user and organization subjects are provisioned through CPGHero external-identity and membership rows.",
           ],
         },
         {
@@ -1304,7 +1304,7 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "Customer authentication",
               "WorkOS AuthKit",
-              "Selected and externally configured for future AuthKit callback/logout flows; production customer login is still disabled until the cutover phase.",
+              "Login, callback, logout, PKCE flow state, sealed session cookies, and session validation are implemented behind the provider flag; Railway production still leaves customer login disabled until cutover.",
             ],
             [
               "Identity mapping",
@@ -1327,7 +1327,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current access-control limitation",
-          text: "The durable account/RBAC/entitlement foundation exists, WorkOS AuthKit is selected and externally configured for future customer authentication, migration 0055 adds external identity mappings, and /api/v1/me can resolve a validated non-production test principal only when the explicit harness flag is enabled. Production rejects the test harness and still has no live customer login. Individual customer login, signup/invites, API keys, real WorkOS session verification, session-to-account membership lookup, and cross-account route enforcement remain future work.",
+          text: "The durable account/RBAC/entitlement foundation exists, WorkOS AuthKit is externally configured, migration 0055 adds external identity mappings, and the API can resolve either a validated non-production test principal or a live WorkOS sealed session into the CPGHero principal model. Railway production still has CPGHERO_CUSTOMER_AUTH_PROVIDER disabled, so customer login is not live. Customer signup/invites, customer API keys, account-administration screens, and cross-account enforcement across existing report and collection routes remain future work.",
         },
       ],
     },
@@ -2982,6 +2982,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-13",
+              "Local verification passed; CI verification pending",
+              "WorkOS AuthKit session bridge added behind disabled production flag.",
+              "The API now exposes /api/auth/login, /api/auth/callback, and /api/auth/logout with PKCE flow state, short-lived encrypted flow cookies, HttpOnly CPGHero customer session cookies, WorkOS sealed-session validation, refresh-on-expired-session support, and database-backed resolution from WorkOS subjects to CPGHero app users, accounts, workspaces, roles, permissions, and entitlements. Next.js exposes same-origin proxy routes for /api/auth/login, /api/auth/callback, /api/auth/logout, and /api/auth/me without moving provider secrets into the browser. The customer-visible /api/v1/me response remains CPGHero-facing and does not serialize WorkOS credentials, cookie secrets, or provider subject IDs. WorkOS webhooks, signup/invites, customer API keys, account-admin screens, and existing report/collection route enforcement remain future work. Railway production still leaves CPGHERO_CUSTOMER_AUTH_PROVIDER disabled, so live customer login is not enabled by this change. No reports, proximity metrics, collection requests, provider calls, PDP calls, AI calls, or historical artifacts changed.",
+            ],
             [
               "2026-09-13",
               "Local verification passed; CI verification pending",

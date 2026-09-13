@@ -76,8 +76,7 @@ def _invalid_values(values: list[str], allowed: frozenset[str]) -> list[str]:
     return sorted(set(values).difference(allowed))
 
 
-def require_customer_principal(
-    request: Request,
+def require_test_customer_principal(
     *,
     test_user_id: str | None,
     test_email: str | None,
@@ -86,25 +85,7 @@ def require_customer_principal(
     test_roles: str | None,
     test_entitlements: str | None,
 ) -> AccessPrincipal:
-    """Resolve the current customer principal.
-
-    Production WorkOS session verification is intentionally not implemented in
-    this development seam. Until the live callback/session exchange is shipped,
-    production fails closed. Non-production tests and local demos can opt into a
-    header-backed harness with explicit, validated role and entitlement keys.
-    """
-
-    if request.app.state.settings.is_production:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Customer authentication is not enabled in production yet.",
-        )
-
-    if not enabled_from_env(os.getenv(CUSTOMER_AUTH_TEST_HARNESS_ENABLED)):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Customer authentication test harness is disabled.",
-        )
+    """Resolve the explicit non-production header-backed customer test principal."""
 
     if not test_user_id or not test_email or not test_account_id:
         raise HTTPException(
@@ -146,6 +127,47 @@ def require_customer_principal(
         entitlements=frozenset(
             cast("EntitlementKey", entitlement) for entitlement in entitlement_values
         ),
+    )
+
+
+def require_customer_principal(
+    request: Request,
+    *,
+    test_user_id: str | None,
+    test_email: str | None,
+    test_account_id: str | None,
+    test_workspace_id: str | None,
+    test_roles: str | None,
+    test_entitlements: str | None,
+) -> AccessPrincipal:
+    """Resolve the non-production customer-principal test harness.
+
+    Live WorkOS session resolution is asynchronous because it must validate a
+    sealed session and resolve CPGHero account membership from the database. API
+    routes that support live customer login use the async resolver in
+    ``customer_identity.py``. This function remains as the narrow test harness
+    for local development and fixture routes only.
+    """
+
+    if request.app.state.settings.is_production:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Customer authentication is not enabled in production yet.",
+        )
+
+    if not enabled_from_env(os.getenv(CUSTOMER_AUTH_TEST_HARNESS_ENABLED)):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Customer authentication test harness is disabled.",
+        )
+
+    return require_test_customer_principal(
+        test_user_id=test_user_id,
+        test_email=test_email,
+        test_account_id=test_account_id,
+        test_workspace_id=test_workspace_id,
+        test_roles=test_roles,
+        test_entitlements=test_entitlements,
     )
 
 

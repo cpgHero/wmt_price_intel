@@ -27,7 +27,6 @@ describe("customer auth config", () => {
     expect(config.missingRequiredEnvironment).toEqual([
       "WORKOS_API_KEY",
       "WORKOS_COOKIE_PASSWORD",
-      "WORKOS_WEBHOOK_SECRET",
     ]);
     expect(JSON.stringify(config)).not.toContain("sk_");
   });

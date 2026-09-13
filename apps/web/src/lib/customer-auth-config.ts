@@ -5,8 +5,9 @@ export const workosRequiredEnvironment = [
   "WORKOS_API_KEY",
   "WORKOS_COOKIE_PASSWORD",
   "WORKOS_REDIRECT_URI",
-  "WORKOS_WEBHOOK_SECRET",
 ] as const;
+
+export const workosWebhookEnvironment = ["WORKOS_WEBHOOK_SECRET"] as const;
 
 export interface CustomerAuthConfig {
   configured: boolean;
