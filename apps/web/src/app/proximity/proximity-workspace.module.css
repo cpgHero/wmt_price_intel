@@ -504,8 +504,103 @@
   display: grid;
   flex-shrink: 0;
   gap: 0.72rem;
-  margin: 0 1.55rem 0.9rem;
   padding: 0.86rem 1rem;
+}
+
+.insightDeck {
+  display: grid;
+  flex-shrink: 0;
+  gap: 0.75rem;
+  grid-template-columns: minmax(34rem, 1.65fr) repeat(3, minmax(14rem, 1fr));
+  padding: 0 1.55rem 0.9rem;
+}
+
+.insightPanel,
+.insightPanelWide {
+  min-width: 0;
+}
+
+.insightPanel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.85rem;
+  box-shadow: 0 2px 10px rgba(24, 58, 75, 0.03);
+  display: grid;
+  gap: 0.7rem;
+  min-height: 9.1rem;
+  padding: 0.86rem 1rem;
+}
+
+.rankedList {
+  display: grid;
+  gap: 0.34rem;
+}
+
+.rankedList button {
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 0.58rem;
+  color: var(--sub);
+  display: grid;
+  gap: 0.18rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 2.62rem;
+  padding: 0.44rem 0.55rem;
+  text-align: left;
+}
+
+.rankedList button:hover,
+.rankedList button:focus-visible {
+  background: var(--accent-bg);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  outline: none;
+}
+
+.rankedList span {
+  color: var(--ink);
+  font-size: 0.7rem;
+  font-weight: 820;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rankedList b {
+  color: var(--accent);
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rankedList small {
+  color: var(--sub);
+  font-size: 0.61rem;
+  grid-column: 1 / -1;
+}
+
+.distanceGrid {
+  display: grid;
+  gap: 0.42rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.distanceGrid span {
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 0.58rem;
+  color: var(--sub);
+  display: grid;
+  font-size: 0.62rem;
+  font-weight: 780;
+  gap: 0.14rem;
+  padding: 0.52rem 0.58rem;
+}
+
+.distanceGrid b {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.03em;
 }
 
 .coverageCard .coverageHead {
@@ -799,7 +894,7 @@
 
 .mapArea {
   flex: 1;
-  min-height: clamp(38rem, 72dvh, 56rem);
+  min-height: clamp(42rem, 76dvh, 62rem);
   overflow: hidden;
   position: relative;
 }
@@ -835,7 +930,7 @@
 
 .tileMap :global(.maplibregl-ctrl-top-right) {
   right: 0.85rem;
-  top: 3.95rem;
+  top: 0.85rem;
 }
 
 .tileMap :global(.maplibregl-ctrl-bottom-left),
@@ -1334,12 +1429,17 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem;
-  left: 0.85rem;
+  bottom: 1rem;
+  left: auto;
   padding: 0.5rem 0.72rem;
   position: absolute;
-  right: 0.85rem;
-  top: 3.85rem;
+  right: 1rem;
+  top: auto;
   z-index: 3;
+}
+
+.mapArea:has(.selectedNetworkPanel) .legend {
+  right: min(24rem, 42vw);
 }
 
 .mapInsightPanel {
@@ -1353,7 +1453,7 @@
   max-width: min(23rem, calc(100% - 2rem));
   padding: 0.75rem 0.85rem;
   position: absolute;
-  top: 6.7rem;
+  top: 4.85rem;
   z-index: 3;
 }
 
@@ -1621,6 +1721,152 @@
   color: rgba(255, 255, 255, 0.76);
   font-size: 0.68rem;
   line-height: 1.35;
+}
+
+.selectedNetworkPanel {
+  background: color-mix(in srgb, var(--control) 96%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  box-shadow: var(--shadow);
+  color: var(--ink);
+  display: grid;
+  gap: 0.72rem;
+  max-height: calc(100% - 7.6rem);
+  overflow: auto;
+  padding: 0.86rem;
+  position: absolute;
+  right: 1rem;
+  top: 5.7rem;
+  width: min(22rem, calc(100% - 2rem));
+  z-index: 5;
+}
+
+.selectedNetworkHead {
+  align-items: flex-start;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: space-between;
+}
+
+.selectedNetworkHead span {
+  color: var(--sub);
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 860;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.selectedNetworkHead h2 {
+  font-size: 0.95rem;
+  letter-spacing: -0.03em;
+  margin: 0.2rem 0 0;
+}
+
+.selectedNetworkHead p {
+  color: var(--sub);
+  font-size: 0.68rem;
+  line-height: 1.35;
+  margin: 0.24rem 0 0;
+}
+
+.selectedNetworkHead button {
+  background: var(--accent-bg);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--line));
+  border-radius: 999px;
+  color: var(--accent);
+  flex-shrink: 0;
+  font-size: 0.95rem;
+  height: 2rem;
+  width: 2rem;
+}
+
+.networkMetrics {
+  display: grid;
+  gap: 0.35rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.networkMetrics span {
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 0.58rem;
+  color: var(--sub);
+  display: grid;
+  font-size: 0.58rem;
+  font-weight: 800;
+  gap: 0.14rem;
+  padding: 0.5rem 0.55rem;
+}
+
+.networkMetrics span:first-child {
+  grid-column: 1 / -1;
+}
+
+.networkMetrics b {
+  color: var(--ink);
+  font-size: 0.83rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.networkActions {
+  display: grid;
+  gap: 0.36rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.networkActions button {
+  background: var(--accent-bg);
+  border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+  border-radius: 0.52rem;
+  color: var(--accent);
+  font-size: 0.66rem;
+  font-weight: 840;
+  min-height: 2rem;
+}
+
+.networkRows {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.35rem;
+  padding-top: 0.68rem;
+}
+
+.networkRows button {
+  align-items: center;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 0.58rem;
+  color: var(--ink);
+  display: flex;
+  font-size: 0.68rem;
+  font-weight: 820;
+  gap: 0.6rem;
+  justify-content: space-between;
+  padding: 0.48rem 0.55rem;
+  text-align: left;
+}
+
+.networkRows button:hover,
+.networkRows button:focus-visible {
+  background: var(--accent-bg);
+  border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
+  outline: none;
+}
+
+.networkRows small {
+  color: var(--sub);
+  display: block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  margin-top: 0.08rem;
+}
+
+.networkRows b {
+  color: var(--accent);
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .selectionToast {
@@ -2041,6 +2287,7 @@
   }
 
   .kpis,
+  .insightDeck,
   .explorer {
     grid-template-columns: 1fr;
   }
@@ -2051,6 +2298,14 @@
 
   .coverageRows {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .insightDeck {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .insightPanelWide {
+    grid-column: 1 / -1;
   }
 
   .tableSummary {
@@ -2065,10 +2320,27 @@
     flex-wrap: wrap;
   }
 
+  .insightDeck {
+    grid-template-columns: 1fr;
+  }
+
   .mapArea,
   .mapSvg,
   .mapEmpty {
     min-height: 26rem;
+  }
+
+  .selectedNetworkPanel {
+    bottom: 0.85rem;
+    max-height: 48%;
+    top: auto;
+  }
+
+  .legend {
+    bottom: auto;
+    left: 0.85rem;
+    right: 0.85rem;
+    top: 9.2rem;
   }
 
   .selectionToast {

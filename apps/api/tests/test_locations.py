@@ -246,6 +246,40 @@ async def test_retailer_proximity_pairs_walmart_to_one_selected_competitor() -> 
     assert body["summary"]["paired_locations"] == 2
     assert body["summary"]["competitor_mappable_locations"] == 2
     assert body["summary"]["within_selected_radius"] == 1
+    assert body["distance_summary"]["median_miles"] is not None
+    assert body["distance_summary"]["p75_miles"] is not None
+    assert body["distance_summary"]["p90_miles"] is not None
+    assert body["state_summary"] == [
+        {
+            "state": "AR",
+            "walmart_locations": 2,
+            "covered_locations": 1,
+            "gap_locations": 1,
+            "coverage_share": 0.5,
+            "median_distance_miles": body["distance_summary"]["median_miles"],
+        }
+    ]
+    assert body["competitor_network_summary"] == [
+        {
+            "competitor_location_id": body["pairs"][0]["competitor"]["id"],
+            "competitor_store_number": "c-near",
+            "competitor_store_name": "costco_us c-near",
+            "city": "Bentonville",
+            "state": "AR",
+            "latitude": 36.3716,
+            "longitude": -94.2035,
+            "assigned_walmart_locations": 2,
+            "covered_walmart_locations": 1,
+            "gap_walmart_locations": 1,
+            "coverage_share": 0.5,
+            "median_distance_miles": body["distance_summary"]["median_miles"],
+            "nearest_distance_miles": body["pairs"][0]["distance_miles"],
+            "farthest_distance_miles": body["pairs"][1]["distance_miles"],
+            "representative_pair_key": (
+                f"{body['pairs'][0]['benchmark']['id']}::{body['pairs'][0]['competitor']['id']}"
+            ),
+        }
+    ]
     assert body["map_summary"]["schema_version"] == "1.0.0-proximity-map-summary"
     assert body["map_summary"]["bounds"]["min_latitude"] <= 36.0104
     assert (

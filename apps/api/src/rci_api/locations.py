@@ -108,6 +108,41 @@ class ProximitySummaryResponse(BaseModel):
     nearest_distance_average_miles: float | None
 
 
+class ProximityDistanceSummaryResponse(BaseModel):
+    average_miles: float | None
+    median_miles: float | None
+    p75_miles: float | None
+    p90_miles: float | None
+    max_miles: float | None
+
+
+class ProximityStateSummaryResponse(BaseModel):
+    state: str
+    walmart_locations: int
+    covered_locations: int
+    gap_locations: int
+    coverage_share: float | None
+    median_distance_miles: float | None
+
+
+class ProximityCompetitorNetworkSummaryResponse(BaseModel):
+    competitor_location_id: str
+    competitor_store_number: str
+    competitor_store_name: str | None
+    city: str | None
+    state: str | None
+    latitude: float
+    longitude: float
+    assigned_walmart_locations: int
+    covered_walmart_locations: int
+    gap_walmart_locations: int
+    coverage_share: float | None
+    median_distance_miles: float | None
+    nearest_distance_miles: float | None
+    farthest_distance_miles: float | None
+    representative_pair_key: str
+
+
 class ProximityMapBoundsResponse(BaseModel):
     min_latitude: float
     max_latitude: float
@@ -145,6 +180,9 @@ class ProximityResponse(BaseModel):
     selected_radius_miles: float
     state_options: list[str]
     summary: ProximitySummaryResponse
+    distance_summary: ProximityDistanceSummaryResponse
+    state_summary: list[ProximityStateSummaryResponse]
+    competitor_network_summary: list[ProximityCompetitorNetworkSummaryResponse]
     map_summary: ProximityMapSummaryResponse
     pairs: list[ProximityPairResponse]
 
@@ -198,6 +236,32 @@ def _rounded(value: float | None) -> float | None:
     if value is None:
         return None
     return round(value, 4)
+
+
+def _percentile(values: list[float], percentile: float) -> float | None:
+    if not values:
+        return None
+    sorted_values = sorted(values)
+    if len(sorted_values) == 1:
+        return sorted_values[0]
+    rank = (len(sorted_values) - 1) * percentile
+    lower = math.floor(rank)
+    upper = math.ceil(rank)
+    if lower == upper:
+        return sorted_values[int(rank)]
+    lower_value = sorted_values[lower]
+    upper_value = sorted_values[upper]
+    return lower_value + (upper_value - lower_value) * (rank - lower)
+
+
+def _distance_summary(distances: list[float]) -> ProximityDistanceSummaryResponse:
+    return ProximityDistanceSummaryResponse(
+        average_miles=_rounded(sum(distances) / len(distances)) if distances else None,
+        median_miles=_rounded(median(distances)) if distances else None,
+        p75_miles=_rounded(_percentile(distances, 0.75)),
+        p90_miles=_rounded(_percentile(distances, 0.9)),
+        max_miles=_rounded(max(distances)) if distances else None,
+    )
 
 
 @dataclass(slots=True)
@@ -311,6 +375,79 @@ def _proximity_map_summary(
     )
 
 
+def _proximity_state_summary(
+    pairs: list[ProximityPair],
+    *,
+    selected_radius_miles: float,
+) -> list[ProximityStateSummaryResponse]:
+    grouped: dict[str, list[ProximityPair]] = {}
+    for pair in pairs:
+        state = pair.benchmark.state or "Unknown"
+        grouped.setdefault(state, []).append(pair)
+
+    rows: list[ProximityStateSummaryResponse] = []
+    for state, state_pairs in grouped.items():
+        distances = [pair.distance_miles for pair in state_pairs]
+        covered = sum(pair.distance_miles <= selected_radius_miles for pair in state_pairs)
+        total = len(state_pairs)
+        rows.append(
+            ProximityStateSummaryResponse(
+                state=state,
+                walmart_locations=total,
+                covered_locations=covered,
+                gap_locations=max(0, total - covered),
+                coverage_share=(covered / total if total else None),
+                median_distance_miles=_rounded(median(distances)) if distances else None,
+            )
+        )
+    return sorted(rows, key=lambda row: (-row.gap_locations, row.state))
+
+
+def _proximity_competitor_network_summary(
+    pairs: list[ProximityPair],
+    *,
+    selected_radius_miles: float,
+) -> list[ProximityCompetitorNetworkSummaryResponse]:
+    grouped: dict[str, list[ProximityPair]] = {}
+    for pair in pairs:
+        grouped.setdefault(pair.competitor.id, []).append(pair)
+
+    rows: list[ProximityCompetitorNetworkSummaryResponse] = []
+    for competitor_location_id, network_pairs in grouped.items():
+        competitor = network_pairs[0].competitor
+        sorted_pairs = sorted(network_pairs, key=lambda pair: pair.distance_miles)
+        distances = [pair.distance_miles for pair in sorted_pairs]
+        covered = sum(pair.distance_miles <= selected_radius_miles for pair in sorted_pairs)
+        total = len(sorted_pairs)
+        rows.append(
+            ProximityCompetitorNetworkSummaryResponse(
+                competitor_location_id=competitor_location_id,
+                competitor_store_number=competitor.store_number,
+                competitor_store_name=competitor.store_name,
+                city=competitor.city,
+                state=competitor.state,
+                latitude=competitor.latitude,
+                longitude=competitor.longitude,
+                assigned_walmart_locations=total,
+                covered_walmart_locations=covered,
+                gap_walmart_locations=max(0, total - covered),
+                coverage_share=(covered / total if total else None),
+                median_distance_miles=_rounded(median(distances)) if distances else None,
+                nearest_distance_miles=_rounded(distances[0]) if distances else None,
+                farthest_distance_miles=_rounded(distances[-1]) if distances else None,
+                representative_pair_key=_pair_key(sorted_pairs[0]),
+            )
+        )
+    return sorted(
+        rows,
+        key=lambda row: (
+            -row.assigned_walmart_locations,
+            row.median_distance_miles if row.median_distance_miles is not None else math.inf,
+            row.competitor_store_number,
+        ),
+    )
+
+
 def _proximity_response(
     result: ProximityResult,
     *,
@@ -368,6 +505,15 @@ def _proximity_response(
             nearest_distance_average_miles=(
                 _rounded(sum(distances) / len(distances)) if distances else None
             ),
+        ),
+        distance_summary=_distance_summary(distances),
+        state_summary=_proximity_state_summary(
+            list(result.pairs),
+            selected_radius_miles=selected_radius_miles,
+        ),
+        competitor_network_summary=_proximity_competitor_network_summary(
+            list(result.pairs),
+            selected_radius_miles=selected_radius_miles,
         ),
         map_summary=_proximity_map_summary(
             list(result.pairs),
