@@ -87,7 +87,7 @@ const availabilityEvidenceLastVerified = "September 10, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.137",
+  version: "1.3.138",
   lastVerified: availabilityEvidenceLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2946,6 +2946,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-12",
+              "Local verification passed; production deployment pending",
+              "Proximity caps the competitor white-space drawer preview for responsiveness.",
+              "The competitor white-space state drawer now renders only the first 100 matching rows in the browser while keeping the complete detail set available through CSV and JSON downloads. This protects browser and accessibility-tree performance for dense competitors such as CVS without changing the underlying API response, row-level evidence, state counts, metric denominators, location rows, coordinates, retailer eligibility, nearest-location Haversine math, product Search evidence, observed product distribution, matching, report calculations, seller rules, provider collection, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-12",
               "Local verification passed; production deployment pending",
