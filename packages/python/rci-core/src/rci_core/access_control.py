@@ -40,6 +40,27 @@ EntitlementKey = Literal[
     "delivery.azure_blob",
 ]
 
+ENTITLEMENT_KEYS: frozenset[EntitlementKey] = frozenset(
+    {
+        "live_api",
+        "bulk_projects",
+        "app_analytics",
+        "endpoint.search",
+        "endpoint.product_detail",
+        "endpoint.reviews",
+        "analytics.price_intelligence",
+        "analytics.competitive_intelligence",
+        "analytics.share_of_search",
+        "analytics.review_radar",
+        "analytics.proximity",
+        "delivery.app_download",
+        "delivery.email",
+        "delivery.sftp",
+        "delivery.s3",
+        "delivery.azure_blob",
+    }
+)
+
 RoleKey = Literal[
     "system_owner",
     "system_admin",
@@ -119,6 +140,8 @@ ROLE_SCOPES: dict[RoleKey, RoleScope] = {
     "developer": "account",
     "billing_user": "account",
 }
+
+ROLE_KEYS: frozenset[RoleKey] = frozenset(ROLE_PERMISSIONS.keys())
 
 
 @dataclass(frozen=True, slots=True)

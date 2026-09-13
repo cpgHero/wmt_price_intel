@@ -21,7 +21,7 @@ describe("platform owner and administrator documentation", () => {
   it("provides a unique maintained guide in every documentation group", () => {
     const ids = platformDocumentation.guides.map((guide) => guide.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(platformDocumentation.version).toBe("1.3.144");
+    expect(platformDocumentation.version).toBe("1.3.145");
     expect(platformDocumentation.lastVerified).toBeTruthy();
 
     for (const group of platformDocGroups) {
@@ -226,7 +226,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.144");
+    expect(platformDocumentation.version).toBe("1.3.145");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -270,8 +270,21 @@ describe("platform owner and administrator documentation", () => {
     expect(guides["trust-governance"]).toContain(
       "enterprise sso, directory sync, and scim are not part of the initial rollout",
     );
+    expect(guides["trust-governance"]).toContain(
+      "railway stores preparatory workos variables",
+    );
+    expect(guides["trust-governance"]).toContain(
+      "non-production customer-principal harness",
+    );
+    expect(guides["trust-governance"]).toContain(
+      "production rejects those headers and fails closed",
+    );
+    expect(guides["trust-governance"]).toContain("/api/v1/me");
     expect(guides["change-orders"]).toContain(
       "workos authkit selected and identity mapping foundation added",
+    );
+    expect(guides["change-orders"]).toContain(
+      "customer-principal harness and workos/railway prep added",
     );
     expect(guides["change-orders"]).toContain(
       "leaves customer auth disabled by default",
