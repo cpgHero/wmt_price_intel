@@ -88,11 +88,12 @@ const proximityLastVerified = "September 13, 2026";
 const visibilityBoundaryLastVerified = "September 13, 2026";
 const accountAccessLastVerified = "September 13, 2026";
 const principalEnforcementLastVerified = "September 13, 2026";
+const customerAuthLastVerified = "September 13, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.143",
-  lastVerified: principalEnforcementLastVerified,
+  version: "1.3.144",
+  lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
   maintenanceOwner: "Platform owner and engineering lead",
@@ -1252,7 +1253,7 @@ export const platformDocumentation: PlatformDocumentation = {
         "The controls that prevent metric drift, secret exposure, duplicate work, uncontrolled provider spend, and silent evidence changes.",
       audience: "Platform owner · Platform administrator",
       readingTime: "9 min",
-      lastVerified: principalEnforcementLastVerified,
+      lastVerified: customerAuthLastVerified,
       status: "Current with limitations",
       blocks: [
         {
@@ -1291,13 +1292,41 @@ export const platformDocumentation: PlatformDocumentation = {
             "Logs redact provider authentication parameters and record IDs, attempts, statuses, costs, and failure classes without credentials.",
             "CI now includes a customer-visible provider-masking gate for non-admin app routes and current CPGHero platform planning docs. Internal adapters, private admin/operations surfaces, tests, source-material records, and migrations remain separately classified until the broader visibility-boundary cleanup is complete.",
             "The account-access foundation now defines CPGHero accounts, workspaces, memberships, roles, permissions, entitlements, and account/workspace audit-event context. Duplicated admin-token checks for core internal admin paths now resolve through a shared CPGHero system AccessPrincipal. Customer login and account/workspace row-level enforcement remain separate follow-up work.",
+            "WorkOS AuthKit/User Management is the selected customer authentication provider. CPGHero remains the authorization source of truth for account/workspace membership, roles, permissions, entitlements, projects, report access, Live API usage limits, and billing. Enterprise SSO, Directory Sync, and SCIM are not part of the initial rollout.",
+          ],
+        },
+        {
+          kind: "table",
+          title: "Authentication and authorization ownership",
+          columns: ["Concern", "Owner", "Current implementation"],
+          rows: [
+            [
+              "Customer authentication",
+              "WorkOS AuthKit",
+              "Selected and configured as an internal foundation; production customer login is still disabled until the cutover phase.",
+            ],
+            [
+              "Identity mapping",
+              "CPGHero",
+              "Migration 0055 maps WorkOS organization subjects to CPGHero accounts and WorkOS user subjects to CPGHero app users.",
+            ],
+            [
+              "Authorization and commercial access",
+              "CPGHero",
+              "Account/workspace memberships, roles, permissions, entitlements, projects, usage limits, billing rules, and report access remain internal CPGHero records.",
+            ],
+            [
+              "Internal administration",
+              "CPGHero",
+              "Protected Product Pack, matching, recovery, and system operations routes continue to use the existing CPGHero admin principal until the admin-auth cutover is separately designed.",
+            ],
           ],
         },
         {
           kind: "callout",
           tone: "attention",
           title: "Current access-control limitation",
-          text: "The durable account/RBAC/entitlement foundation exists, and duplicated admin-token checks now use a shared server-side CPGHero system principal. The implemented administrator surface still uses one protected admin session rather than customer login with route-level account enforcement. Customer identity provider selection, individual user login, API keys, account membership lookup, and cross-account route enforcement remain future work.",
+          text: "The durable account/RBAC/entitlement foundation exists, WorkOS AuthKit is selected for customer authentication, and migration 0055 adds external identity mappings. The implemented administrator surface still uses one protected admin session rather than customer login with route-level account enforcement. Individual customer login, signup/invites, API keys, session-to-account membership lookup, and cross-account route enforcement remain future work.",
         },
       ],
     },
@@ -2952,6 +2981,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-13",
+              "Implemented; CI verification pending",
+              "WorkOS AuthKit selected and identity mapping foundation added.",
+              "Customer authentication direction is now explicit: WorkOS AuthKit/User Management is selected for login, while CPGHero remains the source of truth for account/workspace membership, roles, permissions, entitlements, projects, usage limits, billing, and report access. Migration 0055 adds provider-neutral external identity mappings from WorkOS organization subjects to CPGHero accounts and WorkOS user subjects to CPGHero app users. Environment documentation lists the required WorkOS variables but leaves customer auth disabled by default. This is a security foundation only; it does not create a WorkOS app, store credentials, enable production customer login, add SSO, add SCIM, replace the internal admin session, issue Live API keys, enforce row-level customer route scope, change reports, change proximity metrics, make paid source calls, make PDP calls, make AI calls, or change provider credentials.",
+            ],
             [
               "2026-09-13",
               "Implemented; CI verification pending",

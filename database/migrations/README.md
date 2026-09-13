@@ -99,3 +99,8 @@ entitlement, and audit scoping primitives while preserving the existing `organiz
 permissions, and system/account/workspace/project roles so future route enforcement can resolve
 sessions or API keys into a stable access principal without choosing the final customer identity
 provider in this migration.
+`0055_workos_identity_mapping` records the selected WorkOS AuthKit direction without handing
+authorization to WorkOS. It adds provider-neutral external identity mappings from WorkOS
+organization subjects to CPGHero accounts and WorkOS user subjects to CPGHero app users. CPGHero
+memberships, roles, entitlements, projects, usage ledgers, billing rules, and report access remain
+the authorization source of truth.

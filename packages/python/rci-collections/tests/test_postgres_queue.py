@@ -1375,7 +1375,7 @@ async def test_postgres_scope_projection_history_refuses_migration_downgrade() -
         async with verification.engine.connect() as connection:
             assert (
                 await connection.execute(text("SELECT version_num FROM alembic_version"))
-            ).scalar_one() == "0054_account_access_foundation"
+            ).scalar_one() == "0055_workos_identity_mapping"
     finally:
         await verification.dispose()
 

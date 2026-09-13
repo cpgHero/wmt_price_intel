@@ -21,7 +21,7 @@ describe("platform owner and administrator documentation", () => {
   it("provides a unique maintained guide in every documentation group", () => {
     const ids = platformDocumentation.guides.map((guide) => guide.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(platformDocumentation.version).toBe("1.3.143");
+    expect(platformDocumentation.version).toBe("1.3.144");
     expect(platformDocumentation.lastVerified).toBeTruthy();
 
     for (const group of platformDocGroups) {
@@ -226,7 +226,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.143");
+    expect(platformDocumentation.version).toBe("1.3.144");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -249,6 +249,36 @@ describe("platform owner and administrator documentation", () => {
       "landing-page readiness now distinguishes durable publication authority from source-quality disclosures",
     );
     expect(allText()).toContain("8d6c4756-c44f-487e-9a6a-393dc1661b96");
+  });
+
+  it("documents WorkOS authentication without handing authorization to WorkOS", () => {
+    const guides = Object.fromEntries(
+      platformDocumentation.guides.map((guide) => [
+        guide.id,
+        JSON.stringify(guide).toLocaleLowerCase(),
+      ]),
+    );
+
+    expect(guides["trust-governance"]).toContain("workos authkit");
+    expect(guides["trust-governance"]).toContain(
+      "cpghero remains the authorization source of truth",
+    );
+    expect(guides["trust-governance"]).toContain(
+      "account/workspace membership",
+    );
+    expect(guides["trust-governance"]).toContain("migration 0055");
+    expect(guides["trust-governance"]).toContain(
+      "enterprise sso, directory sync, and scim are not part of the initial rollout",
+    );
+    expect(guides["change-orders"]).toContain(
+      "workos authkit selected and identity mapping foundation added",
+    );
+    expect(guides["change-orders"]).toContain(
+      "leaves customer auth disabled by default",
+    );
+    expect(guides["change-orders"]).toContain(
+      "does not create a workos app, store credentials, enable production customer login",
+    );
   });
 
   it("documents positive-price store distribution without inventory claims", () => {
