@@ -10,8 +10,8 @@ const snapshot = {
     deployment_id: "deployment-1",
     environment: "production",
     service: "api",
-    database_migration: "0053_scope_projections",
-    expected_migration_heads: ["0053_scope_projections"],
+    database_migration: "0054_account_access_foundation",
+    expected_migration_heads: ["0054_account_access_foundation"],
     migration_matches: true,
     product_packs: [
       { id: "fresh_shell_eggs", version: "1.3.1", checksum: "a".repeat(64) },
