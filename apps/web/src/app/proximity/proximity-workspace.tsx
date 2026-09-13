@@ -17,6 +17,12 @@ import type {
   ProximityStateSummary,
   ProximityView,
 } from "@/lib/api";
+import {
+  competitorFootprintStatesForView,
+  type ComparisonScope,
+  recommendedScopeForView,
+  selectCompetitorForProximityLoad,
+} from "@/lib/proximity-workspace-model";
 
 import styles from "./proximity-workspace.module.css";
 
@@ -41,6 +47,7 @@ type ModalKind =
   | "method"
   | "shortlist"
   | "notes"
+  | "metric-scope"
   | "metric-total"
   | "metric-coverage"
   | "metric-gap"
@@ -1069,6 +1076,9 @@ export function ProximityWorkspace({
   const [radius, setRadius] = useState(
     initialView?.selected_radius_miles ?? DEFAULT_RADIUS_MILES,
   );
+  const [comparisonScope, setComparisonScope] = useState<ComparisonScope>(() =>
+    recommendedScopeForView(initialView),
+  );
   const [query, setQuery] = useState("");
   const [stateFilter, setStateFilter] = useState("all");
   const [relation, setRelation] = useState<RelationFilter>("all");
@@ -1167,11 +1177,20 @@ export function ProximityWorkspace({
         nextRetailers = retailerBody as LocationRetailer[];
         setRetailers(nextRetailers);
       }
-      const selectedCompetitor =
-        next.competitorRetailerId ||
-        availableCompetitors(nextRetailers, nextCountry)[0]?.id ||
-        "";
+      const competitorOptionsForCountry = availableCompetitors(
+        nextRetailers,
+        nextCountry,
+      );
+      const selectedCompetitor = selectCompetitorForProximityLoad({
+        competitorOptions: competitorOptionsForCountry,
+        countryChanged: Boolean(next.country && next.country !== country),
+        currentCompetitorRetailerId: competitorRetailerId,
+        requestedCompetitorRetailerId: next.competitorRetailerId,
+      });
       const selectedRadius = next.radius ?? radius;
+      const comparisonChanged =
+        Boolean(next.competitorRetailerId) ||
+        Boolean(next.country && next.country !== country);
       setCountry(nextCountry);
       setCompetitorRetailerId(selectedCompetitor);
       setRadius(selectedRadius);
@@ -1194,7 +1213,11 @@ export function ProximityWorkspace({
       if (!response.ok) {
         throw new Error(body.error || "Proximity data could not be loaded.");
       }
-      setView(body);
+      const nextView = body as ProximityView;
+      setView(nextView);
+      if (comparisonChanged) {
+        setComparisonScope(recommendedScopeForView(nextView));
+      }
       setSelectedKey(body.pairs?.[0] ? pairKey(body.pairs[0]) : null);
       setStateFilter("all");
       setRelation("all");
@@ -1214,12 +1237,45 @@ export function ProximityWorkspace({
     }
   }
 
+  const competitorFootprintStates = useMemo(
+    () => competitorFootprintStatesForView(view),
+    [view],
+  );
+  const competitorFootprintStateSet = useMemo(
+    () => new Set(competitorFootprintStates),
+    [competitorFootprintStates],
+  );
+  const isCompetitorFootprintScope =
+    comparisonScope === "competitor-footprint" &&
+    competitorFootprintStates.length > 0;
+  const competitorFootprintLabel =
+    competitorFootprintStates.length === 0
+      ? "no competitor states"
+      : competitorFootprintStates.length <= 6
+        ? competitorFootprintStates.join(", ")
+        : `${competitorFootprintStates.length} states/provinces`;
+  const effectiveStateFilter =
+    stateFilter !== "all" &&
+    (!isCompetitorFootprintScope ||
+      competitorFootprintStateSet.has(stateFilter))
+      ? stateFilter
+      : "all";
+
   const scopedPairs = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return (view?.pairs ?? [])
       .filter((pair) => {
+        if (
+          isCompetitorFootprintScope &&
+          !competitorFootprintStateSet.has(pair.benchmark.state || "")
+        ) {
+          return false;
+        }
         if (onlySaved && !savedKeys.has(pairKey(pair))) return false;
-        if (stateFilter !== "all" && pair.benchmark.state !== stateFilter) {
+        if (
+          effectiveStateFilter !== "all" &&
+          pair.benchmark.state !== effectiveStateFilter
+        ) {
           return false;
         }
         if (!normalizedQuery) return true;
@@ -1259,7 +1315,16 @@ export function ProximityWorkspace({
         }
         return left.distance_miles - right.distance_miles;
       });
-  }, [onlySaved, query, savedKeys, sort, stateFilter, view?.pairs]);
+  }, [
+    competitorFootprintStateSet,
+    isCompetitorFootprintScope,
+    effectiveStateFilter,
+    onlySaved,
+    query,
+    savedKeys,
+    sort,
+    view?.pairs,
+  ]);
 
   const filteredPairs = useMemo(
     () =>
@@ -1331,32 +1396,49 @@ export function ProximityWorkspace({
   });
   const selectedCoverage =
     coverageBands.find((band) => band.miles === radius) ?? coverageBands[0];
+  const totalWalmartLocations =
+    view?.benchmark.location_count ?? scopedPairs.length;
+  const walmartScopeLabel = isCompetitorFootprintScope
+    ? "Walmart stores in competitor footprint"
+    : "Total Walmart stores";
+  const walmartScopeDescription =
+    view && isCompetitorFootprintScope
+      ? `${count(scopedPairs.length)} Walmart locations in ${competitorFootprintLabel}; ${count(totalWalmartLocations)} total ${view.benchmark.display_name} locations`
+      : view
+        ? `${count(view.benchmark.mappable_location_count)} mappable; ${count(view.summary.paired_locations)} paired to a nearest ${view.competitor.display_name} site`
+        : "No comparison loaded";
+  const comparisonScopeLabel = isCompetitorFootprintScope
+    ? `Competitor footprint (${competitorFootprintLabel})`
+    : `All ${view?.benchmark.display_name ?? "Walmart"} locations`;
   const distanceSummary = useMemo(() => {
     if (
       view?.distance_summary &&
       scopedPairs.length === view.pairs.length &&
-      stateFilter === "all" &&
+      effectiveStateFilter === "all" &&
       !query.trim() &&
       !onlySaved
     ) {
       return view.distance_summary;
     }
     return distanceSummaryForRows(scopedPairs);
-  }, [onlySaved, query, scopedPairs, stateFilter, view]);
+  }, [effectiveStateFilter, onlySaved, query, scopedPairs, view]);
   const competitorNetworkSummaries = useMemo(() => {
     if (
       view?.competitor_network_summary &&
       scopedPairs.length === view.pairs.length &&
-      stateFilter === "all" &&
+      effectiveStateFilter === "all" &&
       !query.trim() &&
       !onlySaved
     ) {
       return view.competitor_network_summary;
     }
     return competitorNetworkSummaryForRows(scopedPairs, radius);
-  }, [onlySaved, query, radius, scopedPairs, stateFilter, view]);
+  }, [effectiveStateFilter, onlySaved, query, radius, scopedPairs, view]);
   const hasScopedDimensionFilters =
-    stateFilter !== "all" || Boolean(query.trim()) || onlySaved;
+    isCompetitorFootprintScope ||
+    effectiveStateFilter !== "all" ||
+    Boolean(query.trim()) ||
+    onlySaved;
   const competitorPerspectivePairs = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     const sourceRows =
@@ -1364,7 +1446,10 @@ export function ProximityWorkspace({
     return sourceRows
       .filter((pair) => {
         if (onlySaved && !savedKeys.has(competitorPairKey(pair))) return false;
-        if (stateFilter !== "all" && pair.competitor.state !== stateFilter) {
+        if (
+          effectiveStateFilter !== "all" &&
+          pair.competitor.state !== effectiveStateFilter
+        ) {
           return false;
         }
         if (!normalizedQuery) return true;
@@ -1394,7 +1479,7 @@ export function ProximityWorkspace({
             right.competitor.store_number,
           ),
       );
-  }, [onlySaved, query, savedKeys, scopedPairs, stateFilter, view]);
+  }, [effectiveStateFilter, onlySaved, query, savedKeys, scopedPairs, view]);
   const competitorStateSummaries = useMemo(() => {
     if (!hasScopedDimensionFilters && view?.competitor_state_summary) {
       return view.competitor_state_summary;
@@ -1524,7 +1609,11 @@ export function ProximityWorkspace({
       (network) => network.covered_walmart_locations === 0,
     ),
   ].slice(0, 5);
-  const stateOptions = view?.state_options ?? [];
+  const stateOptions = useMemo(() => {
+    const options = view?.state_options ?? [];
+    if (!isCompetitorFootprintScope) return options;
+    return options.filter((option) => competitorFootprintStateSet.has(option));
+  }, [competitorFootprintStateSet, isCompetitorFootprintScope, view]);
   const visibleShare = filteredPairs.length
     ? filteredWithin / filteredPairs.length
     : null;
@@ -1930,6 +2019,7 @@ export function ProximityWorkspace({
     setRelation("all");
     setSort("nearest");
     setOnlySaved(false);
+    setComparisonScope(recommendedScopeForView(view));
     setCompetitorStateDetail(null);
     setCompetitorMarketDetail(null);
   }
@@ -2093,6 +2183,14 @@ export function ProximityWorkspace({
               {view ? count(view.summary.paired_locations) : "No"} Walmart
               locations paired
             </span>
+            <button
+              className={styles.scopeChip}
+              onClick={() => setModal("metric-scope")}
+              title="Open comparison-scope definition"
+              type="button"
+            >
+              Scope: {comparisonScopeLabel}
+            </button>
           </div>
           <p>
             OpenFreeMap / OpenMapTiles / OpenStreetMap base map with
@@ -2112,17 +2210,17 @@ export function ProximityWorkspace({
 
       <section className={styles.kpis} aria-label="Proximity summary">
         <MetricCard
-          description={
-            view
-              ? `${count(view.benchmark.mappable_location_count)} mappable; ${count(view.summary.paired_locations)} paired to a nearest ${view.competitor.display_name} site`
-              : "No comparison loaded"
-          }
+          description={walmartScopeDescription}
           icon="W"
           iconClass={styles.blue}
-          label="Total Walmart stores"
+          label={walmartScopeLabel}
           onInfo={() => setModal("metric-total")}
-          title="Open total Walmart stores definition"
-          value={count(view?.benchmark.location_count ?? scopedPairs.length)}
+          title="Open Walmart store denominator definition"
+          value={count(
+            isCompetitorFootprintScope
+              ? scopedPairs.length
+              : totalWalmartLocations,
+          )}
         />
         <MetricCard
           description={`${count(selectedCoverage?.within ?? filteredWithin)} of ${count(scopedPairs.length)} paired Walmart locations`}
@@ -2519,10 +2617,11 @@ export function ProximityWorkspace({
                   <small>Nearest competitor is farther away</small>
                 </button>
                 {query ||
-                stateFilter !== "all" ||
+                effectiveStateFilter !== "all" ||
                 relation !== "all" ||
                 sort !== "nearest" ||
-                onlySaved ? (
+                onlySaved ||
+                comparisonScope !== recommendedScopeForView(view) ? (
                   <button
                     className={styles.resetQuickView}
                     onClick={resetView}
@@ -2861,6 +2960,33 @@ export function ProximityWorkspace({
               </select>
             </label>
             <div className={styles.field}>
+              <span>Comparison scope</span>
+              <div className={styles.scopeSet}>
+                <button
+                  aria-pressed={comparisonScope === "all-walmart"}
+                  onClick={() => setComparisonScope("all-walmart")}
+                  title="Use all paired Walmart locations in the selected country as the denominator"
+                  type="button"
+                >
+                  All Walmart
+                </button>
+                <button
+                  aria-pressed={comparisonScope === "competitor-footprint"}
+                  disabled={competitorFootprintStates.length === 0}
+                  onClick={() => setComparisonScope("competitor-footprint")}
+                  title={`Use only Walmart locations in states/provinces where ${view?.competitor.display_name ?? "the competitor"} has mappable locations`}
+                  type="button"
+                >
+                  Competitor footprint
+                </button>
+              </div>
+              <small className={styles.fieldHint}>
+                {isCompetitorFootprintScope
+                  ? `Using Walmart locations in ${competitorFootprintLabel}.`
+                  : `Using all ${view?.benchmark.display_name ?? "Walmart"} locations in ${country}.`}
+              </small>
+            </div>
+            <div className={styles.field}>
               <span>Competition radius</span>
               <div className={styles.radiusSet}>
                 {RADIUS_OPTIONS.map((option) => (
@@ -2890,7 +3016,7 @@ export function ProximityWorkspace({
               <span>Walmart state/province</span>
               <select
                 title="Filter Walmart locations by state or province"
-                value={stateFilter}
+                value={effectiveStateFilter}
                 onChange={(event) => setStateFilter(event.target.value)}
               >
                 <option value="all">All</option>
@@ -3449,15 +3575,19 @@ export function ProximityWorkspace({
         <InfoModal
           competitorGapLocations={competitorGapLocations}
           competitorGapShare={competitorGapShare}
+          comparisonScopeLabel={comparisonScopeLabel}
+          competitorFootprintLabel={competitorFootprintLabel}
           competitorPairCount={competitorPerspectivePairs.length}
           competitorWithinLocations={competitorWithinLocations}
           distanceSummary={distanceSummary}
+          isCompetitorFootprintScope={isCompetitorFootprintScope}
           modal={modal}
           radius={radius}
           scopeMedian={scopeMedian}
           scopedPairs={scopedPairs}
           selectedCoverage={selectedCoverage}
           setModal={setModal}
+          totalWalmartLocations={totalWalmartLocations}
           view={view}
         />
       ) : null}
@@ -3749,22 +3879,29 @@ function MetricCard({
 function InfoModal({
   competitorGapLocations,
   competitorGapShare,
+  comparisonScopeLabel,
+  competitorFootprintLabel,
   competitorPairCount,
   competitorWithinLocations,
   distanceSummary,
+  isCompetitorFootprintScope,
   modal,
   radius,
   scopeMedian,
   scopedPairs,
   selectedCoverage,
   setModal,
+  totalWalmartLocations,
   view,
 }: Readonly<{
   competitorGapLocations: number;
   competitorGapShare: number | null;
+  comparisonScopeLabel: string;
+  competitorFootprintLabel: string;
   competitorPairCount: number;
   competitorWithinLocations: number;
   distanceSummary: ProximityDistanceSummary;
+  isCompetitorFootprintScope: boolean;
   modal: Exclude<ModalKind, null>;
   radius: number;
   scopeMedian: number | null;
@@ -3779,6 +3916,7 @@ function InfoModal({
       }
     | undefined;
   setModal: (modal: ModalKind) => void;
+  totalWalmartLocations: number;
   view: ProximityView | null;
 }>) {
   const title =
@@ -3788,21 +3926,25 @@ function InfoModal({
         ? "Shortlisted retailer relationships"
         : modal === "notes"
           ? "How to use this page"
-          : modal === "metric-total"
-            ? "Total Walmart stores"
-            : modal === "metric-coverage"
-              ? `Coverage within ${radius} mile${radius === 1 ? "" : "s"}`
-              : modal === "metric-gap"
-                ? `White-space stores beyond ${radius} mile${radius === 1 ? "" : "s"}`
-                : modal === "metric-competitor-whitespace"
-                  ? `Competitor sites beyond ${radius} mile${radius === 1 ? "" : "s"}`
-                  : modal === "metric-market"
-                    ? "Competitor white-space markets"
-                    : modal === "metric-pressure"
-                      ? "Walmart competitive pressure states"
-                      : modal === "metric-distance"
-                        ? "Distance profile"
-                        : "Nearest competitor sites represented";
+          : modal === "metric-scope"
+            ? "Comparison scope"
+            : modal === "metric-total"
+              ? isCompetitorFootprintScope
+                ? "Walmart stores in competitor footprint"
+                : "Total Walmart stores"
+              : modal === "metric-coverage"
+                ? `Coverage within ${radius} mile${radius === 1 ? "" : "s"}`
+                : modal === "metric-gap"
+                  ? `White-space stores beyond ${radius} mile${radius === 1 ? "" : "s"}`
+                  : modal === "metric-competitor-whitespace"
+                    ? `Competitor sites beyond ${radius} mile${radius === 1 ? "" : "s"}`
+                    : modal === "metric-market"
+                      ? "Competitor white-space markets"
+                      : modal === "metric-pressure"
+                        ? "Walmart competitive pressure states"
+                        : modal === "metric-distance"
+                          ? "Distance profile"
+                          : "Nearest competitor sites represented";
   const eyebrow = modal.startsWith("metric-")
     ? "Metric definition"
     : modal === "method"
@@ -3860,23 +4002,45 @@ function InfoModal({
           </div>
         ) : null}
 
+        {modal === "metric-scope" ? (
+          <div className={styles.modalBody}>
+            <p>
+              <b>What it represents:</b> the denominator used for Walmart-side
+              coverage and white-space metrics on this page.
+            </p>
+            <p>
+              <b>All Walmart</b> uses every paired Walmart location in the
+              selected country. <b>Competitor footprint</b> uses only Walmart
+              locations in states/provinces where the selected competitor has
+              mappable locations in the location master.
+            </p>
+            <p>
+              Current scope: {comparisonScopeLabel}. This keeps regional
+              retailers like H-E-B from being evaluated against Walmart stores
+              in states where that competitor has no sourced location footprint.
+            </p>
+          </div>
+        ) : null}
+
         {modal === "metric-total" ? (
           <div className={styles.modalBody}>
             <p>
-              <b>What it represents:</b> all Walmart locations for the selected
-              country in the location master, before state, relationship,
-              search, or shortlist filters.
+              <b>What it represents:</b>{" "}
+              {isCompetitorFootprintScope
+                ? `Walmart locations in ${competitorFootprintLabel}, because the selected competitor is being evaluated in its sourced footprint.`
+                : "all Walmart locations for the selected country in the location master, before state, relationship, search, or shortlist filters."}
             </p>
             <p>
-              <b>Calculation:</b> `benchmark.location_count` from the Proximity
-              API. The supporting line also shows how many Walmart locations
-              have valid coordinates and how many were successfully paired to
-              the selected competitor.
+              <b>Calculation:</b>{" "}
+              {isCompetitorFootprintScope
+                ? "paired Walmart rows where Walmart state/province is also present in the selected competitor’s mappable location states/provinces."
+                : "`benchmark.location_count` from the Proximity API. The supporting line also shows how many Walmart locations have valid coordinates and how many were successfully paired to the selected competitor."}
             </p>
             <p>
-              Current value: {count(view?.benchmark.location_count ?? 0)} total;{" "}
-              {count(view?.benchmark.mappable_location_count ?? 0)} mappable;{" "}
-              {count(view?.summary.paired_locations ?? 0)} paired.
+              Current value: {count(scopedPairs.length)} in the active scope;{" "}
+              {count(totalWalmartLocations)} total{" "}
+              {view?.benchmark.display_name ?? "Walmart"} locations in the
+              selected country.
             </p>
           </div>
         ) : null}
