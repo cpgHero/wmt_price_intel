@@ -93,3 +93,9 @@ and governed physical/network coverage are separate metrics. Recovery plans and 
 generations bind exact projection checksums, and
 projection filtering occurs before readiness, task lineage, and usable-artifact materialization.
 No frozen collection task, geography row, provider response, or raw artifact is mutated.
+`0054_account_access_foundation` adds additive CPGHero account, workspace, membership, RBAC,
+entitlement, and audit scoping primitives while preserving the existing `organization` and
+`app_user` compatibility roots. It seeds a system account, default workspace, baseline governed
+permissions, and system/account/workspace/project roles so future route enforcement can resolve
+sessions or API keys into a stable access principal without choosing the final customer identity
+provider in this migration.

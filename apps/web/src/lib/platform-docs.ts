@@ -86,11 +86,12 @@ const productionOperationsLastVerified = "August 29, 2026";
 const availabilityEvidenceLastVerified = "September 10, 2026";
 const proximityLastVerified = "September 13, 2026";
 const visibilityBoundaryLastVerified = "September 13, 2026";
+const accountAccessLastVerified = "September 13, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.141",
-  lastVerified: visibilityBoundaryLastVerified,
+  version: "1.3.142",
+  lastVerified: accountAccessLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
   maintenanceOwner: "Platform owner and engineering lead",
@@ -1250,7 +1251,7 @@ export const platformDocumentation: PlatformDocumentation = {
         "The controls that prevent metric drift, secret exposure, duplicate work, uncontrolled provider spend, and silent evidence changes.",
       audience: "Platform owner · Platform administrator",
       readingTime: "9 min",
-      lastVerified: visibilityBoundaryLastVerified,
+      lastVerified: accountAccessLastVerified,
       status: "Current with limitations",
       blocks: [
         {
@@ -1288,13 +1289,14 @@ export const platformDocumentation: PlatformDocumentation = {
             "Administrator sessions are eight-hour, HttpOnly, Secure-in-production, SameSite=Strict, and HMAC-signed. Writes require same-origin validation.",
             "Logs redact provider authentication parameters and record IDs, attempts, statuses, costs, and failure classes without credentials.",
             "CI now includes a customer-visible provider-masking gate for non-admin app routes and current CPGHero platform planning docs. Internal adapters, private admin/operations surfaces, tests, source-material records, and migrations remain separately classified until the broader visibility-boundary cleanup is complete.",
+            "The account-access foundation now defines CPGHero accounts, workspaces, memberships, roles, permissions, entitlements, and account/workspace audit-event context. Route-level enforcement and customer login remain separate follow-up work.",
           ],
         },
         {
           kind: "callout",
           tone: "attention",
           title: "Current access-control limitation",
-          text: "The implemented administrator surface uses one protected admin session rather than individual accounts and role-based permissions. The intended roles are Admin, Analyst, and Viewer, but full accounts/RBAC remain future work.",
+          text: "The durable account/RBAC/entitlement foundation exists, but the implemented administrator surface still uses one protected admin session rather than customer login with route-level account enforcement. Customer identity provider selection, individual user login, API keys, and cross-account route enforcement remain future work.",
         },
       ],
     },
@@ -2949,6 +2951,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-13",
+              "Implemented; CI verification pending",
+              "CPGHero account, workspace, role, permission, and entitlement foundation added.",
+              "Migration 0054 adds additive CPGHero account and workspace tables beside the existing organization/app_user compatibility model, seeded platform permissions and roles, membership tables, account entitlements, and account/workspace/request/network-hash fields on audit events. Shared access-control code now provides typed role, permission, entitlement, and AccessPrincipal primitives with tests. This is a security/data-model foundation only; it does not select an identity provider, add customer login, issue API keys, enforce account scope on routes, change provider credentials, change collection requests, modify billing formulas, change reports, change proximity metrics, make paid source calls, make AI calls, or delete historical evidence.",
+            ],
             [
               "2026-09-13",
               "Implemented; CI verification pending",
