@@ -1,5 +1,6 @@
 import { EmptyState } from "@/app/components/empty-state";
 import { getApi, type LocationRetailer, type ProximityView } from "@/lib/api";
+import type { ComparisonScope } from "@/lib/proximity-workspace-model";
 
 import { ProximityWorkspace } from "./proximity-workspace";
 
@@ -10,6 +11,7 @@ interface ProximitySearchParams {
   country?: string;
   competitor?: string;
   radius?: string;
+  scope?: string;
 }
 
 function walmartRetailerId(country: string) {
@@ -27,6 +29,15 @@ function normalizeCountry(country: string | undefined) {
 function normalizeRadius(radius: string | undefined) {
   const value = Number(radius ?? DEFAULT_RADIUS_MILES);
   return Number.isFinite(value) && value > 0 ? value : DEFAULT_RADIUS_MILES;
+}
+
+function normalizeComparisonScope(
+  scope: string | undefined,
+): ComparisonScope | null {
+  if (scope === "all-walmart" || scope === "competitor-footprint") {
+    return scope;
+  }
+  return null;
 }
 
 function defaultCompetitor(retailers: LocationRetailer[], country: string) {
@@ -55,7 +66,12 @@ export default async function ProximityPage({
 }: {
   searchParams: Promise<ProximitySearchParams>;
 }) {
-  const { country: countryParam, competitor, radius } = await searchParams;
+  const {
+    country: countryParam,
+    competitor,
+    radius,
+    scope,
+  } = await searchParams;
   const country = normalizeCountry(countryParam);
   const radiusMiles = normalizeRadius(radius);
   const retailersResponse = await getApi<LocationRetailer[]>(
@@ -87,6 +103,7 @@ export default async function ProximityPage({
         <ProximityWorkspace
           initialCompetitorRetailerId={competitorRetailerId}
           initialCountry={country}
+          initialComparisonScope={normalizeComparisonScope(scope)}
           initialRetailers={retailers}
           initialView={proximityResponse.data ?? null}
         />

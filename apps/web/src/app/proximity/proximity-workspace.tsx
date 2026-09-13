@@ -1056,16 +1056,30 @@ function mapSummaryForRows(
   };
 }
 
+function resolveInitialComparisonScope(
+  initialComparisonScope: ComparisonScope | null,
+  initialView: ProximityView | null,
+) {
+  if (initialComparisonScope === "competitor-footprint") {
+    return competitorFootprintStatesForView(initialView).length > 0
+      ? initialComparisonScope
+      : recommendedScopeForView(initialView);
+  }
+  return initialComparisonScope ?? recommendedScopeForView(initialView);
+}
+
 export function ProximityWorkspace({
   initialView,
   initialRetailers,
   initialCountry,
   initialCompetitorRetailerId,
+  initialComparisonScope,
 }: Readonly<{
   initialView: ProximityView | null;
   initialRetailers: LocationRetailer[];
   initialCountry: string;
   initialCompetitorRetailerId: string | null;
+  initialComparisonScope: ComparisonScope | null;
 }>) {
   const [country, setCountry] = useState(initialCountry);
   const [retailers, setRetailers] = useState(initialRetailers);
@@ -1077,7 +1091,7 @@ export function ProximityWorkspace({
     initialView?.selected_radius_miles ?? DEFAULT_RADIUS_MILES,
   );
   const [comparisonScope, setComparisonScope] = useState<ComparisonScope>(() =>
-    recommendedScopeForView(initialView),
+    resolveInitialComparisonScope(initialComparisonScope, initialView),
   );
   const [query, setQuery] = useState("");
   const [stateFilter, setStateFilter] = useState("all");
@@ -1154,6 +1168,20 @@ export function ProximityWorkspace({
       JSON.stringify(savedByComparison),
     );
   }, [savedByComparison]);
+
+  useEffect(() => {
+    if (!competitorRetailerId) return;
+    const parameters = new URLSearchParams(window.location.search);
+    parameters.set("country", country);
+    parameters.set("competitor", competitorRetailerId);
+    parameters.set("radius", String(radius));
+    parameters.set("scope", comparisonScope);
+    const nextUrl = `${window.location.pathname}?${parameters.toString()}`;
+    const currentUrl = `${window.location.pathname}${window.location.search}`;
+    if (nextUrl !== currentUrl) {
+      window.history.replaceState(null, "", nextUrl);
+    }
+  }, [comparisonScope, competitorRetailerId, country, radius]);
 
   async function load(next: {
     country?: string;
