@@ -1,6 +1,8 @@
 """Shared runtime primitives."""
 
 from rci_core.access_control import (
+    ENTITLEMENT_KEYS,
+    ROLE_KEYS,
     ROLE_PERMISSIONS,
     ROLE_SCOPES,
     AccessPrincipal,
@@ -18,6 +20,8 @@ from rci_core.version import APP_VERSION
 
 __all__ = [
     "APP_VERSION",
+    "ENTITLEMENT_KEYS",
+    "ROLE_KEYS",
     "ROLE_PERMISSIONS",
     "ROLE_SCOPES",
     "WORKOS_AUTH_ENV_VARS",
