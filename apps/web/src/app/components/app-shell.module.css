@@ -259,6 +259,105 @@
   gap: 0.55rem;
 }
 
+.customerSession {
+  align-items: center;
+  display: flex;
+  gap: 0.45rem;
+}
+
+.customerIdentity {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  display: flex;
+  gap: 0.55rem;
+  min-height: 36px;
+  padding: 0.22rem 0.7rem 0.22rem 0.25rem;
+}
+
+.customerIdentity:hover,
+.customerIdentity:focus-visible,
+.customerSignIn:hover,
+.customerSignIn:focus-visible,
+.customerSignOut:hover,
+.customerSignOut:focus-visible {
+  border-color: color-mix(in srgb, var(--green) 42%, var(--line));
+  color: var(--ink);
+  outline: none;
+}
+
+.customerAvatar {
+  align-items: center;
+  background: color-mix(in srgb, var(--green) 18%, var(--surface-alt));
+  border: 1px solid color-mix(in srgb, var(--green) 36%, var(--line));
+  border-radius: 999px;
+  color: var(--green);
+  display: flex;
+  flex: 0 0 28px;
+  font-size: 0.62rem;
+  font-weight: 900;
+  height: 28px;
+  justify-content: center;
+  width: 28px;
+}
+
+.customerIdentity > span:last-child {
+  display: grid;
+  gap: 0.02rem;
+  min-width: 0;
+}
+
+.customerIdentity strong {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 820;
+  max-width: 15rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customerIdentity small {
+  color: var(--muted);
+  font-size: 0.56rem;
+  font-weight: 760;
+}
+
+.customerSignIn,
+.customerSignOut {
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.67rem;
+  font-weight: 800;
+  min-height: 36px;
+  padding: 0 0.72rem;
+}
+
+.customerSignIn {
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  color: var(--ink);
+}
+
+.customerSessionSkeleton {
+  animation: customer-session-pulse 1.2s ease-in-out infinite;
+  background: color-mix(in srgb, var(--surface-alt) 78%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: block;
+  height: 36px;
+  width: 8.5rem;
+}
+
+@keyframes customer-session-pulse {
+  50% {
+    opacity: 0.48;
+  }
+}
+
 .pageActionsSlot {
   align-items: center;
   display: flex;
@@ -416,6 +515,10 @@
     display: none;
   }
 
+  .customerIdentity strong {
+    max-width: 8rem;
+  }
+
   .pageShell {
     padding-inline: 1rem;
   }
@@ -442,8 +545,14 @@
 
 @media (max-width: 560px) {
   .pageContext small,
-  .statusPill {
+  .statusPill,
+  .customerSignOut,
+  .customerIdentity > span:last-child {
     display: none;
+  }
+
+  .customerIdentity {
+    padding-right: 0.25rem;
   }
 }
 
@@ -458,6 +567,10 @@
   }
 
   .navigationProgress span {
+    animation: none;
+  }
+
+  .customerSessionSkeleton {
     animation: none;
   }
 }

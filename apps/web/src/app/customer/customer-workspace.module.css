@@ -1,0 +1,214 @@
+.workspace {
+  display: grid;
+  gap: 1rem;
+  padding-top: 1.8rem;
+}
+
+.hero,
+.panel,
+.card {
+  background:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--green) 12%, transparent),
+      transparent 22rem
+    ),
+    var(--card);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+}
+
+.hero {
+  align-items: stretch;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 24rem);
+  padding: clamp(1.25rem, 3vw, 2rem);
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 4rem);
+  letter-spacing: -0.075em;
+  line-height: 0.95;
+  margin: 0.25rem 0 0.8rem;
+}
+
+.hero p {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0;
+  max-width: 66rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin-top: 1.2rem;
+}
+
+.identityCard {
+  align-content: end;
+  background: color-mix(in srgb, var(--surface-alt) 76%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.identityCard span,
+.card > span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.identityCard strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.identityCard small {
+  color: var(--green);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.card {
+  align-content: start;
+  display: grid;
+  gap: 0.65rem;
+  min-height: 11rem;
+  padding: 1rem;
+}
+
+.card > strong {
+  color: var(--ink);
+  font-size: clamp(1.15rem, 2vw, 1.7rem);
+  letter-spacing: -0.055em;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.card p {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.pillRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.pillRow span {
+  background: color-mix(in srgb, var(--green) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 32%, var(--line));
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 760;
+  padding: 0.38rem 0.55rem;
+}
+
+.panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.panel header {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.panel h2 {
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  letter-spacing: -0.06em;
+  margin: 0.25rem 0 0;
+}
+
+.permissionGrid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.permissionGrid article {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.permissionGrid strong {
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.permissionGrid span {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.permissionGrid article.enabled {
+  border-color: color-mix(in srgb, var(--green) 42%, var(--line));
+}
+
+.permissionGrid article.enabled span {
+  color: var(--green);
+}
+
+.details {
+  background: color-mix(in srgb, var(--surface-alt) 70%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 0.9rem 1rem;
+}
+
+.details summary {
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 820;
+}
+
+.details .pillRow {
+  margin-top: 0.8rem;
+}
+
+@media (max-width: 1180px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .hero,
+  .grid,
+  .permissionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

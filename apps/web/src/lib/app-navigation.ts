@@ -40,6 +40,13 @@ export const applicationNavigation: readonly NavigationGroup[] = [
     label: "Analytics",
     items: [
       {
+        label: "My Workspace",
+        description: "Customer account, workspace, and access state",
+        href: "/customer",
+        icon: "dashboard",
+        match: "prefix",
+      },
+      {
         label: "Price Intelligence",
         description: "Search-listed prices by store query context",
         href: "/price-intelligence",
@@ -159,6 +166,13 @@ export const simplifiedApplicationNavigation: readonly NavigationGroup[] = [
     id: "analytics",
     label: "Analytics",
     items: [
+      {
+        label: "My Workspace",
+        description: "Customer account, workspace, and access state",
+        href: "/customer",
+        icon: "dashboard",
+        match: "prefix",
+      },
       {
         label: "Reports",
         description: "Unified product-level price intelligence reports",
