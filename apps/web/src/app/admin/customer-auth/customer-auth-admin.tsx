@@ -203,8 +203,250 @@ function FoundationTabs({
   );
 }
 
+function AccountDetailDrawer({
+  account,
+  entitlements,
+  invitations,
+  loginEnabled,
+  members,
+  onClose,
+  workspaces,
+}: Readonly<{
+  account: CustomerAccountFoundation["accounts"][number];
+  entitlements: CustomerAccountFoundation["entitlements"];
+  invitations: CustomerAuthReadiness["invitations"];
+  loginEnabled: boolean;
+  members: CustomerAccountFoundation["members"];
+  onClose: () => void;
+  workspaces: CustomerAccountFoundation["workspaces"];
+}>) {
+  const acceptedInvitations = invitations.filter(
+    (invitation) => invitation.accepted,
+  ).length;
+  const boundMembers = members.filter(
+    (member) => member.has_identity_provider_user_binding,
+  ).length;
+
+  return (
+    <div
+      aria-label="Close account detail drawer"
+      className={styles.drawerBackdrop}
+      onClick={onClose}
+      role="presentation"
+    >
+      <aside
+        aria-labelledby="account-detail-title"
+        aria-modal="true"
+        className={styles.drawer}
+        onClick={(event) => event.stopPropagation()}
+        role="dialog"
+      >
+        <header className={styles.drawerHeader}>
+          <div>
+            <span className={styles.kicker}>Account detail</span>
+            <h2 id="account-detail-title">{account.account_display_name}</h2>
+            <p>
+              {account.account_slug} · {account.account_type} /{" "}
+              {readableStatus(account.account_status)}
+            </p>
+          </div>
+          <button onClick={onClose} type="button">
+            Close
+          </button>
+        </header>
+
+        <section className={styles.drawerMetrics}>
+          <article>
+            <small>Workspaces</small>
+            <strong>{formatNumber(workspaces.length)}</strong>
+            <span>{formatNumber(account.workspace_count)} total scopes</span>
+          </article>
+          <article>
+            <small>Active users</small>
+            <strong>{formatNumber(account.active_member_count)}</strong>
+            <span>{formatNumber(boundMembers)} identity-bound users</span>
+          </article>
+          <article>
+            <small>Report grants</small>
+            <strong>{formatNumber(account.active_report_grant_count)}</strong>
+            <span>
+              {formatNumber(account.revoked_report_grant_count)} revoked grants
+            </span>
+          </article>
+          <article>
+            <small>Login readiness</small>
+            <strong>
+              {loginEnabled || acceptedInvitations ? "Tracked" : "Prepared"}
+            </strong>
+            <span>
+              {formatNumber(acceptedInvitations)} of{" "}
+              {formatNumber(invitations.length)} invitations accepted
+            </span>
+          </article>
+        </section>
+
+        <section className={styles.drawerSection}>
+          <header>
+            <div>
+              <span className={styles.kicker}>Readiness</span>
+              <h3>Login, invitation, and identity state</h3>
+            </div>
+          </header>
+          <div className={styles.readinessGrid}>
+            <div>
+              <small>Account identity</small>
+              <StatusPill
+                active={account.has_identity_provider_organization_binding}
+                falseLabel="Not bound"
+                trueLabel="Bound"
+              />
+            </div>
+            <div>
+              <small>Customer login</small>
+              <StatusPill
+                active={loginEnabled}
+                falseLabel="Disabled"
+                trueLabel="Enabled"
+              />
+            </div>
+            <div>
+              <small>User identity binding</small>
+              <strong>
+                {formatNumber(boundMembers)} / {formatNumber(members.length)}
+              </strong>
+            </div>
+            <div>
+              <small>Invitations accepted</small>
+              <strong>
+                {formatNumber(acceptedInvitations)} /{" "}
+                {formatNumber(invitations.length)}
+              </strong>
+            </div>
+          </div>
+        </section>
+
+        <section className={styles.drawerSection}>
+          <header>
+            <div>
+              <span className={styles.kicker}>Workspace & report access</span>
+              <h3>Where this account can operate</h3>
+            </div>
+          </header>
+          {workspaces.length ? (
+            <div className={styles.drawerRows}>
+              {workspaces.map((workspace) => (
+                <div key={workspace.workspace_id}>
+                  <span>
+                    <strong>{workspace.workspace_display_name}</strong>
+                    <small>{workspace.workspace_slug}</small>
+                  </span>
+                  <span>
+                    {formatNumber(workspace.active_member_count)} members ·{" "}
+                    {formatNumber(workspace.active_report_grant_count)} active
+                    grants ·{" "}
+                    {formatNumber(workspace.revoked_report_grant_count)} revoked
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className={styles.emptyState}>
+              No workspace scopes are configured for this account.
+            </div>
+          )}
+        </section>
+
+        <section className={styles.drawerSection}>
+          <header>
+            <div>
+              <span className={styles.kicker}>Users & roles</span>
+              <h3>Membership, role scope, and identity binding</h3>
+            </div>
+          </header>
+          {members.length ? (
+            <div className={styles.drawerRows}>
+              {members.map((member) => (
+                <div
+                  key={`${member.account_id}-${member.user_id}-${
+                    member.workspace_slug ?? "account"
+                  }`}
+                >
+                  <span>
+                    <strong>{member.display_name ?? member.email}</strong>
+                    <small>
+                      {member.email} ·{" "}
+                      {member.workspace_display_name ?? "Account-level"}
+                    </small>
+                  </span>
+                  <span>
+                    {roleList(member.account_role_keys)}
+                    {member.workspace_role_keys.length
+                      ? ` · ${roleList(member.workspace_role_keys)}`
+                      : ""}{" "}
+                    ·{" "}
+                    {member.has_identity_provider_user_binding
+                      ? "identity bound"
+                      : "identity not bound"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className={styles.emptyState}>
+              No users are visible for this account.
+            </div>
+          )}
+        </section>
+
+        <section className={styles.drawerSection}>
+          <header>
+            <div>
+              <span className={styles.kicker}>Entitlements</span>
+              <h3>Enabled account capabilities</h3>
+            </div>
+          </header>
+          {entitlements.length ? (
+            <div className={styles.drawerRows}>
+              {entitlements.map((entitlement) => (
+                <div
+                  key={`${entitlement.account_id}-${entitlement.entitlement_key}`}
+                >
+                  <span>
+                    <strong>{entitlement.entitlement_key}</strong>
+                    <small>
+                      {readableStatus(entitlement.entitlement_status)}
+                    </small>
+                  </span>
+                  <span>
+                    Starts {formatTime(entitlement.starts_at)} · Expires{" "}
+                    {formatTime(entitlement.expires_at)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className={styles.emptyState}>
+              No account entitlements are configured yet.
+            </div>
+          )}
+        </section>
+
+        <section className={styles.drawerGuardrail}>
+          <strong>Read-only guardrail</strong>
+          <span>
+            Role, entitlement, membership, and report-access changes remain
+            gated until explicit approval, audit logging, and rollback workflows
+            are implemented.
+          </span>
+        </section>
+      </aside>
+    </div>
+  );
+}
+
 function FoundationWorkspace({
   data,
+  readinessData,
   accountSearch,
   accountTypeFilter,
   selectedAccountId,
@@ -215,6 +457,7 @@ function FoundationWorkspace({
   onSelectAccount,
 }: Readonly<{
   data: CustomerAccountFoundation;
+  readinessData: CustomerAuthReadiness;
   accountSearch: string;
   accountTypeFilter: AccountTypeFilter;
   selectedAccountId: string | null;
@@ -258,7 +501,6 @@ function FoundationWorkspace({
   );
   const selectedAccount =
     data.accounts.find((account) => account.account_id === selectedAccountId) ??
-    visibleAccounts[0] ??
     null;
   const selectedAccountIds = selectedAccount
     ? new Set([selectedAccount.account_id])
@@ -272,10 +514,27 @@ function FoundationWorkspace({
   const scopedEntitlements = data.entitlements.filter((entitlement) =>
     selectedAccountIds.has(entitlement.account_id),
   );
-  const selectedReportGrantCount = scopedWorkspaces.reduce(
-    (total, workspace) => total + workspace.active_report_grant_count,
-    0,
-  );
+  const selectedAccountWorkspaces = selectedAccount
+    ? data.workspaces.filter(
+        (workspace) => workspace.account_id === selectedAccount.account_id,
+      )
+    : [];
+  const selectedAccountMembers = selectedAccount
+    ? data.members.filter(
+        (member) => member.account_id === selectedAccount.account_id,
+      )
+    : [];
+  const selectedAccountEntitlements = selectedAccount
+    ? data.entitlements.filter(
+        (entitlement) => entitlement.account_id === selectedAccount.account_id,
+      )
+    : [];
+  const selectedAccountInvitations = selectedAccount
+    ? readinessData.invitations.filter(
+        (invitation) =>
+          invitation.account_slug === selectedAccount.account_slug,
+      )
+    : [];
 
   function resetView() {
     onAccountSearchChange("");
@@ -383,11 +642,10 @@ function FoundationWorkspace({
               {visibleAccounts.length ? (
                 visibleAccounts.map((account) => (
                   <button
-                    aria-pressed={
-                      selectedAccount?.account_id === account.account_id
-                    }
+                    aria-label={`Open detail drawer for ${account.account_display_name}`}
+                    aria-pressed={selectedAccountId === account.account_id}
                     className={`${styles.accountCard} ${
-                      selectedAccount?.account_id === account.account_id
+                      selectedAccountId === account.account_id
                         ? styles.selected
                         : ""
                     }`}
@@ -403,6 +661,7 @@ function FoundationWorkspace({
                       {formatNumber(account.active_member_count)} members ·{" "}
                       {formatNumber(account.workspace_count)} workspaces
                     </span>
+                    <em>Open detail drawer</em>
                   </button>
                 ))
               ) : (
@@ -413,146 +672,26 @@ function FoundationWorkspace({
             </div>
           </article>
 
-          <article className={`${styles.panel} ${styles.detailPanel}`}>
+          <article className={`${styles.panel} ${styles.detailPreview}`}>
             <header>
               <div>
-                <span className={styles.kicker}>Account detail</span>
-                <h3>
-                  {selectedAccount
-                    ? selectedAccount.account_display_name
-                    : "No account selected"}
-                </h3>
+                <span className={styles.kicker}>Detail drawer</span>
+                <h3>Inspect one account without losing context</h3>
               </div>
-              {selectedAccount ? (
-                <button
-                  className={styles.linkButton}
-                  onClick={() => onSelectAccount(null)}
-                  type="button"
-                >
-                  Clear selection
-                </button>
-              ) : null}
             </header>
-
-            {selectedAccount ? (
-              <div className={styles.detailStack}>
-                <div className={styles.metaGrid}>
-                  <span>
-                    <small>Status</small>
-                    <strong>
-                      {selectedAccount.account_type} /{" "}
-                      {selectedAccount.account_status}
-                    </strong>
-                  </span>
-                  <span>
-                    <small>Identity binding</small>
-                    <StatusPill
-                      active={
-                        selectedAccount.has_identity_provider_organization_binding
-                      }
-                      trueLabel="Bound"
-                      falseLabel="Not bound"
-                    />
-                  </span>
-                  <span>
-                    <small>Report grants</small>
-                    <strong>{formatNumber(selectedReportGrantCount)}</strong>
-                  </span>
-                  <span>
-                    <small>Created</small>
-                    <strong>{formatTime(selectedAccount.created_at)}</strong>
-                  </span>
-                </div>
-
-                <section className={styles.subsection}>
-                  <h4>Workspace access</h4>
-                  {scopedWorkspaces.length ? (
-                    <div className={styles.compactRows}>
-                      {scopedWorkspaces.map((workspace) => (
-                        <div key={workspace.workspace_id}>
-                          <span>
-                            <strong>{workspace.workspace_display_name}</strong>
-                            <small>{workspace.workspace_slug}</small>
-                          </span>
-                          <span>
-                            {formatNumber(workspace.active_member_count)}{" "}
-                            members ·{" "}
-                            {formatNumber(workspace.active_report_grant_count)}{" "}
-                            active grants
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className={styles.emptyState}>
-                      No workspace scopes are configured for this account.
-                    </div>
-                  )}
-                </section>
-
-                <section className={styles.subsection}>
-                  <h4>Users and roles</h4>
-                  {scopedMembers.length ? (
-                    <div className={styles.compactRows}>
-                      {scopedMembers.map((member) => (
-                        <div
-                          key={`${member.account_id}-${member.user_id}-${
-                            member.workspace_slug ?? "account"
-                          }`}
-                        >
-                          <span>
-                            <strong>
-                              {member.display_name ?? member.email}
-                            </strong>
-                            <small>{member.email}</small>
-                          </span>
-                          <span>
-                            {roleList(member.account_role_keys)}
-                            {member.workspace_role_keys.length
-                              ? ` · ${roleList(member.workspace_role_keys)}`
-                              : ""}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className={styles.emptyState}>
-                      No active users are visible for this account.
-                    </div>
-                  )}
-                </section>
-
-                <section className={styles.subsection}>
-                  <h4>Enabled capabilities</h4>
-                  {scopedEntitlements.length ? (
-                    <div className={styles.compactRows}>
-                      {scopedEntitlements.map((entitlement) => (
-                        <div
-                          key={`${entitlement.account_id}-${entitlement.entitlement_key}`}
-                        >
-                          <span>
-                            <strong>{entitlement.entitlement_key}</strong>
-                            <small>{entitlement.entitlement_status}</small>
-                          </span>
-                          <span>
-                            Expires {formatTime(entitlement.expires_at)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className={styles.emptyState}>
-                      No account entitlements are configured yet.
-                    </div>
-                  )}
-                </section>
-              </div>
-            ) : (
-              <div className={styles.emptyState}>
-                Select a customer account to inspect workspaces, members, roles,
-                entitlements, and report-access counts.
-              </div>
-            )}
+            <div className={styles.previewGrid}>
+              <span>Workspace access and report-grant footprint</span>
+              <span>
+                Users, account roles, workspace roles, and identity binding
+              </span>
+              <span>Entitlements and enabled customer capabilities</span>
+              <span>Login, invitation, and cutover-readiness context</span>
+            </div>
+            <p>
+              Select a customer account from the directory to open the detail
+              drawer. The current phase remains read-only until write workflows
+              have explicit audit, approval, and rollback controls.
+            </p>
           </article>
         </section>
       ) : null}
@@ -584,7 +723,13 @@ function FoundationWorkspace({
                     visibleAccounts.map((account) => (
                       <tr key={account.account_id}>
                         <td>
-                          <strong>{account.account_display_name}</strong>
+                          <button
+                            className={styles.linkButton}
+                            onClick={() => onSelectAccount(account.account_id)}
+                            type="button"
+                          >
+                            {account.account_display_name}
+                          </button>
                           <span>{account.account_slug}</span>
                         </td>
                         <td>
@@ -811,6 +956,17 @@ function FoundationWorkspace({
             </div>
           </article>
         </section>
+      ) : null}
+      {selectedAccount ? (
+        <AccountDetailDrawer
+          account={selectedAccount}
+          entitlements={selectedAccountEntitlements}
+          invitations={selectedAccountInvitations}
+          loginEnabled={readinessData.customer_login_enabled}
+          members={selectedAccountMembers}
+          onClose={() => onSelectAccount(null)}
+          workspaces={selectedAccountWorkspaces}
+        />
       ) : null}
     </section>
   );
@@ -1211,6 +1367,7 @@ export function CustomerAuthAdmin() {
               accountSearch={accountSearch}
               accountTypeFilter={accountTypeFilter}
               data={foundation}
+              readinessData={data}
               onAccountSearchChange={setAccountSearch}
               onAccountTypeFilterChange={setAccountTypeFilter}
               onRefresh={refresh}

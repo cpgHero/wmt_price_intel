@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.160",
+  version: "1.3.161",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2984,6 +2984,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification pending",
+              "Accounts & Access account detail drawer polished.",
+              "The Accounts & Access workspace now opens a read-only full-height account detail drawer from account cards and account table rows. The drawer groups selected-account evidence into workspace, user, report-grant, login-readiness, identity-binding, invitation, and entitlement sections with clear empty states and a visible read-only guardrail. This does not add writable account administration, invitations, re-invitations, role edits, entitlement edits, report-grant edits, API key issuance, billing, customer self-service settings, customer-login cutover, identity-provider migration, reports, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification pending",

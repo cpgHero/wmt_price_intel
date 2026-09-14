@@ -36,6 +36,12 @@ describe("customer account foundation admin source contract", () => {
     expect(customerAuthAdminSource).toContain("Active report grants");
     expect(customerAuthAdminSource).toContain("Reset view");
     expect(customerAuthAdminSource).toContain("Login readiness");
+    expect(customerAuthAdminSource).toContain("Open detail drawer");
+    expect(customerAuthAdminSource).toContain("Workspace & report access");
+    expect(customerAuthAdminSource).toContain(
+      "Login, invitation, and identity state",
+    );
+    expect(customerAuthAdminSource).toContain("Read-only guardrail");
   });
 
   it("surfaces identity binding without exposing upstream provider identifiers", () => {
