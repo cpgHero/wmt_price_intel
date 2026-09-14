@@ -1,10 +1,16 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import {
+  CUSTOMER_ROUTE_CACHE_COOKIE_NAME,
+  CUSTOMER_ROUTE_CACHE_SECONDS,
+  createCustomerRouteCacheCookie,
+  verifyCustomerRouteCacheCookie,
+} from "./lib/route-auth-cache";
+import {
   routeAccessDecision,
   sessionCookieName,
   type ProtectedSessionKind,
-} from "@/lib/route-access-policy";
+} from "./lib/route-access-policy";
 
 function returnTo(request: NextRequest): string {
   return `${request.nextUrl.pathname}${request.nextUrl.search}`;
@@ -68,6 +74,41 @@ async function validateSession(
   }
 }
 
+function routeCacheSecret(): string | null {
+  return process.env.PRODUCT_PACK_SESSION_SECRET?.trim() || null;
+}
+
+async function hasValidCustomerRouteCache(
+  request: NextRequest,
+  sessionCookie: string,
+): Promise<boolean> {
+  return verifyCustomerRouteCacheCookie(
+    request.cookies.get(CUSTOMER_ROUTE_CACHE_COOKIE_NAME)?.value,
+    sessionCookie,
+    routeCacheSecret(),
+  );
+}
+
+async function withCustomerRouteCache(
+  response: NextResponse,
+  sessionCookie: string,
+): Promise<NextResponse> {
+  const cacheCookie = await createCustomerRouteCacheCookie(
+    sessionCookie,
+    routeCacheSecret(),
+  );
+  if (!cacheCookie) return response;
+
+  response.cookies.set(CUSTOMER_ROUTE_CACHE_COOKIE_NAME, cacheCookie, {
+    httpOnly: true,
+    maxAge: CUSTOMER_ROUTE_CACHE_SECONDS,
+    path: "/",
+    sameSite: "strict",
+    secure: process.env.NODE_ENV === "production",
+  });
+  return response;
+}
+
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   if (hasTestRouteBypass(request)) {
     return NextResponse.next();
@@ -79,11 +120,21 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
 
   const cookieName = sessionCookieName(decision.session);
-  if (
-    request.cookies.has(cookieName) &&
-    (await validateSession(request, decision.session))
-  ) {
-    return NextResponse.next();
+  const sessionCookie = request.cookies.get(cookieName)?.value;
+  if (sessionCookie) {
+    if (
+      decision.session === "customer" &&
+      (await hasValidCustomerRouteCache(request, sessionCookie))
+    ) {
+      return NextResponse.next();
+    }
+
+    if (await validateSession(request, decision.session)) {
+      if (decision.session === "customer") {
+        return withCustomerRouteCache(NextResponse.next(), sessionCookie);
+      }
+      return NextResponse.next();
+    }
   }
 
   if (decision.mode === "json") {

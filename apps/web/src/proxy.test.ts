@@ -1,0 +1,91 @@
+import { NextRequest } from "next/server";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import {
+  CUSTOMER_ROUTE_CACHE_COOKIE_NAME,
+  createCustomerRouteCacheCookie,
+} from "./lib/route-auth-cache";
+import { CUSTOMER_SESSION_COOKIE_NAME } from "./lib/route-access-policy";
+
+import { proxy } from "./proxy";
+
+const routeSecret = "unit-route-cache-secret";
+const sessionCookie = "sealed-customer-session";
+
+function requestWithCookie(pathname: string, cookie: string): NextRequest {
+  return new NextRequest(`https://app.cpghero.com${pathname}`, {
+    headers: { cookie },
+  });
+}
+
+describe("proxy customer route authentication cache", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+  });
+
+  it("uses a valid customer route cache without revalidating through /api/auth/me", async () => {
+    vi.stubEnv("PRODUCT_PACK_SESSION_SECRET", routeSecret);
+    const cacheCookie = await createCustomerRouteCacheCookie(
+      sessionCookie,
+      routeSecret,
+    );
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await proxy(
+      requestWithCookie(
+        "/proximity",
+        `${CUSTOMER_SESSION_COOKIE_NAME}=${sessionCookie}; ${CUSTOMER_ROUTE_CACHE_COOKIE_NAME}=${cacheCookie}`,
+      ),
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("sets the customer route cache after a successful customer session validation", async () => {
+    vi.stubEnv("PRODUCT_PACK_SESSION_SECRET", routeSecret);
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await proxy(
+      requestWithCookie(
+        "/proximity",
+        `${CUSTOMER_SESSION_COOKIE_NAME}=${sessionCookie}`,
+      ),
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe(
+      "https://app.cpghero.com/api/auth/me",
+    );
+    expect(response.headers.get("set-cookie")).toContain(
+      `${CUSTOMER_ROUTE_CACHE_COOKIE_NAME}=`,
+    );
+  });
+
+  it("fails closed to the customer login when the session and route cache are invalid", async () => {
+    vi.stubEnv("PRODUCT_PACK_SESSION_SECRET", routeSecret);
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValue(new Response("{}", { status: 401 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await proxy(
+      requestWithCookie(
+        "/proximity",
+        `${CUSTOMER_SESSION_COOKIE_NAME}=fake; ${CUSTOMER_ROUTE_CACHE_COOKIE_NAME}=tampered`,
+      ),
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "https://app.cpghero.com/api/auth/login?return_to=%2Fproximity",
+    );
+  });
+});
