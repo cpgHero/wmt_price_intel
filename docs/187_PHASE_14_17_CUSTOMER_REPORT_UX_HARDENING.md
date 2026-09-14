@@ -1,7 +1,7 @@
 # Phase 14.17 — Customer report UX hardening
 
 Date: 2026-09-14
-Status: merged and deployed; category-label follow-up in progress
+Status: merged, deployed, and production-smoked
 
 ## Purpose
 
@@ -38,5 +38,14 @@ AI calls, PDFs, proximity metrics, or historical artifacts.
 
 ## Next step
 
-Merge and deploy the category-label follow-up, then smoke-check production so
-both customer report titles and categories are clean.
+Continue with the next customer portal foundation slice: account/workspace
+administration, report-grant management UX, or customer-auth hardening depending
+on priority.
+
+## Production verification
+
+- `/customer` returned 200.
+- `/customer/reports/{accessId}` returned 200.
+- Anonymous `/api/customer/reports/{accessId}/report` returned 401.
+- The GHRetail production report list returned 5 granted reports, 5 ready
+  reports, customer-facing report titles, and customer-facing category labels.

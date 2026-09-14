@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.155",
+  version: "1.3.156",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2986,7 +2986,7 @@ export const platformDocumentation: PlatformDocumentation = {
           rows: [
             [
               "2026-09-14",
-              "Local verification passed; CI verification pending",
+              "Merged and deployed",
               "Customer report category labels hardened.",
               "Customer report summary and detail responses now convert technical category identifiers such as Product Pack-style snake-case values into customer-facing display labels before they reach the customer workspace. This closes the production smoke-test gap where titles were clean but categories could still appear as raw identifiers. The change is presentation-only and does not alter stored report results, report calculations, matching, price normalization, source evidence, report grants, customer roles, customer API keys, billing workflows, collection requests, source-provider calls, PDP calls, AI calls, PDFs, proximity metrics, or historical artifacts.",
             ],
