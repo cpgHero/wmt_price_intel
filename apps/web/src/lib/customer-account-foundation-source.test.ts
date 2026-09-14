@@ -16,20 +16,26 @@ const accountFoundationProxySource = readFileSync(
   ),
   "utf8",
 );
+const customerAuthPageSource = readFileSync(
+  new URL("../app/admin/customer-auth/page.tsx", import.meta.url),
+  "utf8",
+);
 
 describe("customer account foundation admin source contract", () => {
   it("keeps the account foundation read-only and scoped to core access primitives", () => {
-    expect(customerAuthAdminSource).toContain(
-      "Account administration foundation",
-    );
+    expect(customerAuthAdminSource).toContain("Account access foundation");
     expect(customerAuthAdminSource).toContain(
       "Read-only CPGHero source-of-truth",
     );
     expect(customerAuthAdminSource).toContain("Customer accounts");
+    expect(customerAuthAdminSource).toContain("Customer accounts only");
+    expect(customerAuthAdminSource).toContain("Account detail");
     expect(customerAuthAdminSource).toContain("Workspace scopes");
     expect(customerAuthAdminSource).toContain("Members");
     expect(customerAuthAdminSource).toContain("Entitlements");
     expect(customerAuthAdminSource).toContain("Active report grants");
+    expect(customerAuthAdminSource).toContain("Reset view");
+    expect(customerAuthAdminSource).toContain("Login readiness");
   });
 
   it("surfaces identity binding without exposing upstream provider identifiers", () => {
@@ -41,6 +47,9 @@ describe("customer account foundation admin source contract", () => {
     );
     expect(customerAuthAdminSource).not.toContain("workos_user_id");
     expect(customerAuthAdminSource).not.toContain("workos_organization_id");
+    expect(customerAuthAdminSource).not.toContain("Internal provider:");
+    expect(customerAuthPageSource).toContain("Accounts &amp; Access");
+    expect(customerAuthPageSource).not.toContain("WorkOS webhook");
   });
 
   it("keeps the account foundation proxy behind the administrator session and internal API", () => {

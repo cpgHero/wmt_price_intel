@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.158",
+  version: "1.3.159",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2984,6 +2984,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification pending",
+              "Accounts & Access workspace polished.",
+              "The internal account administration page keeps its protected route but is now presented as Accounts & Access, with customer-account-only defaults, account/user search, resettable filters, overview/detail workspace flow, better empty states, and customer-login readiness moved into a secondary tab. Current operator-facing copy no longer names the upstream identity provider, while backend adapter names and historical implementation documentation remain unchanged. This does not add writable account administration, customer self-service settings, API key issuance, billing, identity-provider migration, report calculation changes, matching changes, price normalization changes, proximity metric changes, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification pending",
