@@ -40,6 +40,16 @@ function unauthorizedJson(session: "admin" | "customer"): NextResponse {
   );
 }
 
+function isBackgroundRouteRequest(request: NextRequest): boolean {
+  return (
+    request.nextUrl.searchParams.has("_rsc") ||
+    request.headers.get("rsc") === "1" ||
+    request.headers.get("next-router-prefetch") === "1" ||
+    request.headers.get("purpose") === "prefetch" ||
+    request.headers.get("sec-purpose") === "prefetch"
+  );
+}
+
 function hasTestRouteBypass(request: NextRequest): boolean {
   const token = process.env.CPGHERO_WEB_ROUTE_AUTH_TEST_BYPASS_TOKEN?.trim();
   return Boolean(
@@ -143,6 +153,10 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   if (decision.session === "admin") {
     return redirectToAdminLogin(request);
+  }
+
+  if (isBackgroundRouteRequest(request)) {
+    return unauthorizedJson(decision.session);
   }
 
   return redirectToCustomerLogin(request);

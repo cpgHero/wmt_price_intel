@@ -88,4 +88,23 @@ describe("proxy customer route authentication cache", () => {
       "https://app.cpghero.com/api/auth/login?return_to=%2Fproximity",
     );
   });
+
+  it("does not launch customer login for unauthenticated RSC route requests", async () => {
+    vi.stubEnv("PRODUCT_PACK_SESSION_SECRET", routeSecret);
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await proxy(
+      new NextRequest("https://app.cpghero.com/proximity?_rsc=abc123", {
+        headers: { rsc: "1" },
+      }),
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(response.status).toBe(401);
+    expect(response.headers.get("location")).toBeNull();
+    expect(await response.json()).toEqual({
+      error: "Customer authentication is required.",
+    });
+  });
 });
