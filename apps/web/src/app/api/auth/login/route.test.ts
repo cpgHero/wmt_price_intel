@@ -25,6 +25,53 @@ describe("customer auth login route", () => {
     });
   });
 
+  it("does not start hosted login for non-document requests", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+    const response = await GET(
+      new Request(
+        "https://app.cpghero.com/api/auth/login?return_to=/customer",
+        {
+          headers: { accept: "text/x-component" },
+        },
+      ),
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(response.status).toBe(401);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+  });
+
+  it("starts hosted login for browser document navigation headers", async () => {
+    vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, {
+        status: 307,
+        headers: {
+          location: "https://identity.example.test/authorize",
+          "set-cookie": "cph_customer_auth_flow=sealed; Path=/; HttpOnly",
+        },
+      }),
+    );
+
+    const response = await GET(
+      new Request(
+        "https://app.cpghero.com/api/auth/login?return_to=/customer",
+        {
+          headers: {
+            accept:
+              "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "sec-fetch-dest": "document",
+            "sec-fetch-mode": "navigate",
+          },
+        },
+      ),
+    );
+
+    expect(fetchSpy).toHaveBeenCalledOnce();
+    expect(response.status).toBe(307);
+  });
+
   it("starts hosted login for a normal browser navigation", async () => {
     vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(

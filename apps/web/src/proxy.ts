@@ -41,12 +41,18 @@ function unauthorizedJson(session: "admin" | "customer"): NextResponse {
 }
 
 function isBackgroundRouteRequest(request: NextRequest): boolean {
+  const accept = request.headers.get("accept") ?? "";
+  const secFetchMode = request.headers.get("sec-fetch-mode") ?? "";
+  const secFetchDest = request.headers.get("sec-fetch-dest") ?? "";
   return (
     request.nextUrl.searchParams.has("_rsc") ||
     request.headers.get("rsc") === "1" ||
     request.headers.get("next-router-prefetch") === "1" ||
     request.headers.get("purpose") === "prefetch" ||
-    request.headers.get("sec-purpose") === "prefetch"
+    request.headers.get("sec-purpose") === "prefetch" ||
+    (secFetchMode !== "" && secFetchMode !== "navigate") ||
+    (secFetchDest !== "" && secFetchDest !== "document") ||
+    (accept !== "" && !accept.includes("text/html"))
   );
 }
 
