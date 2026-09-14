@@ -6,7 +6,11 @@
 .hero {
   align-items: center;
   background:
-    radial-gradient(circle at 8% 0%, rgba(95, 230, 200, 0.16), transparent 24rem),
+    radial-gradient(
+      circle at 8% 0%,
+      rgba(95, 230, 200, 0.16),
+      transparent 24rem
+    ),
     linear-gradient(120deg, #0d2028, #071115);
   border: 1px solid var(--line);
   border-radius: 16px;
