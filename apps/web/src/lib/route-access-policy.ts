@@ -13,6 +13,7 @@ export type RouteAccessDecision =
     };
 
 const PUBLIC_EXACT_PATHS = new Set([
+  "/",
   "/admin/login",
   "/api/admin/session",
   "/api/auth/callback",

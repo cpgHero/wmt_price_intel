@@ -6,9 +6,18 @@ test("serves the application shell, workflow routes, and health route", async ({
   const home = await request.get("/");
   expect(home.ok()).toBe(true);
   const homeHtml = await home.text();
-  expect(homeHtml).toContain("Your competitive intelligence workspace.");
-  expect(homeHtml).toContain("Schedules &amp; Alerts");
-  expect(homeHtml).toContain("Pipeline Status");
+  expect(homeHtml).toContain(
+    "Source-backed CPG intelligence for retail teams.",
+  );
+  expect(homeHtml).toContain("Sign in to CPGHero");
+  expect(homeHtml).toContain("Live APIs");
+
+  const customer = await request.get("/customer");
+  expect(customer.ok()).toBe(true);
+  const customerHtml = await customer.text();
+  expect(customerHtml).toContain("Application navigation");
+  expect(customerHtml).toContain("My Workspace");
+  expect(customerHtml).toContain("Reports");
 
   const collections = await request.get("/collections");
   expect(collections.ok()).toBe(true);
@@ -59,13 +68,13 @@ test("serves the application shell, workflow routes, and health route", async ({
 test("serves the branded shell and no-flash theme controls", async ({
   request,
 }) => {
-  const response = await request.get("/");
+  const response = await request.get("/customer");
   const html = await response.text();
 
   expect(response.ok()).toBe(true);
   expect(html).toContain("CPGHero");
   expect(html).toContain("Application navigation");
-  expect(html).toContain("Home");
+  expect(html).toContain("My Workspace");
   expect(html).toContain("Analytics");
   expect(html).not.toContain(">Workspace<");
   expect(html).toContain("Match Certification");
@@ -81,12 +90,12 @@ test("serves the branded shell and no-flash theme controls", async ({
 
 test("supports the responsive application navigation", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/");
+  await page.goto("/customer");
 
   const sidebar = page.getByLabel("Application sidebar");
   await expect(sidebar).toBeVisible();
   await expect(
-    sidebar.getByRole("link", { name: "Home", exact: true }),
+    sidebar.getByRole("link", { name: "My Workspace", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await expect(
     sidebar.getByRole("button", { name: "Analytics" }),

@@ -279,7 +279,7 @@ def test_workos_canary_rejects_unapproved_or_unconfigured_users() -> None:
 
 
 async def test_customer_auth_login_sets_flow_cookie_and_redirects_to_workos() -> None:
-    app = _test_app(provider="workos")
+    app = _test_app(provider="workos", app_env="production")
     app.state.customer_session_authenticator = FakeCustomerSessionAuthenticator()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -288,6 +288,24 @@ async def test_customer_auth_login_sets_flow_cookie_and_redirects_to_workos() ->
     assert response.status_code == 307
     assert response.headers["location"] == "https://auth.workos.test/authorize?return_to=/reports"
     assert FLOW_COOKIE_NAME in response.cookies
+    assert "samesite=none" in response.headers["set-cookie"].lower()
+
+
+async def test_customer_auth_callback_recovers_missing_flow_cookie() -> None:
+    app = _test_app(provider="workos", app_env="production")
+    app.state.customer_session_authenticator = FakeCustomerSessionAuthenticator()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/auth/callback?code=code_123&state=state_123",
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 303
+    assert (
+        response.headers["location"]
+        == "/api/auth/login?return_to=/customer&auth_restart=missing_flow"
+    )
 
 
 async def test_customer_auth_callback_sets_session_cookie_and_clears_flow_cookie() -> None:

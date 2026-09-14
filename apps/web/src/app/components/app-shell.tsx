@@ -47,7 +47,7 @@ function SidebarBrand({
   return (
     <Link
       className={styles.brand}
-      href="/"
+      href="/customer"
       aria-label="CPGHero Retail Competitive Intelligence home"
       onClick={onNavigate}
     >
@@ -89,6 +89,17 @@ function CloseIcon() {
 }
 
 export function AppShell({
+  children,
+}: Readonly<{ children: React.ReactNode }>) {
+  const pathname = usePathname();
+  if (pathname === "/") {
+    return <>{children}</>;
+  }
+
+  return <AuthenticatedAppShell>{children}</AuthenticatedAppShell>;
+}
+
+function AuthenticatedAppShell({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const pathname = usePathname();

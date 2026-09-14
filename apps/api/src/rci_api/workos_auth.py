@@ -375,7 +375,7 @@ def set_customer_cookie(
         value,
         httponly=True,
         secure=settings.is_production,
-        samesite="lax",
+        samesite="none" if settings.is_production and name == FLOW_COOKIE_NAME else "lax",
         path="/",
         max_age=max_age,
     )

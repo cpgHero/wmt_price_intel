@@ -27,11 +27,11 @@ export interface NavigationGroup {
 }
 
 export const homeNavigationItem: NavigationItem = {
-  label: "Home",
-  description: "Decisions, activity, and operational health",
-  href: "/",
+  label: "My Workspace",
+  description: "Customer account, workspace, and access state",
+  href: "/customer",
   icon: "dashboard",
-  match: "exact",
+  match: "prefix",
 };
 
 export const applicationNavigation: readonly NavigationGroup[] = [
@@ -39,13 +39,6 @@ export const applicationNavigation: readonly NavigationGroup[] = [
     id: "analytics",
     label: "Analytics",
     items: [
-      {
-        label: "My Workspace",
-        description: "Customer account, workspace, and access state",
-        href: "/customer",
-        icon: "dashboard",
-        match: "prefix",
-      },
       {
         label: "Price Intelligence",
         description: "Search-listed prices by store query context",
@@ -167,13 +160,6 @@ export const simplifiedApplicationNavigation: readonly NavigationGroup[] = [
     id: "analytics",
     label: "Analytics",
     items: [
-      {
-        label: "My Workspace",
-        description: "Customer account, workspace, and access state",
-        href: "/customer",
-        icon: "dashboard",
-        match: "prefix",
-      },
       {
         label: "Reports",
         description: "Unified product-level price intelligence reports",

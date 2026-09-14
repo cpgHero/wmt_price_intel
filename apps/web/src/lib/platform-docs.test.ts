@@ -21,7 +21,7 @@ describe("platform owner and administrator documentation", () => {
   it("provides a unique maintained guide in every documentation group", () => {
     const ids = platformDocumentation.guides.map((guide) => guide.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(platformDocumentation.version).toBe("1.3.163");
+    expect(platformDocumentation.version).toBe("1.3.164");
     expect(platformDocumentation.lastVerified).toBeTruthy();
 
     for (const group of platformDocGroups) {
@@ -226,7 +226,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.163");
+    expect(platformDocumentation.version).toBe("1.3.164");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -294,6 +294,12 @@ describe("platform owner and administrator documentation", () => {
       "short-lived cpghero-signed route-validation cache cookie",
     );
     expect(guides["trust-governance"]).toContain(
+      "root route is a public cpghero landing page",
+    );
+    expect(guides["trust-governance"]).toContain(
+      "without the temporary login-flow cookie",
+    );
+    expect(guides["trust-governance"]).toContain(
       "protected same-origin app/admin api reads return private no-store json 401",
     );
     expect(guides["trust-governance"]).toContain(
@@ -307,6 +313,9 @@ describe("platform owner and administrator documentation", () => {
     );
     expect(guides["change-orders"]).toContain(
       "customer route-session validation cache added",
+    );
+    expect(guides["change-orders"]).toContain(
+      "public landing page and customer login recovery added",
     );
     expect(guides["change-orders"]).toContain(
       "customer-principal harness and workos/railway prep added",
