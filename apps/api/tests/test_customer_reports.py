@@ -107,7 +107,7 @@ class FakeCustomerReportRepository:
             schema_version="2.0.0",
             checksum="a" * 64,
             title="fresh_fluid_milk-19a350ee-90d7-4ec5-92f9-467a15c116b4-match-v2-r2",
-            category=None,
+            category="fresh_fluid_milk",
             retailer_count=4,
             created_at=datetime(2026, 8, 20, 12, 0, tzinfo=UTC),
             granted_at=datetime(2026, 9, 14, 9, 0, tzinfo=UTC),
@@ -125,7 +125,7 @@ class FakeCustomerReportRepository:
             analysis_id="milk-aug-2026",
             analysis_result_id="00000000-0000-0000-0000-000000000501",
             title="fresh_fluid_milk-19a350ee-90d7-4ec5-92f9-467a15c116b4-match-v2-r2",
-            category=None,
+            category="fresh_fluid_milk",
             status=status,
             granted_at=datetime(2026, 9, 14, 9, 0, tzinfo=UTC),
         )

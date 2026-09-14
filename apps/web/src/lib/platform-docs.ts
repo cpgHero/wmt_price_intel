@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.154",
+  version: "1.3.155",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2987,6 +2987,12 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "2026-09-14",
               "Local verification passed; CI verification pending",
+              "Customer report category labels hardened.",
+              "Customer report summary and detail responses now convert technical category identifiers such as Product Pack-style snake-case values into customer-facing display labels before they reach the customer workspace. This closes the production smoke-test gap where titles were clean but categories could still appear as raw identifiers. The change is presentation-only and does not alter stored report results, report calculations, matching, price normalization, source evidence, report grants, customer roles, customer API keys, billing workflows, collection requests, source-provider calls, PDP calls, AI calls, PDFs, proximity metrics, or historical artifacts.",
+            ],
+            [
+              "2026-09-14",
+              "Merged and deployed",
               "Customer report UX hardening added.",
               "Customer report responses now present clean customer-facing report titles derived from curated report metadata when present, or from stable Product Pack identifiers when older reports only contain technical run IDs. The customer workspace adds report-access summary cards, ready-report counts, latest-grant context, grant-gated trust language, and collapsed audit identifiers so raw analysis/result/checksum values remain available without becoming primary labels. Customer report detail pages add a compact access-summary strip before the canonical report workspace. This is a presentation and access-transparency change only; it does not alter stored immutable analysis results, report calculations, matching, price normalization, source evidence, report grants, customer roles, customer API keys, billing workflows, collection requests, source-provider calls, PDP calls, AI calls, PDFs, proximity metrics, or historical artifacts.",
             ],

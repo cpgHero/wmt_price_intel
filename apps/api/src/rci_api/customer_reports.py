@@ -82,7 +82,7 @@ def _customer_report_display_category(
 ) -> str | None:
     candidate = category.strip() if category else ""
     if candidate:
-        return candidate
+        return _display_label_from_identifier(candidate) or candidate
     return _display_label_from_identifier(product_pack_id)
 
 
