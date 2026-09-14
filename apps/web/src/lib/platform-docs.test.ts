@@ -21,7 +21,7 @@ describe("platform owner and administrator documentation", () => {
   it("provides a unique maintained guide in every documentation group", () => {
     const ids = platformDocumentation.guides.map((guide) => guide.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(platformDocumentation.version).toBe("1.3.161");
+    expect(platformDocumentation.version).toBe("1.3.162");
     expect(platformDocumentation.lastVerified).toBeTruthy();
 
     for (const group of platformDocGroups) {
@@ -226,7 +226,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.161");
+    expect(platformDocumentation.version).toBe("1.3.162");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -287,8 +287,20 @@ describe("platform owner and administrator documentation", () => {
       "live customer sessions are cryptographically validated",
     );
     expect(guides["trust-governance"]).toContain("/api/v1/me");
+    expect(guides["trust-governance"]).toContain(
+      "validates the expected cpghero customer or administrator session",
+    );
+    expect(guides["trust-governance"]).toContain(
+      "protected same-origin app/admin api reads return private no-store json 401",
+    );
+    expect(guides["trust-governance"]).toContain(
+      "production must not configure this variable",
+    );
     expect(guides["change-orders"]).toContain(
       "workos authkit selected and identity mapping foundation added",
+    );
+    expect(guides["change-orders"]).toContain(
+      "anonymous page-shell rendering blocked for protected app routes",
     );
     expect(guides["change-orders"]).toContain(
       "customer-principal harness and workos/railway prep added",

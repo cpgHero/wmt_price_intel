@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.161",
+  version: "1.3.162",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -1296,6 +1296,8 @@ export const platformDocumentation: PlatformDocumentation = {
             "Migration 0056 adds the owner-only customer provisioning and identity-event audit foundation: prepared invitations, account/workspace user mappings, role and entitlement assignment, and a signed WorkOS webhook receiver that can activate CPGHero membership only after a matching invitation is accepted. The public Next.js route /api/webhooks/workos forwards raw signed WorkOS payloads to the internal API receiver without forwarding customer cookies or authorization headers. Customer-facing responses remain CPGHero-facing and do not expose provider subject IDs.",
             "Customer-auth canary guardrails now fail closed by default when WorkOS customer login is enabled: an explicit allowlist of customer emails or domains must be configured before any callback can seal a session. A protected Customer Auth admin page exposes readiness, blockers, invitation state, and recent identity webhook processing; it is an internal operations surface only. Browser navigation failures through the customer-auth proxy render a CPGHero-branded controlled-rollout page instead of raw API JSON.",
             "The non-production customer-principal harness is explicit, opt-in, and header-backed for local/API tests only. Production rejects those headers. Live customer sessions are cryptographically validated through WorkOS and then fail closed unless the WorkOS user and organization subjects are provisioned through CPGHero external-identity and membership rows.",
+            "Next.js route-boundary protection now validates the expected CPGHero customer or administrator session through same-origin auth/session endpoints before protected pages or protected same-origin app/admin API proxies run. Anonymous or invalid customer sessions redirect from app workspace and analytics pages to customer login, anonymous or invalid administrator sessions redirect from administrator pages to the dedicated administrator login route, and protected same-origin app/admin API reads return private no-store JSON 401 responses. API route handlers remain responsible for authoritative permission, entitlement, account, workspace, report-grant, and admin-operation enforcement.",
+            "Playwright may set CPGHERO_WEB_ROUTE_AUTH_TEST_BYPASS_TOKEN for route-shell regression tests only. The proxy honors that token only when a matching x-cpghero-route-auth-test header is present; production must not configure this variable.",
           ],
         },
         {
@@ -1329,7 +1331,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current access-control limitation",
-          text: "The durable account/RBAC/entitlement foundation exists, WorkOS AuthKit is externally configured, migration 0055 adds external identity mappings, and migration 0056 adds owner-only invitation/provisioning state plus signed identity webhook audit. The API can resolve either a validated non-production test principal or a live WorkOS sealed session into the CPGHero principal model, and WorkOS callbacks fail closed to a canary allowlist whenever the provider is enabled. Railway production still has CPGHERO_CUSTOMER_AUTH_PROVIDER disabled, so customer login is not live. Customer-facing signup/invite screens, customer API keys, account-administration screens, and cross-account enforcement across existing report and collection routes remain future work.",
+          text: "The durable account/RBAC/entitlement foundation exists, WorkOS AuthKit is externally configured, migration 0055 adds external identity mappings, and migration 0056 adds owner-only invitation/provisioning state plus signed identity webhook audit. The API can resolve either a validated non-production test principal or a live WorkOS sealed session into the CPGHero principal model, and WorkOS callbacks fail closed to a canary allowlist whenever the provider is enabled. Next.js now validates the expected customer or administrator session before protected app workspace, analytics, customer, and administrator page shells load, and protected same-origin app/admin API routes return JSON 401 before reaching legacy global data proxies when the session is absent or invalid. This route-boundary guard is not a substitute for tenant-scoped API authorization: customer-facing signup/invite screens, customer API keys, account-administration screens, and cross-account enforcement across legacy report, collection, and proximity data routes remain future work.",
         },
       ],
     },
@@ -2984,6 +2986,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification pending",
+              "Anonymous page-shell rendering blocked for protected app routes.",
+              "The web app now uses Next.js route-boundary protection so anonymous or invalid sessions are blocked before app workspace, analytics, customer workspace, customer report, and administrator page shells render. Customer/app pages validate the CPGHero customer session through the same-origin auth endpoint and redirect to customer login with the original return path. Administrator pages validate the administrator session through the same-origin admin-session endpoint and redirect to a dedicated administrator login route with the original return path. Protected same-origin app/admin API routes return private no-store JSON 401 responses when the expected session is absent or invalid, while public auth, admin-session, WorkOS webhook, health, and static asset routes remain reachable so login, logout, signed webhook ingress, and health checks continue to work. Playwright uses an explicit route-auth test bypass token/header so existing UI regression tests can exercise mocked protected pages; production must not configure the bypass token. API route handlers remain the authoritative enforcement layer for permissions, entitlements, account/workspace scope, report grants, and admin authorization. This does not change WorkOS credentials, account rows, roles, entitlements, report calculations, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification pending",

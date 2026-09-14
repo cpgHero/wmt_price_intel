@@ -2,6 +2,12 @@ import { defineConfig, devices } from "@playwright/test";
 
 const port = Number(process.env.PLAYWRIGHT_PORT ?? "31958");
 const reuseExistingServer = process.env.PLAYWRIGHT_REUSE_SERVER === "1";
+const routeAuthTestBypassToken =
+  process.env.CPGHERO_WEB_ROUTE_AUTH_TEST_BYPASS_TOKEN ??
+  (reuseExistingServer ? "" : "playwright-route-auth-boundary");
+const routeAuthHeaders = routeAuthTestBypassToken
+  ? { "x-cpghero-route-auth-test": routeAuthTestBypassToken }
+  : undefined;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -11,6 +17,7 @@ export default defineConfig({
   reporter: process.env.CI ? "github" : "list",
   use: {
     baseURL: `http://127.0.0.1:${port}`,
+    extraHTTPHeaders: routeAuthHeaders,
     trace: "on-first-retry",
   },
   projects: [
@@ -23,6 +30,10 @@ export default defineConfig({
     ? undefined
     : {
         command: `pnpm build && mkdir -p .next/standalone/apps/web/.next && cp -R .next/static .next/standalone/apps/web/.next/static && PORT=${port} HOSTNAME=127.0.0.1 node .next/standalone/apps/web/server.js`,
+        env: {
+          ...process.env,
+          CPGHERO_WEB_ROUTE_AUTH_TEST_BYPASS_TOKEN: routeAuthTestBypassToken,
+        },
         url: `http://127.0.0.1:${port}/health`,
         timeout: 120_000,
       },
