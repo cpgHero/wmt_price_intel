@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.157",
+  version: "1.3.158",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2984,6 +2984,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification pending",
+              "Customer account/workspace administration foundation added.",
+              "The Customer Auth administration page now includes a read-only account administration foundation backed by the existing account, workspace, membership, role, entitlement, identity-binding, invitation, and customer report access tables. A protected owner-admin API endpoint and web proxy expose CPGHero-facing account/workspace inventory, active members, role scopes, account entitlements, and active/revoked report-grant counts without exposing upstream identity-provider subject IDs or adding any account mutation workflow. This does not add customer self-service administration, issue customer API keys, change billing, modify WorkOS credentials, broaden customer-auth canary access, alter report calculations, matching, price normalization, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification passed; CI verification pending",

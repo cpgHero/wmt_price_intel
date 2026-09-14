@@ -6,6 +6,12 @@ from typing import Any
 from httpx import ASGITransport, AsyncClient
 
 from rci_api.customer_provisioning import (
+    CustomerAccountFoundationAccount,
+    CustomerAccountFoundationEntitlement,
+    CustomerAccountFoundationMember,
+    CustomerAccountFoundationResponse,
+    CustomerAccountFoundationSummary,
+    CustomerAccountFoundationWorkspace,
     CustomerAuthCanaryStatus,
     CustomerAuthInvitationStatus,
     CustomerAuthReadinessResponse,
@@ -111,6 +117,91 @@ class FakeCustomerProvisioningRepository:
                     processed=True,
                     received_at="2026-09-14 01:29:56+00",
                     processed_at="2026-09-14 01:29:56+00",
+                ),
+            ),
+        )
+
+    async def customer_account_foundation(
+        self,
+        *,
+        account_slug: str | None = None,
+        limit: int = 50,
+    ) -> CustomerAccountFoundationResponse:
+        assert limit == 50
+        return CustomerAccountFoundationResponse(
+            summary=CustomerAccountFoundationSummary(
+                accounts=1,
+                customer_accounts=1,
+                active_accounts=1,
+                workspaces=1,
+                active_workspaces=1,
+                members=1,
+                active_members=1,
+                entitlements=1,
+                active_entitlements=1,
+                active_report_grants=2,
+            ),
+            accounts=(
+                CustomerAccountFoundationAccount(
+                    account_id="00000000-0000-0000-0000-000000000101",
+                    account_slug=account_slug or "acme-foods",
+                    account_display_name="Acme Foods",
+                    account_type="customer",
+                    account_status="active",
+                    workspace_count=1,
+                    member_count=1,
+                    active_member_count=1,
+                    entitlement_count=1,
+                    active_entitlement_count=1,
+                    active_report_grant_count=2,
+                    revoked_report_grant_count=1,
+                    has_identity_provider_organization_binding=True,
+                    created_at="2026-09-14 01:00:00+00",
+                ),
+            ),
+            workspaces=(
+                CustomerAccountFoundationWorkspace(
+                    workspace_id="00000000-0000-0000-0000-000000000201",
+                    account_id="00000000-0000-0000-0000-000000000101",
+                    account_slug=account_slug or "acme-foods",
+                    account_display_name="Acme Foods",
+                    workspace_slug="default",
+                    workspace_display_name="Default workspace",
+                    workspace_status="active",
+                    active_member_count=1,
+                    active_report_grant_count=2,
+                    revoked_report_grant_count=1,
+                    created_at="2026-09-14 01:01:00+00",
+                ),
+            ),
+            members=(
+                CustomerAccountFoundationMember(
+                    user_id="00000000-0000-0000-0000-000000000301",
+                    email="admin@acme.example",
+                    display_name="Acme Admin",
+                    account_id="00000000-0000-0000-0000-000000000101",
+                    account_slug=account_slug or "acme-foods",
+                    account_display_name="Acme Foods",
+                    account_membership_status="active",
+                    workspace_slug="default",
+                    workspace_display_name="Default workspace",
+                    workspace_membership_status="active",
+                    account_role_keys=("account_owner",),
+                    workspace_role_keys=(),
+                    has_identity_provider_user_binding=True,
+                    created_at="2026-09-14 01:02:00+00",
+                ),
+            ),
+            entitlements=(
+                CustomerAccountFoundationEntitlement(
+                    account_id="00000000-0000-0000-0000-000000000101",
+                    account_slug=account_slug or "acme-foods",
+                    account_display_name="Acme Foods",
+                    entitlement_key="analytics.price_intelligence",
+                    entitlement_status="active",
+                    starts_at=None,
+                    expires_at=None,
+                    created_at="2026-09-14 01:03:00+00",
                 ),
             ),
         )
@@ -238,6 +329,34 @@ async def test_customer_auth_readiness_is_admin_guarded(monkeypatch: Any) -> Non
     assert body["invitations"][0]["email"] == "Admin@Acme.example"
     assert "workos_user_id" not in body["invitations"][0]
     assert body["recent_webhook_events"][0]["processing_status"] == "processed"
+
+
+async def test_customer_account_foundation_is_admin_guarded_and_source_backed(
+    monkeypatch: Any,
+) -> None:
+    monkeypatch.setenv("PRODUCT_PACK_ADMIN_TOKEN", "private-admin-token")
+    app, _repository = _app(app_env="production")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        missing = await client.get("/api/v1/admin/customer-provisioning/account-foundation")
+        snapshot = await client.get(
+            "/api/v1/admin/customer-provisioning/account-foundation?account_slug=acme-foods",
+            headers={"X-RCI-Admin-Token": "private-admin-token"},
+        )
+
+    assert missing.status_code == 401
+    assert snapshot.status_code == 200
+    body = snapshot.json()
+    assert body["schema_version"] == "1.0.0-customer-account-foundation"
+    assert body["summary"]["customer_accounts"] == 1
+    assert body["summary"]["active_report_grants"] == 2
+    assert body["accounts"][0]["account_slug"] == "acme-foods"
+    assert body["workspaces"][0]["workspace_slug"] == "default"
+    assert body["members"][0]["account_role_keys"] == ["account_owner"]
+    assert body["members"][0]["has_identity_provider_user_binding"] is True
+    assert body["entitlements"][0]["entitlement_key"] == "analytics.price_intelligence"
+    assert "workos_user_id" not in body["members"][0]
+    assert "workos_organization_id" not in body["accounts"][0]
 
 
 def test_workos_webhook_extracts_event_type_specific_ids() -> None:

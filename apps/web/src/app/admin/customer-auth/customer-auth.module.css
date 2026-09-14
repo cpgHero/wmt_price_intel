@@ -3,6 +3,88 @@
   gap: 0.9rem;
 }
 
+.foundation {
+  display: grid;
+  gap: 0.8rem;
+}
+
+.sectionHeader {
+  align-items: end;
+  background:
+    radial-gradient(
+      circle at 10% 0%,
+      rgba(95, 230, 200, 0.13),
+      transparent 24rem
+    ),
+    linear-gradient(
+      120deg,
+      color-mix(in srgb, var(--card) 92%, #0e4036),
+      var(--card)
+    );
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1.1rem 1.2rem;
+}
+
+.sectionHeader h2 {
+  font-size: 1.35rem;
+  letter-spacing: -0.035em;
+  margin: 0.18rem 0 0.25rem;
+}
+
+.sectionHeader p {
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  margin: 0;
+  max-width: 46rem;
+}
+
+.inlineActions {
+  align-items: end;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 0.55rem;
+}
+
+.inlineActions label {
+  color: var(--muted);
+  display: grid;
+  font-size: 0.51rem;
+  font-weight: 820;
+  gap: 0.35rem;
+  letter-spacing: 0.07em;
+  min-width: 14rem;
+  text-transform: uppercase;
+}
+
+.inlineActions input,
+.inlineActions button {
+  border-radius: 10px;
+  font: inherit;
+}
+
+.inlineActions input {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 0.6rem 0.7rem;
+}
+
+.inlineActions button {
+  background: var(--green);
+  border: 0;
+  color: #04251e;
+  cursor: pointer;
+  font-size: 0.66rem;
+  font-weight: 850;
+  padding: 0.65rem 0.85rem;
+  white-space: nowrap;
+}
+
 .hero {
   align-items: center;
   background:
@@ -242,7 +324,9 @@
   }
 
   .hero,
-  .toolbar {
+  .toolbar,
+  .sectionHeader,
+  .inlineActions {
     align-items: stretch;
     flex-direction: column;
   }

@@ -54,6 +54,77 @@ interface CustomerAuthReadiness {
   }>;
 }
 
+interface CustomerAccountFoundation {
+  schema_version: string;
+  summary: {
+    accounts: number;
+    customer_accounts: number;
+    active_accounts: number;
+    workspaces: number;
+    active_workspaces: number;
+    members: number;
+    active_members: number;
+    entitlements: number;
+    active_entitlements: number;
+    active_report_grants: number;
+  };
+  accounts: Array<{
+    account_id: string;
+    account_slug: string;
+    account_display_name: string;
+    account_type: string;
+    account_status: string;
+    workspace_count: number;
+    member_count: number;
+    active_member_count: number;
+    entitlement_count: number;
+    active_entitlement_count: number;
+    active_report_grant_count: number;
+    revoked_report_grant_count: number;
+    has_identity_provider_organization_binding: boolean;
+    created_at: string;
+  }>;
+  workspaces: Array<{
+    workspace_id: string;
+    account_id: string;
+    account_slug: string;
+    account_display_name: string;
+    workspace_slug: string;
+    workspace_display_name: string;
+    workspace_status: string;
+    active_member_count: number;
+    active_report_grant_count: number;
+    revoked_report_grant_count: number;
+    created_at: string;
+  }>;
+  members: Array<{
+    user_id: string;
+    email: string;
+    display_name: string | null;
+    account_id: string;
+    account_slug: string;
+    account_display_name: string;
+    account_membership_status: string;
+    workspace_slug: string | null;
+    workspace_display_name: string | null;
+    workspace_membership_status: string | null;
+    account_role_keys: string[];
+    workspace_role_keys: string[];
+    has_identity_provider_user_binding: boolean;
+    created_at: string;
+  }>;
+  entitlements: Array<{
+    account_id: string;
+    account_slug: string;
+    account_display_name: string;
+    entitlement_key: string;
+    entitlement_status: string;
+    starts_at: string | null;
+    expires_at: string | null;
+    created_at: string;
+  }>;
+}
+
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -75,6 +146,14 @@ function formatTime(value: string | null): string {
   return value ? new Date(value).toLocaleString() : "Not recorded";
 }
 
+function formatNumber(value: number): string {
+  return value.toLocaleString();
+}
+
+function roleList(values: string[]): string {
+  return values.length ? values.join(", ") : "No role recorded";
+}
+
 function StatusPill({
   active,
   trueLabel,
@@ -84,6 +163,285 @@ function StatusPill({
     <span className={`${styles.pill} ${active ? styles.good : styles.warn}`}>
       {active ? trueLabel : falseLabel}
     </span>
+  );
+}
+
+function FoundationWorkspace({
+  data,
+  accountSlug,
+  onAccountSlugChange,
+  onRefresh,
+}: Readonly<{
+  data: CustomerAccountFoundation;
+  accountSlug: string;
+  onAccountSlugChange: (value: string) => void;
+  onRefresh: () => void;
+}>) {
+  return (
+    <section className={styles.foundation}>
+      <header className={styles.sectionHeader}>
+        <div>
+          <span className={styles.kicker}>
+            Account administration foundation
+          </span>
+          <h2>Accounts, workspaces, access, and entitlements</h2>
+          <p>
+            Read-only CPGHero source-of-truth view for customer account
+            structure. Mutating account, role, entitlement, and workspace
+            settings should remain gated until policy workflows are finalized.
+          </p>
+        </div>
+        <div className={styles.inlineActions}>
+          <label>
+            Account slug
+            <input
+              onChange={(event) => onAccountSlugChange(event.target.value)}
+              placeholder="Filter by account slug"
+              value={accountSlug}
+            />
+          </label>
+          <button onClick={onRefresh} type="button">
+            Refresh foundation
+          </button>
+        </div>
+      </header>
+
+      <section className={styles.metrics}>
+        <article>
+          <small>Customer accounts</small>
+          <strong>{formatNumber(data.summary.customer_accounts)}</strong>
+          <span>
+            {formatNumber(data.summary.active_accounts)} active of{" "}
+            {formatNumber(data.summary.accounts)} total account records
+          </span>
+        </article>
+        <article>
+          <small>Workspaces</small>
+          <strong>{formatNumber(data.summary.workspaces)}</strong>
+          <span>
+            {formatNumber(data.summary.active_workspaces)} active workspace
+            scopes
+          </span>
+        </article>
+        <article>
+          <small>Members</small>
+          <strong>{formatNumber(data.summary.active_members)}</strong>
+          <span>
+            Active of {formatNumber(data.summary.members)} total membership
+            records
+          </span>
+        </article>
+        <article>
+          <small>Active report grants</small>
+          <strong>{formatNumber(data.summary.active_report_grants)}</strong>
+          <span>Customer report access grants currently available</span>
+        </article>
+      </section>
+
+      <section className={styles.grid}>
+        <article className={styles.panel}>
+          <header>
+            <div>
+              <span className={styles.kicker}>Accounts</span>
+              <h3>Customer and system account inventory</h3>
+            </div>
+          </header>
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>Status</th>
+                  <th>Workspaces</th>
+                  <th>Members</th>
+                  <th>Entitlements</th>
+                  <th>Report grants</th>
+                  <th>Identity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.accounts.map((account) => (
+                  <tr key={account.account_id}>
+                    <td>
+                      <strong>{account.account_display_name}</strong>
+                      <span>{account.account_slug}</span>
+                    </td>
+                    <td>
+                      {account.account_type} / {account.account_status}
+                    </td>
+                    <td>{formatNumber(account.workspace_count)}</td>
+                    <td>
+                      {formatNumber(account.active_member_count)} active
+                      <span>{formatNumber(account.member_count)} total</span>
+                    </td>
+                    <td>
+                      {formatNumber(account.active_entitlement_count)} active
+                      <span>
+                        {formatNumber(account.entitlement_count)} total
+                      </span>
+                    </td>
+                    <td>
+                      {formatNumber(account.active_report_grant_count)} active
+                      <span>
+                        {formatNumber(account.revoked_report_grant_count)}{" "}
+                        revoked
+                      </span>
+                    </td>
+                    <td>
+                      <StatusPill
+                        active={
+                          account.has_identity_provider_organization_binding
+                        }
+                        trueLabel="Bound"
+                        falseLabel="Not bound"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article className={styles.panel}>
+          <header>
+            <div>
+              <span className={styles.kicker}>Workspace scopes</span>
+              <h3>Workspace access and report grants</h3>
+            </div>
+          </header>
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Workspace</th>
+                  <th>Account</th>
+                  <th>Status</th>
+                  <th>Active members</th>
+                  <th>Report grants</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.workspaces.map((workspace) => (
+                  <tr key={workspace.workspace_id}>
+                    <td>
+                      <strong>{workspace.workspace_display_name}</strong>
+                      <span>{workspace.workspace_slug}</span>
+                    </td>
+                    <td>{workspace.account_display_name}</td>
+                    <td>{workspace.workspace_status}</td>
+                    <td>{formatNumber(workspace.active_member_count)}</td>
+                    <td>
+                      {formatNumber(workspace.active_report_grant_count)} active
+                      <span>
+                        {formatNumber(workspace.revoked_report_grant_count)}{" "}
+                        revoked
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+
+      <section className={styles.grid}>
+        <article className={styles.panel}>
+          <header>
+            <div>
+              <span className={styles.kicker}>Members</span>
+              <h3>Users, role scopes, and identity binding</h3>
+            </div>
+          </header>
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Account</th>
+                  <th>Workspace</th>
+                  <th>Status</th>
+                  <th>Roles</th>
+                  <th>Identity</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.members.map((member) => {
+                  const rowKey = [
+                    member.account_id,
+                    member.user_id,
+                    member.workspace_slug ?? "account",
+                  ].join("-");
+                  return (
+                    <tr key={rowKey}>
+                      <td>
+                        <strong>{member.display_name ?? member.email}</strong>
+                        <span>{member.email}</span>
+                      </td>
+                      <td>{member.account_display_name}</td>
+                      <td>
+                        {member.workspace_display_name ?? "Account-level"}
+                      </td>
+                      <td>
+                        {member.account_membership_status} /{" "}
+                        {member.workspace_membership_status ?? "none"}
+                      </td>
+                      <td>
+                        {roleList(member.account_role_keys)}
+                        <span>{roleList(member.workspace_role_keys)}</span>
+                      </td>
+                      <td>
+                        <StatusPill
+                          active={member.has_identity_provider_user_binding}
+                          trueLabel="Bound"
+                          falseLabel="Not bound"
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </article>
+
+        <article className={styles.panel}>
+          <header>
+            <div>
+              <span className={styles.kicker}>Entitlements</span>
+              <h3>Enabled account capabilities</h3>
+            </div>
+          </header>
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>Entitlement</th>
+                  <th>Status</th>
+                  <th>Starts</th>
+                  <th>Expires</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.entitlements.map((entitlement) => (
+                  <tr
+                    key={`${entitlement.account_id}-${entitlement.entitlement_key}`}
+                  >
+                    <td>{entitlement.account_display_name}</td>
+                    <td>{entitlement.entitlement_key}</td>
+                    <td>{entitlement.entitlement_status}</td>
+                    <td>{formatTime(entitlement.starts_at)}</td>
+                    <td>{formatTime(entitlement.expires_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </article>
+      </section>
+    </section>
   );
 }
 
@@ -333,7 +691,10 @@ function ReadinessWorkspace({
 export function CustomerAuthAdmin() {
   const [session, setSession] = useState<AdminSession | null>(null);
   const [data, setData] = useState<CustomerAuthReadiness | null>(null);
+  const [foundation, setFoundation] =
+    useState<CustomerAccountFoundation | null>(null);
   const [email, setEmail] = useState(DEFAULT_READINESS_EMAIL);
+  const [accountSlug, setAccountSlug] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (emailValue: string) => {
@@ -347,16 +708,30 @@ export function CustomerAuthAdmin() {
     );
   }, []);
 
+  const loadFoundation = useCallback(async (slugValue: string) => {
+    const query = slugValue.trim()
+      ? `?account_slug=${encodeURIComponent(slugValue.trim())}`
+      : "";
+    setFoundation(
+      await jsonRequest<CustomerAccountFoundation>(
+        `/api/admin/customer-auth/account-foundation${query}`,
+      ),
+    );
+  }, []);
+
   useEffect(() => {
     void jsonRequest<AdminSession>("/api/admin/session")
       .then((value) => {
         setSession(value);
         if (value.authenticated) {
-          void load(DEFAULT_READINESS_EMAIL).catch((err: unknown) => {
+          void Promise.all([
+            load(DEFAULT_READINESS_EMAIL),
+            loadFoundation(""),
+          ]).catch((err: unknown) => {
             setError(
               err instanceof Error
                 ? err.message
-                : "Unable to load customer-auth readiness.",
+                : "Unable to load customer administration data.",
             );
           });
         }
@@ -369,7 +744,7 @@ export function CustomerAuthAdmin() {
         );
         setSession({ authenticated: false, configured: false });
       });
-  }, [load]);
+  }, [load, loadFoundation]);
 
   async function login(password: string) {
     try {
@@ -379,7 +754,7 @@ export function CustomerAuthAdmin() {
         body: JSON.stringify({ password }),
       });
       setSession({ authenticated: true, configured: true });
-      await load(email);
+      await Promise.all([load(email), loadFoundation(accountSlug)]);
     } catch (err) {
       setError(
         err instanceof Error
@@ -392,10 +767,10 @@ export function CustomerAuthAdmin() {
   async function refresh() {
     try {
       setError(null);
-      await load(email);
+      await Promise.all([load(email), loadFoundation(accountSlug)]);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Unable to refresh readiness.",
+        err instanceof Error ? err.message : "Unable to refresh admin data.",
       );
     }
   }
@@ -418,15 +793,23 @@ export function CustomerAuthAdmin() {
   return (
     <>
       {error ? <p className={styles.error}>{error}</p> : null}
-      {data ? (
-        <ReadinessWorkspace
-          data={data}
-          email={email}
-          onEmailChange={setEmail}
-          onRefresh={refresh}
-        />
+      {data && foundation ? (
+        <div className={styles.workspace}>
+          <FoundationWorkspace
+            accountSlug={accountSlug}
+            data={foundation}
+            onAccountSlugChange={setAccountSlug}
+            onRefresh={refresh}
+          />
+          <ReadinessWorkspace
+            data={data}
+            email={email}
+            onEmailChange={setEmail}
+            onRefresh={refresh}
+          />
+        </div>
       ) : (
-        <div className="builder-loading">Loading customer-auth readiness…</div>
+        <div className="builder-loading">Loading customer administration…</div>
       )}
     </>
   );

@@ -229,6 +229,87 @@ class CustomerAuthReadinessResponse(BaseModel):
     recent_webhook_events: tuple[CustomerAuthWebhookEventStatus, ...]
 
 
+class CustomerAccountFoundationSummary(BaseModel):
+    accounts: int
+    customer_accounts: int
+    active_accounts: int
+    workspaces: int
+    active_workspaces: int
+    members: int
+    active_members: int
+    entitlements: int
+    active_entitlements: int
+    active_report_grants: int
+
+
+class CustomerAccountFoundationAccount(BaseModel):
+    account_id: str
+    account_slug: str
+    account_display_name: str
+    account_type: str
+    account_status: str
+    workspace_count: int
+    member_count: int
+    active_member_count: int
+    entitlement_count: int
+    active_entitlement_count: int
+    active_report_grant_count: int
+    revoked_report_grant_count: int
+    has_identity_provider_organization_binding: bool
+    created_at: str
+
+
+class CustomerAccountFoundationWorkspace(BaseModel):
+    workspace_id: str
+    account_id: str
+    account_slug: str
+    account_display_name: str
+    workspace_slug: str
+    workspace_display_name: str
+    workspace_status: str
+    active_member_count: int
+    active_report_grant_count: int
+    revoked_report_grant_count: int
+    created_at: str
+
+
+class CustomerAccountFoundationMember(BaseModel):
+    user_id: str
+    email: str
+    display_name: str | None = None
+    account_id: str
+    account_slug: str
+    account_display_name: str
+    account_membership_status: str
+    workspace_slug: str | None = None
+    workspace_display_name: str | None = None
+    workspace_membership_status: str | None = None
+    account_role_keys: tuple[str, ...] = ()
+    workspace_role_keys: tuple[str, ...] = ()
+    has_identity_provider_user_binding: bool
+    created_at: str
+
+
+class CustomerAccountFoundationEntitlement(BaseModel):
+    account_id: str
+    account_slug: str
+    account_display_name: str
+    entitlement_key: str
+    entitlement_status: str
+    starts_at: str | None = None
+    expires_at: str | None = None
+    created_at: str
+
+
+class CustomerAccountFoundationResponse(BaseModel):
+    schema_version: str = "1.0.0-customer-account-foundation"
+    summary: CustomerAccountFoundationSummary
+    accounts: tuple[CustomerAccountFoundationAccount, ...]
+    workspaces: tuple[CustomerAccountFoundationWorkspace, ...]
+    members: tuple[CustomerAccountFoundationMember, ...]
+    entitlements: tuple[CustomerAccountFoundationEntitlement, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class WebhookProcessingResult:
     event_id: str
@@ -258,12 +339,508 @@ class CustomerProvisioningRepository(Protocol):
         limit: int = 25,
     ) -> CustomerAuthReadinessResponse: ...
 
+    async def customer_account_foundation(
+        self,
+        *,
+        account_slug: str | None = None,
+        limit: int = 50,
+    ) -> CustomerAccountFoundationResponse: ...
+
 
 class PostgresCustomerProvisioningRepository:
     """Provision CPGHero-owned access rows before customer login is enabled."""
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
+
+    async def customer_account_foundation(
+        self,
+        *,
+        account_slug: str | None = None,
+        limit: int = 50,
+    ) -> CustomerAccountFoundationResponse:
+        normalized_slug = _slugify(account_slug) if account_slug else None
+        safe_limit = max(1, min(limit, 200))
+        async with self._engine.begin() as connection:
+            summary = await self._customer_account_foundation_summary(
+                connection,
+                account_slug=normalized_slug,
+            )
+            accounts = await self._customer_account_foundation_accounts(
+                connection,
+                account_slug=normalized_slug,
+                limit=safe_limit,
+            )
+            workspaces = await self._customer_account_foundation_workspaces(
+                connection,
+                account_slug=normalized_slug,
+                limit=safe_limit,
+            )
+            members = await self._customer_account_foundation_members(
+                connection,
+                account_slug=normalized_slug,
+                limit=safe_limit,
+            )
+            entitlements = await self._customer_account_foundation_entitlements(
+                connection,
+                account_slug=normalized_slug,
+                limit=safe_limit,
+            )
+        return CustomerAccountFoundationResponse(
+            summary=summary,
+            accounts=tuple(accounts),
+            workspaces=tuple(workspaces),
+            members=tuple(members),
+            entitlements=tuple(entitlements),
+        )
+
+    async def _customer_account_foundation_summary(
+        self,
+        connection: AsyncConnection,
+        *,
+        account_slug: str | None,
+    ) -> CustomerAccountFoundationSummary:
+        row = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT
+                          COUNT(*)::integer AS accounts,
+                          COUNT(*) FILTER (WHERE account_type = 'customer')::integer
+                            AS customer_accounts,
+                          COUNT(*) FILTER (WHERE status = 'active')::integer
+                            AS active_accounts,
+                          (
+                            SELECT COUNT(*)::integer
+                            FROM workspace
+                            JOIN account ON account.id = workspace.account_id
+                            WHERE (
+                              CAST(:account_slug AS text) IS NULL
+                              OR account.slug = CAST(:account_slug AS text)
+                            )
+                          ) AS workspaces,
+                          (
+                            SELECT COUNT(*)::integer
+                            FROM workspace
+                            JOIN account ON account.id = workspace.account_id
+                            WHERE workspace.status = 'active'
+                              AND (
+                                CAST(:account_slug AS text) IS NULL
+                                OR account.slug = CAST(:account_slug AS text)
+                              )
+                          ) AS active_workspaces,
+                          (
+                            SELECT COUNT(*)::integer
+                            FROM account_membership
+                            JOIN account ON account.id = account_membership.account_id
+                            WHERE (
+                              CAST(:account_slug AS text) IS NULL
+                              OR account.slug = CAST(:account_slug AS text)
+                            )
+                          ) AS members,
+                          (
+                            SELECT COUNT(*)::integer
+                            FROM account_membership
+                            JOIN account ON account.id = account_membership.account_id
+                            WHERE account_membership.status = 'active'
+                              AND (
+                                CAST(:account_slug AS text) IS NULL
+                                OR account.slug = CAST(:account_slug AS text)
+                              )
+                          ) AS active_members,
+                          (
+                            SELECT COUNT(*)::integer
+                            FROM account_entitlement
+                            JOIN account ON account.id = account_entitlement.account_id
+                            WHERE (
+                              CAST(:account_slug AS text) IS NULL
+                              OR account.slug = CAST(:account_slug AS text)
+                            )
+                          ) AS entitlements,
+                          (
+                            SELECT COUNT(*)::integer
+                            FROM account_entitlement
+                            JOIN account ON account.id = account_entitlement.account_id
+                            WHERE account_entitlement.status = 'active'
+                              AND (
+                                CAST(:account_slug AS text) IS NULL
+                                OR account.slug = CAST(:account_slug AS text)
+                              )
+                          ) AS active_entitlements,
+                          (
+                            SELECT COUNT(*)::integer
+                            FROM customer_report_access
+                            JOIN account ON account.id = customer_report_access.account_id
+                            WHERE customer_report_access.status = 'active'
+                              AND (
+                                CAST(:account_slug AS text) IS NULL
+                                OR account.slug = CAST(:account_slug AS text)
+                              )
+                          ) AS active_report_grants
+                        FROM account
+                        WHERE (
+                          CAST(:account_slug AS text) IS NULL
+                          OR slug = CAST(:account_slug AS text)
+                        )
+                        """
+                    ),
+                    {"account_slug": account_slug},
+                )
+            )
+            .mappings()
+            .one()
+        )
+        return CustomerAccountFoundationSummary(
+            accounts=int(row["accounts"] or 0),
+            customer_accounts=int(row["customer_accounts"] or 0),
+            active_accounts=int(row["active_accounts"] or 0),
+            workspaces=int(row["workspaces"] or 0),
+            active_workspaces=int(row["active_workspaces"] or 0),
+            members=int(row["members"] or 0),
+            active_members=int(row["active_members"] or 0),
+            entitlements=int(row["entitlements"] or 0),
+            active_entitlements=int(row["active_entitlements"] or 0),
+            active_report_grants=int(row["active_report_grants"] or 0),
+        )
+
+    async def _customer_account_foundation_accounts(
+        self,
+        connection: AsyncConnection,
+        *,
+        account_slug: str | None,
+        limit: int,
+    ) -> list[CustomerAccountFoundationAccount]:
+        rows = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT
+                          account.id::text AS account_id,
+                          account.slug AS account_slug,
+                          account.display_name AS account_display_name,
+                          account.account_type,
+                          account.status AS account_status,
+                          COALESCE(workspace_counts.workspace_count, 0)::integer
+                            AS workspace_count,
+                          COALESCE(member_counts.member_count, 0)::integer AS member_count,
+                          COALESCE(member_counts.active_member_count, 0)::integer
+                            AS active_member_count,
+                          COALESCE(entitlement_counts.entitlement_count, 0)::integer
+                            AS entitlement_count,
+                          COALESCE(entitlement_counts.active_entitlement_count, 0)::integer
+                            AS active_entitlement_count,
+                          COALESCE(report_counts.active_report_grant_count, 0)::integer
+                            AS active_report_grant_count,
+                          COALESCE(report_counts.revoked_report_grant_count, 0)::integer
+                            AS revoked_report_grant_count,
+                          external_identity.id IS NOT NULL
+                            AS has_identity_provider_organization_binding,
+                          account.created_at::text AS created_at
+                        FROM account
+                        LEFT JOIN (
+                          SELECT account_id, COUNT(*) AS workspace_count
+                          FROM workspace
+                          GROUP BY account_id
+                        ) workspace_counts ON workspace_counts.account_id = account.id
+                        LEFT JOIN (
+                          SELECT
+                            account_id,
+                            COUNT(*) AS member_count,
+                            COUNT(*) FILTER (WHERE status = 'active') AS active_member_count
+                          FROM account_membership
+                          GROUP BY account_id
+                        ) member_counts ON member_counts.account_id = account.id
+                        LEFT JOIN (
+                          SELECT
+                            account_id,
+                            COUNT(*) AS entitlement_count,
+                            COUNT(*) FILTER (WHERE status = 'active')
+                              AS active_entitlement_count
+                          FROM account_entitlement
+                          GROUP BY account_id
+                        ) entitlement_counts ON entitlement_counts.account_id = account.id
+                        LEFT JOIN (
+                          SELECT
+                            account_id,
+                            COUNT(*) FILTER (WHERE status = 'active')
+                              AS active_report_grant_count,
+                            COUNT(*) FILTER (WHERE status = 'revoked')
+                              AS revoked_report_grant_count
+                          FROM customer_report_access
+                          GROUP BY account_id
+                        ) report_counts ON report_counts.account_id = account.id
+                        LEFT JOIN external_identity
+                          ON external_identity.provider = 'workos'
+                         AND external_identity.subject_type = 'organization'
+                         AND external_identity.account_id = account.id
+                        WHERE (
+                          CAST(:account_slug AS text) IS NULL
+                          OR account.slug = CAST(:account_slug AS text)
+                        )
+                        ORDER BY account.created_at DESC, account.display_name ASC
+                        LIMIT :limit
+                        """
+                    ),
+                    {"account_slug": account_slug, "limit": limit},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return [
+            CustomerAccountFoundationAccount(
+                account_id=str(row["account_id"]),
+                account_slug=str(row["account_slug"]),
+                account_display_name=str(row["account_display_name"]),
+                account_type=str(row["account_type"]),
+                account_status=str(row["account_status"]),
+                workspace_count=int(row["workspace_count"] or 0),
+                member_count=int(row["member_count"] or 0),
+                active_member_count=int(row["active_member_count"] or 0),
+                entitlement_count=int(row["entitlement_count"] or 0),
+                active_entitlement_count=int(row["active_entitlement_count"] or 0),
+                active_report_grant_count=int(row["active_report_grant_count"] or 0),
+                revoked_report_grant_count=int(row["revoked_report_grant_count"] or 0),
+                has_identity_provider_organization_binding=bool(
+                    row["has_identity_provider_organization_binding"]
+                ),
+                created_at=str(row["created_at"]),
+            )
+            for row in rows
+        ]
+
+    async def _customer_account_foundation_workspaces(
+        self,
+        connection: AsyncConnection,
+        *,
+        account_slug: str | None,
+        limit: int,
+    ) -> list[CustomerAccountFoundationWorkspace]:
+        rows = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT
+                          workspace.id::text AS workspace_id,
+                          account.id::text AS account_id,
+                          account.slug AS account_slug,
+                          account.display_name AS account_display_name,
+                          workspace.slug AS workspace_slug,
+                          workspace.display_name AS workspace_display_name,
+                          workspace.status AS workspace_status,
+                          COALESCE(member_counts.active_member_count, 0)::integer
+                            AS active_member_count,
+                          COALESCE(report_counts.active_report_grant_count, 0)::integer
+                            AS active_report_grant_count,
+                          COALESCE(report_counts.revoked_report_grant_count, 0)::integer
+                            AS revoked_report_grant_count,
+                          workspace.created_at::text AS created_at
+                        FROM workspace
+                        JOIN account ON account.id = workspace.account_id
+                        LEFT JOIN (
+                          SELECT
+                            workspace_id,
+                            COUNT(*) FILTER (WHERE status = 'active')
+                              AS active_member_count
+                          FROM workspace_membership
+                          GROUP BY workspace_id
+                        ) member_counts ON member_counts.workspace_id = workspace.id
+                        LEFT JOIN (
+                          SELECT
+                            workspace_id,
+                            COUNT(*) FILTER (WHERE status = 'active')
+                              AS active_report_grant_count,
+                            COUNT(*) FILTER (WHERE status = 'revoked')
+                              AS revoked_report_grant_count
+                          FROM customer_report_access
+                          WHERE workspace_id IS NOT NULL
+                          GROUP BY workspace_id
+                        ) report_counts ON report_counts.workspace_id = workspace.id
+                        WHERE (
+                          CAST(:account_slug AS text) IS NULL
+                          OR account.slug = CAST(:account_slug AS text)
+                        )
+                        ORDER BY workspace.created_at DESC, account.display_name ASC
+                        LIMIT :limit
+                        """
+                    ),
+                    {"account_slug": account_slug, "limit": limit},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return [
+            CustomerAccountFoundationWorkspace(
+                workspace_id=str(row["workspace_id"]),
+                account_id=str(row["account_id"]),
+                account_slug=str(row["account_slug"]),
+                account_display_name=str(row["account_display_name"]),
+                workspace_slug=str(row["workspace_slug"]),
+                workspace_display_name=str(row["workspace_display_name"]),
+                workspace_status=str(row["workspace_status"]),
+                active_member_count=int(row["active_member_count"] or 0),
+                active_report_grant_count=int(row["active_report_grant_count"] or 0),
+                revoked_report_grant_count=int(row["revoked_report_grant_count"] or 0),
+                created_at=str(row["created_at"]),
+            )
+            for row in rows
+        ]
+
+    async def _customer_account_foundation_members(
+        self,
+        connection: AsyncConnection,
+        *,
+        account_slug: str | None,
+        limit: int,
+    ) -> list[CustomerAccountFoundationMember]:
+        rows = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT
+                          app_user.id::text AS user_id,
+                          app_user.email,
+                          app_user.display_name,
+                          account.id::text AS account_id,
+                          account.slug AS account_slug,
+                          account.display_name AS account_display_name,
+                          account_membership.status AS account_membership_status,
+                          workspace.slug AS workspace_slug,
+                          workspace.display_name AS workspace_display_name,
+                          workspace_membership.status AS workspace_membership_status,
+                          COALESCE(account_roles.role_keys, ARRAY[]::text[])
+                            AS account_role_keys,
+                          COALESCE(workspace_roles.role_keys, ARRAY[]::text[])
+                            AS workspace_role_keys,
+                          external_identity.id IS NOT NULL
+                            AS has_identity_provider_user_binding,
+                          account_membership.created_at::text AS created_at
+                        FROM account_membership
+                        JOIN account ON account.id = account_membership.account_id
+                        JOIN app_user ON app_user.id = account_membership.user_id
+                        LEFT JOIN workspace_membership
+                          ON workspace_membership.account_membership_id = account_membership.id
+                        LEFT JOIN workspace ON workspace.id = workspace_membership.workspace_id
+                        LEFT JOIN (
+                          SELECT
+                            account_membership_role.account_membership_id,
+                            ARRAY_AGG(platform_role.role_key ORDER BY platform_role.role_key)
+                              AS role_keys
+                          FROM account_membership_role
+                          JOIN platform_role ON platform_role.id = account_membership_role.role_id
+                          GROUP BY account_membership_role.account_membership_id
+                        ) account_roles
+                          ON account_roles.account_membership_id = account_membership.id
+                        LEFT JOIN (
+                          SELECT
+                            workspace_membership_role.workspace_membership_id,
+                            ARRAY_AGG(platform_role.role_key ORDER BY platform_role.role_key)
+                              AS role_keys
+                          FROM workspace_membership_role
+                          JOIN platform_role ON platform_role.id = workspace_membership_role.role_id
+                          GROUP BY workspace_membership_role.workspace_membership_id
+                        ) workspace_roles
+                          ON workspace_roles.workspace_membership_id = workspace_membership.id
+                        LEFT JOIN external_identity
+                          ON external_identity.provider = 'workos'
+                         AND external_identity.subject_type = 'user'
+                         AND external_identity.user_id = app_user.id
+                        WHERE (
+                          CAST(:account_slug AS text) IS NULL
+                          OR account.slug = CAST(:account_slug AS text)
+                        )
+                        ORDER BY account_membership.created_at DESC, app_user.email ASC
+                        LIMIT :limit
+                        """
+                    ),
+                    {"account_slug": account_slug, "limit": limit},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return [
+            CustomerAccountFoundationMember(
+                user_id=str(row["user_id"]),
+                email=str(row["email"]),
+                display_name=str(row["display_name"]) if row["display_name"] else None,
+                account_id=str(row["account_id"]),
+                account_slug=str(row["account_slug"]),
+                account_display_name=str(row["account_display_name"]),
+                account_membership_status=str(row["account_membership_status"]),
+                workspace_slug=str(row["workspace_slug"]) if row["workspace_slug"] else None,
+                workspace_display_name=(
+                    str(row["workspace_display_name"]) if row["workspace_display_name"] else None
+                ),
+                workspace_membership_status=(
+                    str(row["workspace_membership_status"])
+                    if row["workspace_membership_status"]
+                    else None
+                ),
+                account_role_keys=tuple(str(value) for value in row["account_role_keys"] or []),
+                workspace_role_keys=tuple(str(value) for value in row["workspace_role_keys"] or []),
+                has_identity_provider_user_binding=bool(row["has_identity_provider_user_binding"]),
+                created_at=str(row["created_at"]),
+            )
+            for row in rows
+        ]
+
+    async def _customer_account_foundation_entitlements(
+        self,
+        connection: AsyncConnection,
+        *,
+        account_slug: str | None,
+        limit: int,
+    ) -> list[CustomerAccountFoundationEntitlement]:
+        rows = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT
+                          account.id::text AS account_id,
+                          account.slug AS account_slug,
+                          account.display_name AS account_display_name,
+                          account_entitlement.entitlement_key,
+                          account_entitlement.status AS entitlement_status,
+                          account_entitlement.starts_at::text AS starts_at,
+                          account_entitlement.expires_at::text AS expires_at,
+                          account_entitlement.created_at::text AS created_at
+                        FROM account_entitlement
+                        JOIN account ON account.id = account_entitlement.account_id
+                        WHERE (
+                          CAST(:account_slug AS text) IS NULL
+                          OR account.slug = CAST(:account_slug AS text)
+                        )
+                        ORDER BY account_entitlement.created_at DESC,
+                                 account_entitlement.entitlement_key ASC
+                        LIMIT :limit
+                        """
+                    ),
+                    {"account_slug": account_slug, "limit": limit},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return [
+            CustomerAccountFoundationEntitlement(
+                account_id=str(row["account_id"]),
+                account_slug=str(row["account_slug"]),
+                account_display_name=str(row["account_display_name"]),
+                entitlement_key=str(row["entitlement_key"]),
+                entitlement_status=str(row["entitlement_status"]),
+                starts_at=str(row["starts_at"]) if row["starts_at"] else None,
+                expires_at=str(row["expires_at"]) if row["expires_at"] else None,
+                created_at=str(row["created_at"]),
+            )
+            for row in rows
+        ]
 
     async def customer_auth_readiness(
         self,
@@ -1414,6 +1991,21 @@ async def customer_auth_readiness(
     require_platform_admin(request, x_rci_admin_token)
     repository = _customer_provisioning_repository(request)
     return await repository.customer_auth_readiness(email=email, limit=limit)
+
+
+@router.get(
+    "/admin/customer-provisioning/account-foundation",
+    tags=["admin", "customer-auth"],
+)
+async def customer_account_foundation(
+    request: Request,
+    account_slug: Annotated[str | None, Query(min_length=3, max_length=64)] = None,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> CustomerAccountFoundationResponse:
+    require_platform_admin(request, x_rci_admin_token)
+    repository = _customer_provisioning_repository(request)
+    return await repository.customer_account_foundation(account_slug=account_slug, limit=limit)
 
 
 def _verify_workos_webhook(request: Request, event_body: bytes, signature: str | None) -> None:
