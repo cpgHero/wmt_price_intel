@@ -26,7 +26,7 @@ Expose the first customer-facing report data path only after adding an explicit 
 
 - The route does not infer access from legacy `organization_id`.
 - Existing internal/global report-library and report-detail routes remain unchanged.
-- Granted report rows are listed, but opening report detail through a customer-safe route remains future work.
+- Granted report rows are listed without exposing the legacy global `/analyses/{analysis_id}` route. Phase 14.14 adds the first customer-safe detail route keyed by the grant id.
 - The customer canary allowlist is unchanged.
 - No source-provider calls, PDP calls, AI calls, report recalculation, PDF generation, or historical artifact changes were made.
 
@@ -40,4 +40,4 @@ The local gate must include:
 
 ## Next recommended step
 
-Add a protected customer report-detail route that requires a matching `customer_report_access` grant before delegating to report rendering/projection. Until then, the customer workspace can safely show which reports are granted without opening the legacy global `/analyses/{analysis_id}` route.
+Add customer-gated equivalents for downstream interactive analytics modules before exposing the full internal report workspace to customer accounts.

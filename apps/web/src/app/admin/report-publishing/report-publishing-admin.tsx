@@ -74,6 +74,35 @@ interface PublishingSummary {
     updated_at: string;
   }>;
 }
+interface CustomerReportGrant {
+  access_id: string;
+  account_id: string;
+  account_slug: string;
+  account_display_name: string;
+  workspace_id: string | null;
+  workspace_slug: string | null;
+  workspace_display_name: string | null;
+  analysis_id: string;
+  analysis_result_id: string;
+  title: string;
+  category: string | null;
+  status: string;
+  granted_at: string;
+}
+interface GrantableCustomerReport {
+  analysis_id: string;
+  analysis_result_id: string;
+  title: string;
+  category: string | null;
+  product_pack_id: string | null;
+  product_pack_version: string | null;
+  created_at: string;
+}
+interface CustomerReportAccessSnapshot {
+  schema_version: string;
+  grants: CustomerReportGrant[];
+  grantable_reports: GrantableCustomerReport[];
+}
 
 async function jsonRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -231,9 +260,25 @@ export function ReportPublishingAdmin() {
   const [session, setSession] = useState<AdminSession | null>(null);
   const [jobs, setJobs] = useState<PublishingJob[]>([]);
   const [summary, setSummary] = useState<PublishingSummary | null>(null);
+  const [customerAccess, setCustomerAccess] =
+    useState<CustomerReportAccessSnapshot | null>(null);
+  const [grantAccount, setGrantAccount] = useState("ghretail");
+  const [grantWorkspace, setGrantWorkspace] = useState("");
+  const [grantAnalysisResultId, setGrantAnalysisResultId] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const loadCustomerAccess = useCallback(async () => {
+    const snapshot = await jsonRequest<CustomerReportAccessSnapshot>(
+      "/api/admin/customer-report-access?limit=100",
+    );
+    setCustomerAccess(snapshot);
+    setGrantAnalysisResultId((current) => {
+      if (current) return current;
+      return snapshot.grantable_reports[0]?.analysis_result_id ?? "";
+    });
+  }, []);
 
   const loadJobs = useCallback(async () => {
     const nextJobs = await jsonRequest<PublishingJob[]>(
@@ -255,7 +300,9 @@ export function ReportPublishingAdmin() {
     void jsonRequest<AdminSession>("/api/admin/session")
       .then(async (value) => {
         setSession(value);
-        if (value.authenticated) await loadJobs();
+        if (value.authenticated) {
+          await Promise.all([loadJobs(), loadCustomerAccess()]);
+        }
       })
       .catch((cause: unknown) =>
         setError(
@@ -264,7 +311,7 @@ export function ReportPublishingAdmin() {
             : "Unable to check administrator access.",
         ),
       );
-  }, [loadJobs]);
+  }, [loadCustomerAccess, loadJobs]);
 
   useEffect(() => {
     if (!session?.authenticated) return;
@@ -283,7 +330,7 @@ export function ReportPublishingAdmin() {
       });
       setSession({ authenticated: true, configured: true });
       setPassword("");
-      await loadJobs();
+      await Promise.all([loadJobs(), loadCustomerAccess()]);
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Unable to authenticate.",
@@ -304,6 +351,50 @@ export function ReportPublishingAdmin() {
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Unable to retry the job.",
+      );
+    }
+  }
+
+  async function grantCustomerReport(event: FormEvent) {
+    event.preventDefault();
+    setError(null);
+    setBusy(true);
+    try {
+      await jsonRequest("/api/admin/customer-report-access", {
+        method: "POST",
+        body: JSON.stringify({
+          account: grantAccount,
+          workspace: grantWorkspace.trim() || null,
+          analysis_result_id: grantAnalysisResultId,
+        }),
+      });
+      await loadCustomerAccess();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to grant report access.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revokeCustomerReport(accessId: string) {
+    setError(null);
+    try {
+      await jsonRequest(
+        `/api/admin/customer-report-access/${encodeURIComponent(accessId)}`,
+        {
+          method: "DELETE",
+        },
+      );
+      await loadCustomerAccess();
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Unable to revoke report access.",
       );
     }
   }
@@ -391,6 +482,123 @@ export function ReportPublishingAdmin() {
           </div>
         </section>
       ) : null}
+      <section
+        className={styles.customerAccessPanel}
+        aria-label="Customer report access"
+      >
+        <header>
+          <div>
+            <span className="section-kicker">Customer access</span>
+            <h2>Grant reports to customer accounts</h2>
+            <p>
+              Only ready, non-archived reports can be granted. Customer report
+              detail pages remain keyed by the grant ID, not by a global
+              analysis URL.
+            </p>
+          </div>
+          <button
+            className="button secondary"
+            onClick={() => void loadCustomerAccess()}
+            type="button"
+          >
+            Refresh access
+          </button>
+        </header>
+        <form className={styles.grantForm} onSubmit={grantCustomerReport}>
+          <label>
+            <span>Account slug or ID</span>
+            <input
+              onChange={(event) => setGrantAccount(event.target.value)}
+              placeholder="ghretail"
+              required
+              value={grantAccount}
+            />
+          </label>
+          <label>
+            <span>Workspace slug or ID</span>
+            <input
+              onChange={(event) => setGrantWorkspace(event.target.value)}
+              placeholder="Optional"
+              value={grantWorkspace}
+            />
+          </label>
+          <label>
+            <span>Ready report</span>
+            <select
+              onChange={(event) => setGrantAnalysisResultId(event.target.value)}
+              required
+              value={grantAnalysisResultId}
+            >
+              {customerAccess?.grantable_reports.map((report) => (
+                <option
+                  key={report.analysis_result_id}
+                  value={report.analysis_result_id}
+                >
+                  {report.title} · {report.analysis_id}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button className="button primary" disabled={busy} type="submit">
+            {busy ? "Saving…" : "Grant access"}
+          </button>
+        </form>
+        {customerAccess ? (
+          <div className={styles.grantTableWrap}>
+            <table className={styles.grantTable}>
+              <thead>
+                <tr>
+                  <th>Account</th>
+                  <th>Workspace</th>
+                  <th>Report</th>
+                  <th>Status</th>
+                  <th>Granted</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {customerAccess.grants.map((grant) => (
+                  <tr key={grant.access_id}>
+                    <td>
+                      <strong>{grant.account_display_name}</strong>
+                      <span>{grant.account_slug}</span>
+                    </td>
+                    <td>
+                      {grant.workspace_display_name ?? "Account-level"}
+                      <span>
+                        {grant.workspace_slug ?? grant.workspace_id ?? "—"}
+                      </span>
+                    </td>
+                    <td>
+                      <strong>{grant.title}</strong>
+                      <span>{grant.analysis_id}</span>
+                    </td>
+                    <td>{grant.status}</td>
+                    <td>{new Date(grant.granted_at).toLocaleDateString()}</td>
+                    <td>
+                      {grant.status === "active" ? (
+                        <button
+                          className="button secondary"
+                          onClick={() =>
+                            void revokeCustomerReport(grant.access_id)
+                          }
+                          type="button"
+                        >
+                          Revoke
+                        </button>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="builder-loading">Loading customer access grants…</div>
+        )}
+      </section>
       {error ? <p className="form-error">{error}</p> : null}
       <div className={styles.jobs}>
         {jobs.length ? (

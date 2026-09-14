@@ -1,0 +1,63 @@
+import { NextResponse } from "next/server";
+
+import { assertSameOrigin, verifyAdminSession } from "@/lib/admin-session";
+import { loadServerConfig } from "@/lib/config";
+
+async function proxy(
+  request: Request,
+  context: { params: Promise<{ path?: string[] }> },
+) {
+  if (!verifyAdminSession(request)) {
+    return NextResponse.json(
+      { error: "Administrator authentication is required." },
+      { status: 401 },
+    );
+  }
+  if (request.method !== "GET" && !assertSameOrigin(request)) {
+    return NextResponse.json(
+      { error: "Invalid request origin." },
+      { status: 403 },
+    );
+  }
+  const { path = [] } = await context.params;
+  const suffix = path.length
+    ? `/${path.map((part) => encodeURIComponent(part)).join("/")}`
+    : "";
+  const upstreamUrl = new URL(
+    `/api/v1/admin/customer-report-access${suffix}`,
+    loadServerConfig().apiInternalUrl,
+  );
+  const input = new URL(request.url);
+  upstreamUrl.search = input.search;
+  const body = request.method === "GET" ? undefined : await request.text();
+  try {
+    const upstream = await fetch(upstreamUrl, {
+      method: request.method,
+      headers: {
+        ...(body ? { "content-type": "application/json" } : {}),
+        ...(process.env.PRODUCT_PACK_ADMIN_TOKEN
+          ? { "X-RCI-Admin-Token": process.env.PRODUCT_PACK_ADMIN_TOKEN }
+          : {}),
+      },
+      body,
+      cache: "no-store",
+      signal: AbortSignal.timeout(30_000),
+    });
+    return new NextResponse(await upstream.text(), {
+      status: upstream.status,
+      headers: {
+        "content-type":
+          upstream.headers.get("content-type") ?? "application/json",
+      },
+    });
+  } catch {
+    return NextResponse.json(
+      { error: "The customer report access API is not currently reachable." },
+      { status: 503 },
+    );
+  }
+}
+
+export const GET = proxy;
+export const POST = proxy;
+export const DELETE = proxy;

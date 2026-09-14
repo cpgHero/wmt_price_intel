@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.150",
+  version: "1.3.151",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2984,6 +2984,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification passed; CI verification pending",
+              "Customer report detail and admin grant controls added.",
+              "Customer report access now has a protected /api/v1/customer/reports/{access_id} detail route that is keyed by the explicit grant id and requires the same customer authentication, analytics.view permission, app_analytics entitlement, account scope, workspace scope, active grant, ready reporting status, and non-archived report predicates before returning report content. The admin report-publishing workspace adds customer report access controls for listing grants, selecting ready reports, granting by account/workspace slug or id, and revoking grants without deleting the audit row. The customer workspace links granted reports to the new customer route rather than global /analyses pages. This does not broaden the canary allowlist, expose internal report-workbench APIs to customers, issue customer API keys, add billing workflows, change collection requests, source-provider calls, PDP calls, AI calls, PDFs, proximity metrics, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification passed; CI verification pending",

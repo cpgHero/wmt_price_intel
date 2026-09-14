@@ -8,7 +8,13 @@ from pytest import MonkeyPatch
 
 from rci_api.customer_identity import router as customer_identity_router
 from rci_api.customer_principals import CustomerPrincipalResolution
-from rci_api.customer_reports import CustomerReportSummary
+from rci_api.customer_reports import (
+    AdminCustomerReportGrant,
+    AdminGrantableReport,
+    CustomerReportDetail,
+    CustomerReportSummary,
+)
+from rci_api.customer_reports import admin_router as customer_report_admin_router
 from rci_api.customer_reports import router as customer_report_router
 from rci_api.workos_auth import SESSION_COOKIE_NAME, WorkOSSessionIdentity
 from rci_core import AccessPrincipal, AppSettings
@@ -58,8 +64,8 @@ class FakeCustomerPrincipalRepository:
                 email=identity.email,
                 account_id=self.account_id,
                 workspace_id=self.workspace_id,
-                role_keys=self.role_keys,  # type: ignore[arg-type]
-                entitlements=self.entitlements,  # type: ignore[arg-type]
+                role_keys=self.role_keys,
+                entitlements=self.entitlements,
             ),
             source="workos_session",
         )
@@ -68,6 +74,58 @@ class FakeCustomerPrincipalRepository:
 class FakeCustomerReportRepository:
     def __init__(self) -> None:
         self.calls: list[dict[str, object]] = []
+        self.detail: CustomerReportDetail | None = CustomerReportDetail(
+            summary=self._summary(),
+            analysis={
+                "id": "00000000-0000-0000-0000-000000000501",
+                "analysis_run_id": "00000000-0000-0000-0000-000000000701",
+                "analysis_id": "milk-aug-2026",
+                "collection_run_id": "00000000-0000-0000-0000-000000000601",
+                "status": "succeeded",
+                "reporting_status": "ready",
+                "product_pack_id": "fluid_milk",
+                "product_pack_version": "1.4.0",
+                "schema_version": "2.0.0",
+                "checksum": "a" * 64,
+                "result": {"schema_version": "2.0.0", "analysis_id": "milk-aug-2026"},
+                "created_at": datetime(2026, 8, 20, 12, 0, tzinfo=UTC),
+            },
+        )
+
+    def _summary(self) -> CustomerReportSummary:
+        return CustomerReportSummary(
+            access_id="00000000-0000-0000-0000-000000000401",
+            analysis_id="milk-aug-2026",
+            analysis_result_id="00000000-0000-0000-0000-000000000501",
+            collection_run_id="00000000-0000-0000-0000-000000000601",
+            product_pack_id="fluid_milk",
+            product_pack_version="1.4.0",
+            reporting_status="ready",
+            schema_version="2.0.0",
+            checksum="a" * 64,
+            title="Milk price intelligence",
+            category="Milk",
+            retailer_count=4,
+            created_at=datetime(2026, 8, 20, 12, 0, tzinfo=UTC),
+            granted_at=datetime(2026, 9, 14, 9, 0, tzinfo=UTC),
+        )
+
+    def _admin_grant(self, *, status: str = "active") -> AdminCustomerReportGrant:
+        return AdminCustomerReportGrant(
+            access_id="00000000-0000-0000-0000-000000000401",
+            account_id="00000000-0000-0000-0000-000000000101",
+            account_slug="ghretail",
+            account_display_name="GHRetail",
+            workspace_id="00000000-0000-0000-0000-000000000201",
+            workspace_slug="pricing",
+            workspace_display_name="Pricing",
+            analysis_id="milk-aug-2026",
+            analysis_result_id="00000000-0000-0000-0000-000000000501",
+            title="Milk price intelligence",
+            category="Milk",
+            status=status,
+            granted_at=datetime(2026, 9, 14, 9, 0, tzinfo=UTC),
+        )
 
     async def list_reports(
         self,
@@ -83,24 +141,62 @@ class FakeCustomerReportRepository:
                 "limit": limit,
             }
         )
-        return [
-            CustomerReportSummary(
-                access_id="00000000-0000-0000-0000-000000000401",
-                analysis_id="milk-aug-2026",
-                analysis_result_id="00000000-0000-0000-0000-000000000501",
-                collection_run_id="00000000-0000-0000-0000-000000000601",
-                product_pack_id="fluid_milk",
-                product_pack_version="1.4.0",
-                reporting_status="ready",
-                schema_version="2.0.0",
-                checksum="a" * 64,
-                title="Milk price intelligence",
-                category="Milk",
-                retailer_count=4,
-                created_at=datetime(2026, 8, 20, 12, 0, tzinfo=UTC),
-                granted_at=datetime(2026, 9, 14, 9, 0, tzinfo=UTC),
-            )
-        ]
+        return [self._summary()]
+
+    async def get_report(
+        self,
+        *,
+        access_id: str,
+        account_id: str,
+        workspace_id: str | None,
+    ) -> CustomerReportDetail | None:
+        self.calls.append(
+            {
+                "access_id": access_id,
+                "account_id": account_id,
+                "workspace_id": workspace_id,
+            }
+        )
+        return self.detail
+
+    async def admin_snapshot(self, *, limit: int) -> dict[str, list[object]]:
+        self.calls.append({"admin_snapshot_limit": limit})
+        return {
+            "grants": [self._admin_grant()],
+            "grantable_reports": [
+                AdminGrantableReport(
+                    analysis_id="milk-aug-2026",
+                    analysis_result_id="00000000-0000-0000-0000-000000000501",
+                    title="Milk price intelligence",
+                    category="Milk",
+                    product_pack_id="fluid_milk",
+                    product_pack_version="1.4.0",
+                    created_at=datetime(2026, 8, 20, 12, 0, tzinfo=UTC),
+                )
+            ],
+        }
+
+    async def admin_grant_report(
+        self,
+        *,
+        account_key: str,
+        workspace_key: str | None,
+        analysis_result_id: str,
+        granted_by: str,
+    ) -> AdminCustomerReportGrant:
+        self.calls.append(
+            {
+                "account_key": account_key,
+                "workspace_key": workspace_key,
+                "analysis_result_id": analysis_result_id,
+                "granted_by": granted_by,
+            }
+        )
+        return self._admin_grant()
+
+    async def admin_revoke_report(self, *, access_id: str) -> AdminCustomerReportGrant | None:
+        self.calls.append({"revoke_access_id": access_id})
+        return self._admin_grant(status="revoked")
 
 
 def _test_app(
@@ -122,6 +218,7 @@ def _test_app(
     )
     app.state.customer_report_repository = reports
     app.include_router(customer_identity_router)
+    app.include_router(customer_report_admin_router)
     app.include_router(customer_report_router)
     return app, reports
 
@@ -254,3 +351,115 @@ async def test_customer_report_list_supports_non_production_header_harness(
             "limit": 50,
         }
     ]
+
+
+async def test_customer_report_detail_requires_active_grant() -> None:
+    app, reports = _test_app()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        response = await client.get("/api/v1/customer/reports/00000000-0000-0000-0000-000000000401")
+
+    assert response.status_code == 200
+    assert reports.calls == [
+        {
+            "access_id": "00000000-0000-0000-0000-000000000401",
+            "account_id": "00000000-0000-0000-0000-000000000101",
+            "workspace_id": "00000000-0000-0000-0000-000000000201",
+        }
+    ]
+    payload = response.json()
+    assert payload["schema_version"] == "1.0.0-customer-report-detail"
+    assert payload["report"]["title"] == "Milk price intelligence"
+    assert payload["analysis"]["analysis_id"] == "milk-aug-2026"
+
+
+async def test_customer_report_detail_hides_missing_or_ungranted_report() -> None:
+    reports = FakeCustomerReportRepository()
+    reports.detail = None
+    app, reports = _test_app(report_repository=reports)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        response = await client.get("/api/v1/customer/reports/00000000-0000-0000-0000-000000000499")
+
+    assert response.status_code == 404
+    assert response.json() == {"detail": "A granted, ready customer report was not found."}
+
+
+async def test_admin_customer_report_access_snapshot_requires_admin_token() -> None:
+    app, reports = _test_app()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/v1/admin/customer-report-access")
+
+    assert response.status_code == 401
+    assert reports.calls == []
+
+
+async def test_admin_customer_report_access_snapshot_lists_grants_and_reports(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PRODUCT_PACK_ADMIN_TOKEN", "secret")
+    app, reports = _test_app()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get(
+            "/api/v1/admin/customer-report-access?limit=20",
+            headers={"X-RCI-Admin-Token": "secret"},
+        )
+
+    assert response.status_code == 200
+    assert reports.calls == [{"admin_snapshot_limit": 20}]
+    payload = response.json()
+    assert payload["schema_version"] == "1.0.0-admin-customer-report-access"
+    assert payload["grants"][0]["account_slug"] == "ghretail"
+    assert payload["grantable_reports"][0]["analysis_result_id"] == (
+        "00000000-0000-0000-0000-000000000501"
+    )
+
+
+async def test_admin_customer_report_access_grants_ready_report(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PRODUCT_PACK_ADMIN_TOKEN", "secret")
+    app, reports = _test_app()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/admin/customer-report-access",
+            headers={"X-RCI-Admin-Token": "secret"},
+            json={
+                "account": "ghretail",
+                "workspace": "pricing",
+                "analysis_result_id": "00000000-0000-0000-0000-000000000501",
+            },
+        )
+
+    assert response.status_code == 200
+    assert reports.calls == [
+        {
+            "account_key": "ghretail",
+            "workspace_key": "pricing",
+            "analysis_result_id": "00000000-0000-0000-0000-000000000501",
+            "granted_by": None,
+        }
+    ]
+    assert response.json()["status"] == "active"
+
+
+async def test_admin_customer_report_access_revokes_without_deleting(
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("PRODUCT_PACK_ADMIN_TOKEN", "secret")
+    app, reports = _test_app()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.delete(
+            "/api/v1/admin/customer-report-access/00000000-0000-0000-0000-000000000401",
+            headers={"X-RCI-Admin-Token": "secret"},
+        )
+
+    assert response.status_code == 200
+    assert reports.calls == [{"revoke_access_id": "00000000-0000-0000-0000-000000000401"}]
+    assert response.json()["status"] == "revoked"

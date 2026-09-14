@@ -1,0 +1,230 @@
+.workspace {
+  display: grid;
+  gap: 1rem;
+  padding-top: 1.8rem;
+}
+
+.hero,
+.panel,
+.grid article {
+  background:
+    radial-gradient(
+      circle at top left,
+      color-mix(in srgb, var(--green) 12%, transparent),
+      transparent 22rem
+    ),
+    var(--card);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  box-shadow: var(--shadow);
+}
+
+.hero {
+  align-items: stretch;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) minmax(16rem, 24rem);
+  padding: clamp(1.25rem, 3vw, 2rem);
+}
+
+.hero h1 {
+  font-size: clamp(2rem, 5vw, 3.8rem);
+  letter-spacing: -0.075em;
+  line-height: 0.95;
+  margin: 0.25rem 0 0.8rem;
+}
+
+.hero p {
+  color: var(--muted);
+  line-height: 1.55;
+  margin: 0 0 1rem;
+  max-width: 64rem;
+}
+
+.identityCard {
+  align-content: end;
+  background: color-mix(in srgb, var(--surface-alt) 76%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.identityCard span,
+.grid span,
+.metricGrid span,
+.sectionList span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.identityCard strong {
+  color: var(--ink);
+  font-size: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.identityCard small {
+  color: var(--green);
+  font-size: 0.78rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.grid,
+.metricGrid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.grid article,
+.metricGrid article {
+  display: grid;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.grid strong,
+.metricGrid strong {
+  color: var(--ink);
+  font-size: clamp(1.15rem, 2vw, 1.65rem);
+  letter-spacing: -0.055em;
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+
+.grid small {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.panel {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.panel header {
+  align-items: start;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+}
+
+.panel h2 {
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  letter-spacing: -0.06em;
+  margin: 0.25rem 0 0;
+}
+
+.sectionList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.sectionList article {
+  align-items: start;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) auto;
+  padding: 1rem;
+}
+
+.sectionList article > div {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.sectionList strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.sectionList small,
+.emptyState p {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.emptyState {
+  background: color-mix(in srgb, var(--surface-alt) 70%, transparent);
+  border: 1px dashed var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 0.45rem;
+  padding: 1rem;
+}
+
+.emptyState strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.emptyState p {
+  margin: 0;
+}
+
+.auditGrid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+}
+
+.auditGrid div {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.auditGrid dt {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.auditGrid dd {
+  color: var(--ink);
+  font-size: 0.86rem;
+  font-weight: 800;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1180px) {
+  .grid,
+  .metricGrid,
+  .auditGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .hero,
+  .grid,
+  .metricGrid,
+  .sectionList article,
+  .auditGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .panel header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
