@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.159",
+  version: "1.3.160",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2984,6 +2984,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification pending",
+              "Admin top-bar session state clarified.",
+              "Administrator workspaces now replace the customer-login Sign in link with an Admin protected indicator when no customer session exists, making it clear that admin access is governed by the page-level administrator session. Customer login behavior outside administrator routes is unchanged. This does not change customer login, administrator authentication, identity-provider configuration, roles, entitlements, account data, report access, reports, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification pending",
