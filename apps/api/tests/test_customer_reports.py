@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, status
 from httpx import ASGITransport, AsyncClient
 from pytest import MonkeyPatch
 
+from rci_api.analyses import get_analysis_service
 from rci_api.customer_identity import router as customer_identity_router
 from rci_api.customer_principals import CustomerPrincipalResolution
 from rci_api.customer_reports import (
@@ -182,7 +183,7 @@ class FakeCustomerReportRepository:
         account_key: str,
         workspace_key: str | None,
         analysis_result_id: str,
-        granted_by: str,
+        granted_by: str | None,
     ) -> AdminCustomerReportGrant:
         self.calls.append(
             {
@@ -199,10 +200,36 @@ class FakeCustomerReportRepository:
         return self._admin_grant(status="revoked")
 
 
+class FakeAnalysisService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, str]] = []
+
+    async def report_view(self, analysis_id: str) -> dict[str, object]:
+        self.calls.append({"report_view": analysis_id})
+        return {
+            "analysis_id": analysis_id,
+            "generated_at": "2026-09-14T00:00:00Z",
+            "sections": [],
+        }
+
+    async def quality(self, analysis_id: str) -> dict[str, object]:
+        self.calls.append({"quality": analysis_id})
+        return {"analysis_id": analysis_id, "status": "passed"}
+
+    async def product_evidence(self, analysis_id: str, decision_id: str) -> dict[str, object]:
+        self.calls.append({"product_evidence": f"{analysis_id}:{decision_id}"})
+        return {
+            "analysis_id": analysis_id,
+            "decision_id": decision_id,
+            "rows": [],
+        }
+
+
 def _test_app(
     *,
     principal_repository: FakeCustomerPrincipalRepository | None = None,
     report_repository: FakeCustomerReportRepository | None = None,
+    analysis_service: FakeAnalysisService | None = None,
 ) -> tuple[FastAPI, FakeCustomerReportRepository]:
     app = FastAPI()
     app.state.settings = AppSettings(
@@ -217,6 +244,9 @@ def _test_app(
         principal_repository or FakeCustomerPrincipalRepository()
     )
     app.state.customer_report_repository = reports
+    app.dependency_overrides[get_analysis_service] = lambda: (
+        analysis_service or FakeAnalysisService()
+    )
     app.include_router(customer_identity_router)
     app.include_router(customer_report_admin_router)
     app.include_router(customer_report_router)
@@ -385,6 +415,92 @@ async def test_customer_report_detail_hides_missing_or_ungranted_report() -> Non
 
     assert response.status_code == 404
     assert response.json() == {"detail": "A granted, ready customer report was not found."}
+
+
+async def test_customer_report_view_uses_grant_before_report_service() -> None:
+    analysis_service = FakeAnalysisService()
+    app, reports = _test_app(analysis_service=analysis_service)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        response = await client.get(
+            "/api/v1/customer/reports/00000000-0000-0000-0000-000000000401/report"
+        )
+
+    assert response.status_code == 200
+    assert reports.calls == [
+        {
+            "access_id": "00000000-0000-0000-0000-000000000401",
+            "account_id": "00000000-0000-0000-0000-000000000101",
+            "workspace_id": "00000000-0000-0000-0000-000000000201",
+        }
+    ]
+    assert analysis_service.calls == [{"report_view": "milk-aug-2026"}]
+    payload = response.json()
+    assert payload["schema_version"] == "1.0.0-customer-report-view"
+    assert payload["report"]["title"] == "Milk price intelligence"
+    assert payload["view"]["analysis_id"] == "milk-aug-2026"
+
+
+async def test_customer_report_quality_uses_grant_before_quality_service() -> None:
+    analysis_service = FakeAnalysisService()
+    app, _reports = _test_app(analysis_service=analysis_service)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        response = await client.get(
+            "/api/v1/customer/reports/00000000-0000-0000-0000-000000000401/quality"
+        )
+
+    assert response.status_code == 200
+    assert analysis_service.calls == [{"quality": "milk-aug-2026"}]
+    assert response.json()["quality"] == {
+        "analysis_id": "milk-aug-2026",
+        "status": "passed",
+    }
+
+
+async def test_customer_report_evidence_uses_grant_before_evidence_service() -> None:
+    analysis_service = FakeAnalysisService()
+    app, _reports = _test_app(analysis_service=analysis_service)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        response = await client.get(
+            "/api/v1/customer/reports/00000000-0000-0000-0000-000000000401"
+            "/product-decisions/decision-123/evidence"
+        )
+
+    assert response.status_code == 200
+    assert analysis_service.calls == [{"product_evidence": "milk-aug-2026:decision-123"}]
+    assert response.json() == {
+        "analysis_id": "milk-aug-2026",
+        "decision_id": "decision-123",
+        "rows": [],
+    }
+
+
+async def test_customer_report_view_does_not_call_report_service_without_grant() -> None:
+    reports = FakeCustomerReportRepository()
+    reports.detail = None
+    analysis_service = FakeAnalysisService()
+    app, reports = _test_app(report_repository=reports, analysis_service=analysis_service)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        response = await client.get(
+            "/api/v1/customer/reports/00000000-0000-0000-0000-000000000499/report"
+        )
+
+    assert response.status_code == 404
+    assert reports.calls == [
+        {
+            "access_id": "00000000-0000-0000-0000-000000000499",
+            "account_id": "00000000-0000-0000-0000-000000000101",
+            "workspace_id": "00000000-0000-0000-0000-000000000201",
+        }
+    ]
+    assert analysis_service.calls == []
 
 
 async def test_admin_customer_report_access_snapshot_requires_admin_token() -> None:

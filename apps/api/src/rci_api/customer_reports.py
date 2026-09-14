@@ -20,11 +20,13 @@ from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.types import Integer, String
 
+from rci_api.analyses import AnalysisServiceDependency
 from rci_api.customer_access import (
     current_customer_access_principal,
     enforce_customer_access,
 )
 from rci_core import AccessPrincipal
+from rci_results.service import AnalysisNotFoundError, ProductEvidenceNotFoundError
 
 router = APIRouter(prefix="/api/v1/customer", tags=["customer-reports"])
 admin_router = APIRouter(prefix="/api/v1/admin/customer-report-access", tags=["admin"])
@@ -725,6 +727,21 @@ class CustomerReportDetailResponse(BaseModel):
     analysis: dict[str, Any]
 
 
+class CustomerReportViewResponse(BaseModel):
+    schema_version: str = "1.0.0-customer-report-view"
+    scope: dict[str, str | None]
+    report: CustomerReportSummaryResponse
+    analysis: dict[str, Any]
+    view: dict[str, Any]
+
+
+class CustomerReportQualityResponse(BaseModel):
+    schema_version: str = "1.0.0-customer-report-quality"
+    scope: dict[str, str | None]
+    report: CustomerReportSummaryResponse
+    quality: dict[str, Any]
+
+
 class AdminCustomerReportGrantResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -781,6 +798,35 @@ def _require_customer_report_admin(
         )
 
 
+async def _authorized_customer_report_detail(
+    *,
+    access_id: str,
+    principal: AccessPrincipal,
+    repository: CustomerReportRepository,
+) -> CustomerReportDetail:
+    enforce_customer_access(
+        principal,
+        permission="analytics.view",
+        entitlement="app_analytics",
+    )
+    if principal.account_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Customer account access is required for this resource.",
+        )
+    detail = await repository.get_report(
+        access_id=access_id,
+        account_id=principal.account_id,
+        workspace_id=principal.workspace_id,
+    )
+    if detail is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="A granted, ready customer report was not found.",
+        )
+    return detail
+
+
 @router.get("/reports", response_model=CustomerReportListResponse)
 async def list_customer_reports(
     principal: CustomerPrincipalDependency,
@@ -819,26 +865,11 @@ async def get_customer_report(
     principal: CustomerPrincipalDependency,
     repository: CustomerReportRepositoryDependency,
 ) -> CustomerReportDetailResponse:
-    enforce_customer_access(
-        principal,
-        permission="analytics.view",
-        entitlement="app_analytics",
-    )
-    if principal.account_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Customer account access is required for this resource.",
-        )
-    detail = await repository.get_report(
+    detail = await _authorized_customer_report_detail(
         access_id=access_id,
-        account_id=principal.account_id,
-        workspace_id=principal.workspace_id,
+        principal=principal,
+        repository=repository,
     )
-    if detail is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="A granted, ready customer report was not found.",
-        )
     return CustomerReportDetailResponse(
         scope={
             "account_id": principal.account_id,
@@ -847,6 +878,82 @@ async def get_customer_report(
         report=CustomerReportSummaryResponse.model_validate(detail.summary),
         analysis=detail.analysis,
     )
+
+
+@router.get("/reports/{access_id}/report", response_model=CustomerReportViewResponse)
+async def get_customer_report_view(
+    access_id: str,
+    principal: CustomerPrincipalDependency,
+    repository: CustomerReportRepositoryDependency,
+    service: AnalysisServiceDependency,
+) -> CustomerReportViewResponse:
+    detail = await _authorized_customer_report_detail(
+        access_id=access_id,
+        principal=principal,
+        repository=repository,
+    )
+    try:
+        view = await service.report_view(detail.summary.analysis_id)
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return CustomerReportViewResponse(
+        scope={
+            "account_id": principal.account_id,
+            "workspace_id": principal.workspace_id,
+        },
+        report=CustomerReportSummaryResponse.model_validate(detail.summary),
+        analysis=detail.analysis,
+        view=view,
+    )
+
+
+@router.get("/reports/{access_id}/quality", response_model=CustomerReportQualityResponse)
+async def get_customer_report_quality(
+    access_id: str,
+    principal: CustomerPrincipalDependency,
+    repository: CustomerReportRepositoryDependency,
+    service: AnalysisServiceDependency,
+) -> CustomerReportQualityResponse:
+    detail = await _authorized_customer_report_detail(
+        access_id=access_id,
+        principal=principal,
+        repository=repository,
+    )
+    try:
+        quality = await service.quality(detail.summary.analysis_id)
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return CustomerReportQualityResponse(
+        scope={
+            "account_id": principal.account_id,
+            "workspace_id": principal.workspace_id,
+        },
+        report=CustomerReportSummaryResponse.model_validate(detail.summary),
+        quality=quality,
+    )
+
+
+@router.get("/reports/{access_id}/product-decisions/{decision_id}/evidence")
+async def get_customer_product_decision_evidence(
+    access_id: str,
+    decision_id: str,
+    principal: CustomerPrincipalDependency,
+    repository: CustomerReportRepositoryDependency,
+    service: AnalysisServiceDependency,
+) -> dict[str, Any]:
+    detail = await _authorized_customer_report_detail(
+        access_id=access_id,
+        principal=principal,
+        repository=repository,
+    )
+    try:
+        return await service.product_evidence(detail.summary.analysis_id, decision_id)
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ProductEvidenceNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
 @admin_router.get("", response_model=AdminCustomerReportAccessSnapshotResponse)

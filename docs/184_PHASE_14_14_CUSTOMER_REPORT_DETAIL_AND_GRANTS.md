@@ -42,4 +42,4 @@ The local gate must include:
 
 ## Next recommended step
 
-Choose one customer report module at a time and replace its legacy/global data calls with customer-gated endpoints. The highest-value first targets are customer-safe canonical report dataset, evidence CSV, product footprint/state coverage, and price-monitoring map endpoints because those power the richest report interactions.
+Phase 14.15 starts with the read-only report-view, quality, product evidence, and canonical dataset routes because those power the richest customer report interactions without enabling customer write/recompute operations.
