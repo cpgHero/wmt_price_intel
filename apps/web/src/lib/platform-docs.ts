@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.151",
+  version: "1.3.152",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2984,6 +2984,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification passed; CI verification pending",
+              "Customer-gated report data endpoints added.",
+              "Granted customer reports now have read-only downstream data routes keyed by /api/v1/customer/reports/{access_id}: report view, quality, and product-decision evidence. The web app adds same-origin /api/customer/reports/{accessId} equivalents, including a customer-safe canonical report dataset builder that uses the granted report view instead of global /api/analyses/{analysisId} URLs. Each route still requires customer authentication, analytics.view permission, app_analytics entitlement, account scope, workspace scope, active grant, ready reporting status, and a non-archived report before data-service calls run. This does not expose admin recompute/write routes, global analysis URLs, internal match or brand workbench mutations, customer API keys, billing workflows, collection requests, source-provider calls, PDP calls, AI calls, PDFs, proximity metrics, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification passed; CI verification pending",
