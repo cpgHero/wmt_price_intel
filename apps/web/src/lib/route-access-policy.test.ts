@@ -9,6 +9,7 @@ import {
 
 describe("routeAccessDecision", () => {
   it("keeps auth, webhook, health, and framework assets public", () => {
+    expect(routeAccessDecision("/")).toEqual({ kind: "public" });
     expect(routeAccessDecision("/api/auth/login")).toEqual({ kind: "public" });
     expect(routeAccessDecision("/api/auth/callback")).toEqual({
       kind: "public",
@@ -48,7 +49,6 @@ describe("routeAccessDecision", () => {
 
   it("requires a customer session for app pages and app analytics", () => {
     for (const path of [
-      "/",
       "/customer",
       "/customer/reports/report-access-1",
       "/proximity",

@@ -34,6 +34,171 @@
   color: var(--ink);
 }
 
+.public-home {
+  background:
+    radial-gradient(
+      circle at 12% 8%,
+      color-mix(in srgb, var(--lime) 18%, transparent),
+      transparent 28rem
+    ),
+    radial-gradient(
+      circle at 86% 18%,
+      color-mix(in srgb, var(--green) 20%, transparent),
+      transparent 30rem
+    ),
+    linear-gradient(135deg, #071115 0%, #0d1a21 52%, #101014 100%);
+  color: #eef8fb;
+  min-height: 100vh;
+  overflow: hidden;
+  padding: clamp(1rem, 2.4vw, 2rem);
+  position: relative;
+}
+.public-home::after {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 56px 56px;
+  content: "";
+  inset: 0;
+  mask-image: linear-gradient(to bottom, black, transparent 76%);
+  opacity: 0.32;
+  pointer-events: none;
+  position: absolute;
+}
+.public-home > * {
+  position: relative;
+  z-index: 1;
+}
+.public-home__nav {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin: 0 auto;
+  max-width: 1180px;
+}
+.public-home__nav > div,
+.public-home__brand {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+}
+.public-home__brand {
+  color: #eef8fb;
+  text-decoration: none;
+}
+.public-home__brand > span {
+  align-items: center;
+  background: linear-gradient(135deg, var(--green), var(--lime));
+  border-radius: 0.9rem;
+  color: white;
+  display: inline-flex;
+  font-weight: 900;
+  height: 2.35rem;
+  justify-content: center;
+  width: 2.35rem;
+}
+.public-home__brand strong {
+  font-size: 1.08rem;
+  letter-spacing: -0.04em;
+}
+.public-home__brand strong span {
+  color: var(--lime);
+}
+.public-home__hero {
+  display: grid;
+  gap: 1.2rem;
+  margin: 12vh auto 0;
+  max-width: 980px;
+  text-align: center;
+}
+.public-home__hero h1 {
+  font-size: clamp(3rem, 8vw, 6.8rem);
+  letter-spacing: -0.085em;
+  line-height: 0.86;
+  margin: 0;
+}
+.public-home__hero p:not(.eyebrow) {
+  color: rgba(238, 248, 251, 0.74);
+  font-size: clamp(1rem, 2vw, 1.28rem);
+  line-height: 1.55;
+  margin: 0 auto;
+  max-width: 760px;
+}
+.public-home__hero .button-row {
+  justify-content: center;
+}
+.public-home .button.secondary {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #eef8fb;
+}
+.public-home__grid,
+.public-home__trust {
+  margin: clamp(2rem, 7vw, 5.5rem) auto 0;
+  max-width: 1180px;
+}
+.public-home__grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.public-home__grid article,
+.public-home__trust {
+  background: rgba(12, 28, 36, 0.72);
+  border: 1px solid rgba(148, 178, 190, 0.22);
+  border-radius: 1.35rem;
+  box-shadow: 0 1.5rem 4rem rgba(0, 0, 0, 0.24);
+}
+.public-home__grid article {
+  padding: 1.35rem;
+}
+.public-home__grid span {
+  color: var(--lime);
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+}
+.public-home__grid h2,
+.public-home__trust h2 {
+  letter-spacing: -0.045em;
+  margin: 0.45rem 0 0.5rem;
+}
+.public-home__grid p,
+.public-home__trust li {
+  color: rgba(238, 248, 251, 0.68);
+  line-height: 1.5;
+}
+.public-home__trust {
+  align-items: center;
+  display: grid;
+  gap: 2rem;
+  grid-template-columns: 1fr 1fr;
+  padding: 1.5rem;
+}
+.public-home__trust ul {
+  display: grid;
+  gap: 0.6rem;
+  margin: 0;
+}
+
+@media (max-width: 780px) {
+  .public-home {
+    overflow: auto;
+  }
+  .public-home__nav {
+    align-items: flex-start;
+    gap: 1rem;
+  }
+  .public-home__nav > div {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .public-home__grid,
+  .public-home__trust {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* Price monitoring: retailer-within-location intelligence */
 .price-monitoring-index,
 .price-monitoring-page {

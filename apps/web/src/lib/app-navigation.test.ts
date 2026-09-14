@@ -20,7 +20,6 @@ describe("application navigation", () => {
     ];
 
     expect(hrefs).toEqual([
-      "/",
       "/customer",
       "/price-intelligence",
       "/analyses",
@@ -40,14 +39,18 @@ describe("application navigation", () => {
     expect(hrefs).not.toContain("/intelligence/price");
   });
 
-  it("keeps the dashboard exact and activates nested workspaces by prefix", () => {
+  it("keeps the customer workspace as in-app home and activates nested workspaces by prefix", () => {
     const dashboard = homeNavigationItem;
     const competitive = applicationNavigation[0].items.find(
       (item) => item.href === "/analyses",
     );
     if (!competitive) throw new Error("Expected /analyses navigation item");
 
-    expect(navigationItemIsActive("/", dashboard)).toBe(true);
+    expect(navigationItemIsActive("/customer", dashboard)).toBe(true);
+    expect(
+      navigationItemIsActive("/customer/reports/access-1", dashboard),
+    ).toBe(true);
+    expect(navigationItemIsActive("/", dashboard)).toBe(false);
     expect(navigationItemIsActive("/collections", dashboard)).toBe(false);
     expect(navigationItemIsActive("/analyses", competitive)).toBe(true);
     expect(navigationItemIsActive("/analyses/analysis-123", competitive)).toBe(
@@ -118,7 +121,6 @@ describe("application navigation", () => {
     ];
 
     expect(hrefs).toEqual([
-      "/",
       "/customer",
       "/analyses",
       "/proximity",

@@ -51,10 +51,12 @@ def callback(
         )
     flow_cookie = request.cookies.get(FLOW_COOKIE_NAME)
     if not flow_cookie:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Customer authentication flow is missing or expired.",
+        response = RedirectResponse(
+            url="/api/auth/login?return_to=/customer&auth_restart=missing_flow",
+            status_code=status.HTTP_303_SEE_OTHER,
         )
+        response.delete_cookie(FLOW_COOKIE_NAME, path="/")
+        return response
     authenticator = _customer_authenticator(request)
     completed = authenticator.complete_login(
         code=code,
