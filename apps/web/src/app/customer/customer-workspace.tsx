@@ -354,7 +354,12 @@ export function CustomerWorkspace() {
                     Granted {new Date(report.granted_at).toLocaleDateString()}
                   </small>
                 </div>
-                <span className={styles.pendingAction}>Detail route next</span>
+                <Link
+                  className={styles.reportAction}
+                  href={`/customer/reports/${encodeURIComponent(report.access_id)}`}
+                >
+                  Open report
+                </Link>
               </article>
             ))}
           </div>

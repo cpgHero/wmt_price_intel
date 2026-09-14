@@ -23,6 +23,7 @@ from rci_api.customer_provisioning import (
 from rci_api.customer_provisioning import (
     webhook_router as customer_identity_webhook_router,
 )
+from rci_api.customer_reports import admin_router as customer_report_admin_router
 from rci_api.customer_reports import router as customer_report_router
 from rci_api.locations import router as location_router
 from rci_api.matching_v2 import router as matching_v2_router
@@ -81,6 +82,7 @@ def create_app(settings: AppSettings | None = None) -> FastAPI:
     app.include_router(customer_identity_router)
     app.include_router(customer_provisioning_router)
     app.include_router(customer_identity_webhook_router)
+    app.include_router(customer_report_admin_router)
     app.include_router(customer_report_router)
     app.include_router(location_router)
     app.include_router(matching_v2_router)

@@ -75,6 +75,45 @@ test("shows durable report progress and trust audit evidence", async ({
       }),
     });
   });
+  await page.route(
+    "**/api/admin/customer-report-access?limit=100",
+    async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        body: JSON.stringify({
+          schema_version: "1.0.0-admin-customer-report-access",
+          grants: [
+            {
+              access_id: "grant-1",
+              account_id: "account-1",
+              account_slug: "ghretail",
+              account_display_name: "GHRetail",
+              workspace_id: null,
+              workspace_slug: null,
+              workspace_display_name: null,
+              analysis_id: "fresh_shell_eggs-certified",
+              analysis_result_id: "result-1",
+              title: "Egg price intelligence",
+              category: "Eggs",
+              status: "active",
+              granted_at: "2026-09-14T12:00:00Z",
+            },
+          ],
+          grantable_reports: [
+            {
+              analysis_id: "fresh_shell_eggs-certified",
+              analysis_result_id: "result-1",
+              title: "Egg price intelligence",
+              category: "Eggs",
+              product_pack_id: "fresh_shell_eggs",
+              product_pack_version: "2.0.0",
+              created_at: "2026-09-14T10:00:00Z",
+            },
+          ],
+        }),
+      });
+    },
+  );
 
   await page.goto("/admin/report-publishing");
   await expect(
@@ -89,4 +128,10 @@ test("shows durable report progress and trust audit evidence", async ({
   await page.getByText("Trust audit · passed").click();
   await expect(page.getByText("0 blocking errors")).toBeVisible();
   await expect(page.getByText("6 competitive views")).toBeVisible();
+  await expect(
+    page.getByText("Grant reports to customer accounts"),
+  ).toBeVisible();
+  await expect(
+    page.locator("td strong").filter({ hasText: /^GHRetail$/ }),
+  ).toBeVisible();
 });

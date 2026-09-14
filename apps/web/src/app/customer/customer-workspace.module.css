@@ -269,7 +269,8 @@
   text-align: right;
 }
 
-.pendingAction {
+.pendingAction,
+.reportAction {
   background: color-mix(in srgb, var(--surface) 82%, transparent);
   border: 1px solid var(--line);
   border-radius: 999px;
@@ -280,6 +281,15 @@
   padding: 0.5rem 0.7rem;
   text-transform: none !important;
   white-space: nowrap;
+}
+
+.reportAction {
+  color: var(--green) !important;
+  text-decoration: none;
+}
+
+.reportAction:hover {
+  border-color: color-mix(in srgb, var(--green) 44%, var(--line));
 }
 
 @media (max-width: 1180px) {
