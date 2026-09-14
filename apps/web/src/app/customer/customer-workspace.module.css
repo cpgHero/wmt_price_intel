@@ -194,6 +194,94 @@
   margin-top: 0.8rem;
 }
 
+.emptyState {
+  background: color-mix(in srgb, var(--surface-alt) 70%, transparent);
+  border: 1px dashed var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 0.45rem;
+  padding: 1rem;
+}
+
+.emptyState strong {
+  color: var(--ink);
+  font-size: 0.95rem;
+}
+
+.emptyState p,
+.scopeNote {
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.scopeNote code {
+  background: color-mix(in srgb, var(--green) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--green) 24%, var(--line));
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 0.76rem;
+  padding: 0.18rem 0.38rem;
+}
+
+.reportList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.reportList article {
+  align-items: center;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  padding: 1rem;
+}
+
+.reportList article > div {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.reportList span {
+  color: var(--green);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.reportList strong {
+  color: var(--ink);
+  font-size: 1rem;
+}
+
+.reportList small {
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.reportMeta {
+  min-width: 9rem;
+  text-align: right;
+}
+
+.pendingAction {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted) !important;
+  font-size: 0.72rem !important;
+  font-weight: 800;
+  letter-spacing: 0 !important;
+  padding: 0.5rem 0.7rem;
+  text-transform: none !important;
+  white-space: nowrap;
+}
+
 @media (max-width: 1180px) {
   .grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -203,8 +291,13 @@
 @media (max-width: 760px) {
   .hero,
   .grid,
-  .permissionGrid {
+  .permissionGrid,
+  .reportList article {
     grid-template-columns: 1fr;
+  }
+
+  .reportMeta {
+    text-align: left;
   }
 
   .panel header {

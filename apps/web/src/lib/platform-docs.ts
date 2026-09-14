@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.149",
+  version: "1.3.150",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2984,6 +2984,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification passed; CI verification pending",
+              "Tenant-safe customer report listing added.",
+              "Migration 0057 adds explicit customer_report_access grants that bind an analysis result to a CPGHero account and optional workspace. The API adds a customer-owned /api/v1/customer/reports listing route that requires customer authentication, analytics.view permission, app_analytics entitlement, and the resolved account/workspace scope before returning any rows. The web /customer workspace now loads this scoped list through a same-origin customer proxy and shows an honest empty state when no reports have been deliberately granted. Existing global report-library and report-detail routes are not exposed through this customer listing; report detail remains future work until its data service can enforce the same grant and scope predicates. This does not broaden the canary allowlist, issue customer API keys, add billing workflows, change reports, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification passed; CI verification pending",
