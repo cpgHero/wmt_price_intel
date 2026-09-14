@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.156",
+  version: "1.3.157",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2984,6 +2984,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification passed; CI verification pending",
+              "Customer report access management UX added.",
+              "The Pipeline Status administration page now gives operators an account/workspace-oriented report access workspace: access summary cards, account and workspace scope rollups, ready-report search before granting, grant ledger search, active/revoked/all filters, direct customer-view links for active grants, and two-step soft-revoke confirmation. The workflow continues to use the existing admin-protected customer report access API and keeps grants keyed by access id. This does not add customer self-service administration, broaden account roles, change WorkOS authentication, expose source-provider credentials, issue customer API keys, alter report calculations, matching, price normalization, evidence, PDFs, proximity metrics, collection requests, PDP calls, AI calls, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Merged and deployed",

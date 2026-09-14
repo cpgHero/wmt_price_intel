@@ -62,21 +62,96 @@
   margin: 0;
   max-width: 760px;
 }
+.accessMetricGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.accessMetricGrid article {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+}
+.accessMetricGrid span,
+.subsectionHeader span,
+.grantForm label,
+.ledgerToolbar label {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.accessMetricGrid strong {
+  color: var(--ink);
+  font-size: 1.7rem;
+  line-height: 1;
+}
+.accessMetricGrid p,
+.summaryCard p,
+.muted {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin: 0;
+}
+.accessSummaryGrid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.accessSummaryGrid > section {
+  background: color-mix(in srgb, var(--surface-alt) 78%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+}
+.subsectionHeader {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.subsectionHeader h3 {
+  font-size: 0.95rem;
+  margin: 0;
+}
+.summaryCards {
+  display: grid;
+  gap: 8px;
+}
+.summaryCard {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+}
+.summaryCard strong {
+  overflow-wrap: anywhere;
+}
+.summaryCard span {
+  color: var(--muted);
+  font-size: 0.76rem;
+  overflow-wrap: anywhere;
+}
 .grantForm {
   align-items: end;
   display: grid;
   gap: 12px;
   grid-template-columns:
-    minmax(160px, 0.9fr) minmax(160px, 0.9fr) minmax(260px, 1.4fr)
-    auto;
+    minmax(140px, 0.8fr) minmax(140px, 0.8fr) minmax(190px, 1fr)
+    minmax(260px, 1.4fr) auto;
 }
 .grantForm label {
-  color: var(--muted);
   display: grid;
-  font-size: 0.76rem;
-  font-weight: 800;
   gap: 6px;
 }
+.ledgerToolbar input,
 .grantForm input,
 .grantForm select {
   background: var(--surface-alt);
@@ -85,6 +160,44 @@
   color: var(--ink);
   min-height: 42px;
   padding: 0 12px;
+}
+.grantLedger {
+  display: grid;
+  gap: 12px;
+}
+.ledgerToolbar {
+  align-items: end;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+.ledgerToolbar label {
+  display: grid;
+  flex: 1;
+  gap: 6px;
+  max-width: 520px;
+}
+.segmentedControl {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+}
+.segmentedControl button {
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--muted);
+  cursor: pointer;
+  font-weight: 800;
+  padding: 8px 12px;
+  text-transform: capitalize;
+}
+.segmentedControl button[aria-pressed="true"] {
+  background: rgba(32, 167, 104, 0.18);
+  color: var(--ink);
 }
 .grantTableWrap {
   border: 1px solid var(--line);
@@ -124,6 +237,36 @@
   font-size: 0.72rem;
   margin-top: 3px;
   overflow-wrap: anywhere;
+}
+.grantStatus {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.68rem;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  padding: 5px 8px;
+  text-transform: uppercase;
+}
+.grantStatus.active {
+  background: rgba(32, 167, 104, 0.16);
+  color: #46d995;
+}
+.grantStatus.revoked {
+  background: rgba(116, 128, 150, 0.18);
+  color: var(--muted);
+}
+.inlineLink {
+  color: var(--green);
+  font-weight: 800;
+  text-decoration: none;
+}
+.inlineLink:hover {
+  text-decoration: underline;
+}
+.tableEmpty {
+  color: var(--muted);
+  padding: 18px;
+  text-align: center;
 }
 .jobs {
   display: grid;
@@ -289,12 +432,19 @@
 
 @media (max-width: 760px) {
   .statusPanel,
+  .accessMetricGrid,
+  .accessSummaryGrid,
   .grantForm {
     grid-template-columns: 1fr;
   }
 
-  .customerAccessPanel header {
+  .customerAccessPanel header,
+  .ledgerToolbar {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .ledgerToolbar label {
+    max-width: none;
   }
 }
