@@ -15,6 +15,7 @@ import { activeNavigationItem } from "@/lib/app-navigation";
 
 import { useApplicationContext } from "./application-context";
 import { ContextControlBar } from "./context-control-bar";
+import { CustomerAccountMenu } from "./customer-account-menu";
 import { PrimaryNavigation } from "./primary-navigation";
 import { ThemeToggle } from "./theme-toggle";
 import styles from "./app-shell.module.css";
@@ -248,6 +249,7 @@ export function AppShell({
             {contextActions ? (
               <div className={styles.pageActionsSlot}>{contextActions}</div>
             ) : null}
+            <CustomerAccountMenu />
             <span className={styles.statusPill}>
               <span className={styles.liveDot} aria-hidden="true" />
               Live

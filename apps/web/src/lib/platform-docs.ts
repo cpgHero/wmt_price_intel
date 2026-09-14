@@ -2987,6 +2987,12 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "2026-09-14",
               "Local verification passed; CI verification pending",
+              "Customer workspace shell added for auth canary users.",
+              "The web app now has a customer-facing /customer workspace backed by /api/auth/me, a My Workspace navigation item, and a top-bar customer session control that shows sign-in for anonymous users or the resolved customer email and primary role for signed-in users. The page displays CPGHero-resolved account, workspace, role, permission, and entitlement state so canary users have an explicit landing surface. This does not broaden the canary allowlist, disable the canary, issue customer API keys, add billing/account-admin workflows, enforce tenant scope on every existing report or collection route, change reports, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
+            [
+              "2026-09-14",
+              "Local verification passed; CI verification pending",
               "Customer-auth canary guardrails and readiness cockpit added.",
               "WorkOS customer login now has a fail-closed canary gate that requires an explicit allowed email or domain before a successful callback can seal a CPGHero customer session. The API exposes a protected owner-admin readiness endpoint with login/provider state, canary configuration, go/no-go blockers, invitation readiness, and recent signed identity webhook processing. The web app adds an Administration > Customer Auth page for that cockpit and renders CPGHero-branded controlled-rollout pages for browser auth failures instead of raw JSON. This does not enable production customer login, disable the canary, change WorkOS credentials, add SSO/SCIM, issue customer API keys, modify reports, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
             ],
