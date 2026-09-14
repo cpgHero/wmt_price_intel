@@ -47,6 +47,21 @@ const publicAvailabilityRoutes = [
       "../app/api/analyses/[analysisId]/product-decisions/[decisionId]/evidence/route.ts",
     ],
   },
+  {
+    paths: [
+      "../app/api/customer/reports/[accessId]/price-monitoring/map/route.ts",
+    ],
+  },
+  {
+    paths: [
+      "../app/api/customer/reports/[accessId]/price-monitoring/state-coverage/route.ts",
+    ],
+  },
+  {
+    paths: [
+      "../app/api/customer/reports/[accessId]/price-monitoring/evidence.csv/route.ts",
+    ],
+  },
 ];
 
 const publicAvailabilityClients = [

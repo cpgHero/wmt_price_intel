@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, status
 from httpx import ASGITransport, AsyncClient
@@ -17,6 +18,7 @@ from rci_api.customer_reports import (
 )
 from rci_api.customer_reports import admin_router as customer_report_admin_router
 from rci_api.customer_reports import router as customer_report_router
+from rci_api.price_monitoring import get_price_monitoring_service
 from rci_api.workos_auth import SESSION_COOKIE_NAME, WorkOSSessionIdentity
 from rci_core import AccessPrincipal, AppSettings
 
@@ -225,11 +227,60 @@ class FakeAnalysisService:
         }
 
 
+class FakePriceMonitoringService:
+    def __init__(self) -> None:
+        self.calls: list[dict[str, object]] = []
+
+    async def map_view(
+        self,
+        analysis_id: str,
+        filters: Any,
+        *,
+        detail: str,
+    ) -> dict[str, object]:
+        self.calls.append(
+            {
+                "map_view": analysis_id,
+                "retailer_id": filters.retailer_id,
+                "product_id": filters.product_id,
+                "detail": detail,
+            }
+        )
+        return {
+            "analysis_id": analysis_id,
+            "display": {"distribution_store_count": 2, "not_observed_locations": 1},
+            "points": [],
+        }
+
+    async def state_coverage(
+        self,
+        analysis_id: str,
+        products: list[dict[str, str]],
+    ) -> dict[str, object]:
+        self.calls.append({"state_coverage": analysis_id, "products": products})
+        return {
+            "analysis_id": analysis_id,
+            "products": products,
+            "state_options": [{"state": "CA", "product_count": 1}],
+        }
+
+    async def evidence_csv(self, analysis_id: str, filters: Any) -> str:
+        self.calls.append(
+            {
+                "evidence_csv": analysis_id,
+                "retailer_id": filters.retailer_id,
+                "product_id": filters.product_id,
+            }
+        )
+        return "retailer_id,product_id\nwalmart,123\n"
+
+
 def _test_app(
     *,
     principal_repository: FakeCustomerPrincipalRepository | None = None,
     report_repository: FakeCustomerReportRepository | None = None,
     analysis_service: FakeAnalysisService | None = None,
+    price_monitoring_service: FakePriceMonitoringService | None = None,
 ) -> tuple[FastAPI, FakeCustomerReportRepository]:
     app = FastAPI()
     app.state.settings = AppSettings(
@@ -246,6 +297,9 @@ def _test_app(
     app.state.customer_report_repository = reports
     app.dependency_overrides[get_analysis_service] = lambda: (
         analysis_service or FakeAnalysisService()
+    )
+    app.dependency_overrides[get_price_monitoring_service] = lambda: (
+        price_monitoring_service or FakePriceMonitoringService()
     )
     app.include_router(customer_identity_router)
     app.include_router(customer_report_admin_router)
@@ -501,6 +555,105 @@ async def test_customer_report_view_does_not_call_report_service_without_grant()
         }
     ]
     assert analysis_service.calls == []
+
+
+async def test_customer_report_map_uses_grant_before_price_service() -> None:
+    price_service = FakePriceMonitoringService()
+    app, reports = _test_app(price_monitoring_service=price_service)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        response = await client.get(
+            "/api/v1/customer/reports/00000000-0000-0000-0000-000000000401"
+            "/price-monitoring/map?retailer=walmart&product_id=123&detail=summary"
+        )
+
+    assert response.status_code == 200
+    assert reports.calls == [
+        {
+            "access_id": "00000000-0000-0000-0000-000000000401",
+            "account_id": "00000000-0000-0000-0000-000000000101",
+            "workspace_id": "00000000-0000-0000-0000-000000000201",
+        }
+    ]
+    assert price_service.calls == [
+        {
+            "map_view": "milk-aug-2026",
+            "retailer_id": "walmart",
+            "product_id": "123",
+            "detail": "summary",
+        }
+    ]
+    assert response.json()["display"]["distribution_store_count"] == 2
+
+
+async def test_customer_report_state_coverage_uses_grant_before_price_service() -> None:
+    price_service = FakePriceMonitoringService()
+    app, _reports = _test_app(price_monitoring_service=price_service)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        response = await client.post(
+            "/api/v1/customer/reports/00000000-0000-0000-0000-000000000401"
+            "/price-monitoring/state-coverage",
+            json={"products": [{"retailer_id": "walmart", "product_id": "123"}]},
+        )
+
+    assert response.status_code == 200
+    assert price_service.calls == [
+        {
+            "state_coverage": "milk-aug-2026",
+            "products": [{"retailer_id": "walmart", "product_id": "123"}],
+        }
+    ]
+    assert response.json()["state_options"] == [{"state": "CA", "product_count": 1}]
+
+
+async def test_customer_report_evidence_csv_uses_grant_before_price_service() -> None:
+    price_service = FakePriceMonitoringService()
+    app, _reports = _test_app(price_monitoring_service=price_service)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        response = await client.get(
+            "/api/v1/customer/reports/00000000-0000-0000-0000-000000000401"
+            "/price-monitoring/evidence.csv?retailer=walmart&product_id=123"
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "text/csv; charset=utf-8"
+    assert response.text == "retailer_id,product_id\nwalmart,123\n"
+    assert price_service.calls == [
+        {
+            "evidence_csv": "milk-aug-2026",
+            "retailer_id": "walmart",
+            "product_id": "123",
+        }
+    ]
+
+
+async def test_customer_report_map_does_not_call_price_service_without_grant() -> None:
+    reports = FakeCustomerReportRepository()
+    reports.detail = None
+    price_service = FakePriceMonitoringService()
+    app, reports = _test_app(report_repository=reports, price_monitoring_service=price_service)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        response = await client.get(
+            "/api/v1/customer/reports/00000000-0000-0000-0000-000000000499"
+            "/price-monitoring/map?retailer=walmart&product_id=123"
+        )
+
+    assert response.status_code == 404
+    assert reports.calls == [
+        {
+            "access_id": "00000000-0000-0000-0000-000000000499",
+            "account_id": "00000000-0000-0000-0000-000000000101",
+            "workspace_id": "00000000-0000-0000-0000-000000000201",
+        }
+    ]
+    assert price_service.calls == []
 
 
 async def test_admin_customer_report_access_snapshot_requires_admin_token() -> None:
