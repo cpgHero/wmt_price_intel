@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.148",
+  version: "1.3.149",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2984,6 +2984,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification passed; CI verification pending",
+              "Customer access enforcement seam added.",
+              "The API now has a reusable protected-route dependency that resolves the current CPGHero customer principal from the existing customer session and an explicit fail-closed helper for permission, entitlement, account, and workspace scope checks. This gives future report, project, Live API, export, and proximity routes one consistent authorization seam before tenant-scoped data is exposed. It does not broadly convert existing report, collection, proximity, admin, or source-provider routes; does not broaden the customer-auth canary; does not issue customer API keys; does not add billing workflows; and does not change reports, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification passed; CI verification pending",

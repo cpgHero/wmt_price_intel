@@ -1,10 +1,16 @@
 from __future__ import annotations
 
+from typing import Annotated
+
 import pytest
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 from pytest import MonkeyPatch
 
+from rci_api.customer_access import (
+    current_customer_access_principal,
+    enforce_customer_access,
+)
 from rci_api.customer_auth import router as customer_auth_router
 from rci_api.customer_identity import router as customer_identity_router
 from rci_api.customer_principals import CustomerPrincipalResolution
@@ -33,6 +39,30 @@ def _test_app(
     )
     app.include_router(customer_auth_router)
     app.include_router(customer_identity_router)
+
+    @app.get("/api/v1/customer/protected-workspace")
+    async def protected_workspace(
+        principal: Annotated[
+            AccessPrincipal,
+            Depends(current_customer_access_principal),
+        ],
+        account_id: str = "00000000-0000-0000-0000-000000000101",
+        workspace_id: str = "00000000-0000-0000-0000-000000000201",
+    ) -> dict[str, object]:
+        enforce_customer_access(
+            principal,
+            permission="analytics.view",
+            entitlement="analytics.proximity",
+            account_id=account_id,
+            workspace_id=workspace_id,
+        )
+        return {
+            "account_id": principal.account_id,
+            "workspace_id": principal.workspace_id,
+            "permissions": sorted(principal.permissions),
+            "entitlements": sorted(principal.entitlements),
+        }
+
     return app
 
 
@@ -326,3 +356,122 @@ async def test_customer_auth_logout_clears_customer_session_cookie() -> None:
     assert response.status_code == 303
     assert response.headers["location"] == "https://auth.workos.test/logout?return_to=/"
     assert f"{SESSION_COOKIE_NAME}=" in response.headers["set-cookie"]
+
+
+async def test_customer_access_dependency_allows_scoped_workos_principal() -> None:
+    app = _test_app(provider="workos", app_env="production")
+    app.state.customer_session_authenticator = FakeCustomerSessionAuthenticator()
+    app.state.customer_principal_repository = FakeCustomerPrincipalRepository()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        response = await client.get("/api/v1/customer/protected-workspace")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "account_id": "00000000-0000-0000-0000-000000000101",
+        "workspace_id": "00000000-0000-0000-0000-000000000201",
+        "permissions": [
+            "analytics.share",
+            "analytics.view",
+            "api_keys.manage",
+            "exports.download",
+            "projects.approve_paid_run",
+            "projects.create",
+            "projects.manage",
+            "users.manage",
+        ],
+        "entitlements": ["analytics.proximity", "app_analytics"],
+    }
+
+
+async def test_customer_access_dependency_denies_wrong_account_and_workspace() -> None:
+    app = _test_app(provider="workos", app_env="production")
+    app.state.customer_session_authenticator = FakeCustomerSessionAuthenticator()
+    app.state.customer_principal_repository = FakeCustomerPrincipalRepository()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        wrong_account = await client.get(
+            "/api/v1/customer/protected-workspace",
+            params={"account_id": "00000000-0000-0000-0000-000000000999"},
+        )
+        wrong_workspace = await client.get(
+            "/api/v1/customer/protected-workspace",
+            params={"workspace_id": "00000000-0000-0000-0000-000000000999"},
+        )
+
+    assert wrong_account.status_code == 403
+    assert wrong_account.json() == {
+        "detail": "Customer account access is required for this resource."
+    }
+    assert wrong_workspace.status_code == 403
+    assert wrong_workspace.json() == {
+        "detail": "Customer workspace access is required for this resource."
+    }
+
+
+async def test_customer_access_dependency_denies_missing_entitlement() -> None:
+    class NoProximityEntitlementRepository(FakeCustomerPrincipalRepository):
+        async def resolve_workos_identity(
+            self,
+            identity: WorkOSSessionIdentity,
+        ) -> CustomerPrincipalResolution:
+            resolution = await super().resolve_workos_identity(identity)
+            return CustomerPrincipalResolution(
+                principal=AccessPrincipal(
+                    user_id=resolution.principal.user_id,
+                    email=resolution.principal.email,
+                    account_id=resolution.principal.account_id,
+                    workspace_id=resolution.principal.workspace_id,
+                    role_keys=resolution.principal.role_keys,
+                    entitlements=frozenset({"app_analytics"}),
+                ),
+                source=resolution.source,
+                workos_session_id=resolution.workos_session_id,
+                workos_organization_id=resolution.workos_organization_id,
+            )
+
+    app = _test_app(provider="workos", app_env="production")
+    app.state.customer_session_authenticator = FakeCustomerSessionAuthenticator()
+    app.state.customer_principal_repository = NoProximityEntitlementRepository()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        response = await client.get("/api/v1/customer/protected-workspace")
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Customer entitlement is required for this resource."}
+
+
+async def test_customer_access_dependency_denies_missing_permission() -> None:
+    class NoAnalyticsPermissionRepository(FakeCustomerPrincipalRepository):
+        async def resolve_workos_identity(
+            self,
+            identity: WorkOSSessionIdentity,
+        ) -> CustomerPrincipalResolution:
+            resolution = await super().resolve_workos_identity(identity)
+            return CustomerPrincipalResolution(
+                principal=AccessPrincipal(
+                    user_id=resolution.principal.user_id,
+                    email=resolution.principal.email,
+                    account_id=resolution.principal.account_id,
+                    workspace_id=resolution.principal.workspace_id,
+                    role_keys=frozenset({"billing_user"}),
+                    entitlements=resolution.principal.entitlements,
+                ),
+                source=resolution.source,
+                workos_session_id=resolution.workos_session_id,
+                workos_organization_id=resolution.workos_organization_id,
+            )
+
+    app = _test_app(provider="workos", app_env="production")
+    app.state.customer_session_authenticator = FakeCustomerSessionAuthenticator()
+    app.state.customer_principal_repository = NoAnalyticsPermissionRepository()
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        client.cookies.set(SESSION_COOKIE_NAME, "sealed-session")
+        response = await client.get("/api/v1/customer/protected-workspace")
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Customer permission is required for this resource."}

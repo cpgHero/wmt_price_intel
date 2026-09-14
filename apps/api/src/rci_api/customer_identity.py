@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Header, Request, Response
+from fastapi import APIRouter, Depends, Header, Request, Response
 
 from rci_api.access import require_customer_principal
 from rci_api.customer_principals import (
@@ -88,8 +88,7 @@ async def _resolve_workos_customer_principal(
     return await repository.resolve_workos_identity(identity)
 
 
-@router.get("/me")
-async def current_customer_principal(
+async def resolve_current_customer_principal(
     request: Request,
     response: Response,
     x_cpghero_test_user_id: Annotated[
@@ -116,13 +115,17 @@ async def current_customer_principal(
         str | None,
         Header(alias="X-CPGHero-Test-Entitlements"),
     ] = None,
-) -> dict[str, object]:
+) -> CustomerPrincipalResolution:
+    """Resolve the current CPGHero customer principal for protected routes."""
+
     settings = request.app.state.settings
     if settings.customer_identity_provider == "workos":
         resolution = await _resolve_workos_customer_principal(request, response)
-        return _serialize_principal(
-            resolution.principal,
+        return CustomerPrincipalResolution(
+            principal=resolution.principal,
             source="customer_session",
+            workos_session_id=resolution.workos_session_id,
+            workos_organization_id=resolution.workos_organization_id,
         )
 
     principal = require_customer_principal(
@@ -134,7 +137,20 @@ async def current_customer_principal(
         test_roles=x_cpghero_test_roles,
         test_entitlements=x_cpghero_test_entitlements,
     )
-    return _serialize_principal(
-        principal,
+    return CustomerPrincipalResolution(
+        principal=principal,
         source="non_production_test_harness",
+    )
+
+
+@router.get("/me")
+async def current_customer_principal(
+    resolution: Annotated[
+        CustomerPrincipalResolution,
+        Depends(resolve_current_customer_principal),
+    ],
+) -> dict[str, object]:
+    return _serialize_principal(
+        resolution.principal,
+        source=resolution.source,
     )
