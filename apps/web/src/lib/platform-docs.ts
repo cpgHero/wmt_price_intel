@@ -88,7 +88,7 @@ const proximityLastVerified = "September 13, 2026";
 const visibilityBoundaryLastVerified = "September 13, 2026";
 const accountAccessLastVerified = "September 13, 2026";
 const principalEnforcementLastVerified = "September 13, 2026";
-const customerAuthLastVerified = "September 13, 2026";
+const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
@@ -2983,6 +2983,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification passed; CI verification pending",
+              "WorkOS identity webhook event processing hardened.",
+              "The signed WorkOS webhook receiver now casts nullable invitation/email lookup parameters for the production Postgres driver path and extracts event-type-specific WorkOS user versus invitation identifiers. This repairs the first customer-invitation user.created delivery path without enabling production customer login. Railway production still leaves CPGHERO_CUSTOMER_AUTH_PROVIDER disabled until explicit cutover. CPGHero remains the authorization source of truth for membership, roles, permissions, entitlements, projects, report access, Live API usage limits, and billing. No customer entitlements, reports, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts changed.",
+            ],
             [
               "2026-09-13",
               "Local verification passed; CI verification pending",

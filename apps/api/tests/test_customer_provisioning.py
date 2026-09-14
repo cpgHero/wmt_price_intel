@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 from httpx import ASGITransport, AsyncClient
 
 from rci_api.customer_provisioning import (
+    PostgresCustomerProvisioningRepository,
     PrepareCustomerAccountRequest,
     PrepareCustomerAccountResponse,
     WebhookProcessingResult,
+    _workos_invitation_id_for_event,
+    _workos_user_id_for_event,
 )
 from rci_api.main import create_app
 from rci_core import AccessPrincipal, AppSettings
@@ -148,6 +152,39 @@ async def test_prepare_customer_account_rejects_system_roles() -> None:
     assert response.status_code == 422
     assert "system roles cannot be assigned to customer accounts" in response.text
     assert repository.prepared is None
+
+
+def test_workos_webhook_extracts_event_type_specific_ids() -> None:
+    user_created = {
+        "id": "user_01M2EPG44YNPCPXBCJE28NR019",
+        "email": "admin@acme.example",
+    }
+    invitation_accepted = {
+        "id": "invitation_01M2EPG46YZ3XA1VD342MAFDG6",
+        "email": "admin@acme.example",
+        "user_id": "user_01M2EPG44YNPCPXBCJE28NR019",
+    }
+
+    assert _workos_user_id_for_event("user.created", user_created) == (
+        "user_01M2EPG44YNPCPXBCJE28NR019"
+    )
+    assert _workos_invitation_id_for_event("user.created", user_created) is None
+    assert _workos_user_id_for_event("invitation.accepted", invitation_accepted) == (
+        "user_01M2EPG44YNPCPXBCJE28NR019"
+    )
+    assert _workos_invitation_id_for_event("invitation.accepted", invitation_accepted) == (
+        "invitation_01M2EPG46YZ3XA1VD342MAFDG6"
+    )
+
+
+def test_postgres_invitation_lookup_casts_nullable_text_parameters() -> None:
+    source = inspect.getsource(PostgresCustomerProvisioningRepository._find_invitation)
+
+    assert "CAST(:workos_invitation_id AS text) IS NOT NULL" in source
+    assert "invitation.workos_invitation_id =" in source
+    assert "CAST(:workos_invitation_id AS text)" in source
+    assert "CAST(:email AS text) IS NOT NULL" in source
+    assert "invitation.email = CAST(:email AS text)" in source
 
 
 async def test_workos_webhook_requires_configured_secret(monkeypatch: Any) -> None:

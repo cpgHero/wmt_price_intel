@@ -97,6 +97,31 @@ def _nested_string_field(container: dict[str, Any], *paths: tuple[str, ...]) -> 
     return None
 
 
+def _workos_user_id_for_event(event_type: str, data: dict[str, Any]) -> str | None:
+    explicit_user_id = _string_field(data, "user_id") or _nested_string_field(data, ("user", "id"))
+    if explicit_user_id:
+        return explicit_user_id
+    data_id = _string_field(data, "id")
+    if event_type in {"user.created", "user.updated"} and data_id and data_id.startswith("user_"):
+        return data_id
+    return None
+
+
+def _workos_invitation_id_for_event(event_type: str, data: dict[str, Any]) -> str | None:
+    explicit_invitation_id = _string_field(data, "invitation_id") or _nested_string_field(
+        data,
+        ("invitation", "id"),
+    )
+    if explicit_invitation_id:
+        return explicit_invitation_id
+    data_id = _string_field(data, "id")
+    if event_type.startswith("invitation.") and data_id:
+        return data_id
+    if data_id and data_id.startswith("invitation_"):
+        return data_id
+    return None
+
+
 class PrepareCustomerAccountRequest(BaseModel):
     account_display_name: str = Field(min_length=2, max_length=160)
     admin_email: str = Field(min_length=3, max_length=320)
@@ -840,15 +865,12 @@ class PostgresCustomerProvisioningRepository:
             )
         data = _event_data(payload)
         email = _string_field(data, "email") or _nested_string_field(data, ("user", "email"))
-        workos_user_id = _string_field(data, "user_id") or _nested_string_field(
-            data,
-            ("user", "id"),
-        )
         workos_organization_id = _string_field(data, "organization_id") or _nested_string_field(
             data,
             ("organization", "id"),
         )
-        workos_invitation_id = _string_field(data, "id", "invitation_id")
+        workos_user_id = _workos_user_id_for_event(event_type, data)
+        workos_invitation_id = _workos_invitation_id_for_event(event_type, data)
         async with self._engine.begin() as connection:
             inserted = (
                 (
@@ -1053,12 +1075,13 @@ class PostgresCustomerProvisioningRepository:
                           ON membership.account_id = invitation.account_id
                          AND membership.user_id = invitation.user_id
                         WHERE (
-                            :workos_invitation_id IS NOT NULL
-                            AND invitation.workos_invitation_id = :workos_invitation_id
+                            CAST(:workos_invitation_id AS text) IS NOT NULL
+                            AND invitation.workos_invitation_id =
+                              CAST(:workos_invitation_id AS text)
                           )
                           OR (
-                            :email IS NOT NULL
-                            AND invitation.email = :email
+                            CAST(:email AS text) IS NOT NULL
+                            AND invitation.email = CAST(:email AS text)
                             AND invitation.status IN ('prepared','sent')
                           )
                         ORDER BY invitation.created_at ASC, invitation.id ASC
