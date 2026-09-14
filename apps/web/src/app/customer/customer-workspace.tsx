@@ -23,11 +23,46 @@ interface CustomerPrincipalResponse {
   };
 }
 
+interface CustomerReport {
+  access_id: string;
+  analysis_id: string;
+  analysis_result_id: string;
+  category: string | null;
+  checksum: string;
+  collection_run_id: string | null;
+  created_at: string;
+  granted_at: string;
+  product_pack_id: string | null;
+  product_pack_version: string | null;
+  reporting_status: string;
+  retailer_count: number | null;
+  schema_version: string;
+  title: string;
+}
+
+interface CustomerReportListResponse {
+  reports: CustomerReport[];
+  schema_version: string;
+  scope: {
+    account_id: string | null;
+    workspace_id: string | null;
+  };
+}
+
+type ReportLoadState =
+  | { status: "loading" }
+  | { data: CustomerReportListResponse; status: "ready" }
+  | { message: string; status: "error" };
+
 type LoadState =
   | { status: "loading" }
   | { status: "anonymous" }
   | { message: string; status: "error" }
-  | { data: CustomerPrincipalResponse; status: "ready" };
+  | {
+      data: CustomerPrincipalResponse;
+      reports: ReportLoadState;
+      status: "ready";
+    };
 
 function label(value: string): string {
   return value
@@ -60,7 +95,7 @@ export function CustomerWorkspace() {
 
   useEffect(() => {
     let cancelled = false;
-    async function loadPrincipal() {
+    async function loadCustomerWorkspace() {
       try {
         const response = await fetch("/api/auth/me", {
           cache: "no-store",
@@ -84,7 +119,34 @@ export function CustomerWorkspace() {
           });
           return;
         }
-        setState({ status: "ready", data: payload });
+        setState({
+          status: "ready",
+          data: payload,
+          reports: { status: "loading" },
+        });
+        const reportsResponse = await fetch("/api/customer/reports?limit=25", {
+          cache: "no-store",
+          credentials: "include",
+          headers: { accept: "application/json" },
+        });
+        if (cancelled) return;
+        const reportPayload = (await reportsResponse.json()) as
+          CustomerReportListResponse | { error?: string; detail?: string };
+        setState({
+          status: "ready",
+          data: payload,
+          reports:
+            reportsResponse.ok && "reports" in reportPayload
+              ? { status: "ready", data: reportPayload }
+              : {
+                  status: "error",
+                  message:
+                    "detail" in reportPayload &&
+                    typeof reportPayload.detail === "string"
+                      ? reportPayload.detail
+                      : "Granted reports are temporarily unavailable.",
+                },
+        });
       } catch {
         if (!cancelled) {
           setState({
@@ -94,7 +156,7 @@ export function CustomerWorkspace() {
         }
       }
     }
-    loadPrincipal();
+    loadCustomerWorkspace();
     return () => {
       cancelled = true;
     };
@@ -150,6 +212,7 @@ export function CustomerWorkspace() {
   }
 
   const { principal } = state.data;
+  const { reports } = state;
   const hasAnalytics = principal.permissions.includes("analytics.view");
   const hasExports = principal.permissions.includes("exports.download");
   const hasProjects = principal.permissions.includes("projects.create");
@@ -247,6 +310,69 @@ export function CustomerWorkspace() {
             ))}
           </div>
         </details>
+      </section>
+
+      <section className={styles.panel}>
+        <header>
+          <div>
+            <span className="section-kicker">Granted report access</span>
+            <h2>Your reports</h2>
+          </div>
+        </header>
+        {reports.status === "loading" ? (
+          <div className="builder-loading">Loading granted reports…</div>
+        ) : reports.status === "error" ? (
+          <div className={styles.emptyState}>
+            <strong>Report access could not be loaded.</strong>
+            <p>{reports.message}</p>
+          </div>
+        ) : reports.data.reports.length === 0 ? (
+          <div className={styles.emptyState}>
+            <strong>No customer reports have been granted yet.</strong>
+            <p>
+              This is expected for a fresh canary account. Existing global
+              internal reports are not shown here until a CPGHero administrator
+              explicitly grants them to this account or workspace.
+            </p>
+          </div>
+        ) : (
+          <div className={styles.reportList}>
+            {reports.data.reports.map((report) => (
+              <article key={report.access_id}>
+                <div>
+                  <span>{report.category ?? "Report"}</span>
+                  <strong>{report.title}</strong>
+                  <small>
+                    {report.product_pack_id
+                      ? `${label(report.product_pack_id)} ${report.product_pack_version ?? ""}`
+                      : report.schema_version}
+                  </small>
+                </div>
+                <div className={styles.reportMeta}>
+                  <span>{label(report.reporting_status)}</span>
+                  <small>
+                    Granted {new Date(report.granted_at).toLocaleDateString()}
+                  </small>
+                </div>
+                <span className={styles.pendingAction}>Detail route next</span>
+              </article>
+            ))}
+          </div>
+        )}
+        <p className={styles.scopeNote}>
+          Scope checked by the API: account{" "}
+          <code>
+            {reports.status === "ready"
+              ? reports.data.scope.account_id
+              : principal.account_id}
+          </code>{" "}
+          · workspace{" "}
+          <code>
+            {reports.status === "ready"
+              ? (reports.data.scope.workspace_id ?? "account-level")
+              : (principal.workspace_id ?? "account-level")}
+          </code>
+        </p>
       </section>
     </main>
   );

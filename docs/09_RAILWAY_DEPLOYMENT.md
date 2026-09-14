@@ -257,7 +257,7 @@ MetricsCart uses query-parameter authentication.
    the raw signed payload to the internal API receiver. Add `WORKOS_WEBHOOK_SECRET` only after the
    real WorkOS webhook endpoint exists; do not invent or pre-seed a placeholder webhook secret.
 5. Deploy `api`. Its pre-deploy log must show Alembic at the repository's single current migration
-   head (System Operations currently expects `0056_customer_auth_provisioning`); then verify
+   head (System Operations currently expects `0057_customer_report_access`); then verify
    `/health/live` and `/health/ready` inside Railway.
 6. Run the idempotent location import once in the API image:
    `rci-locations --source fixtures/location_master/locations.csv`. Confirm the expected Walmart and

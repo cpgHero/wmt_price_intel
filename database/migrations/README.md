@@ -104,3 +104,11 @@ authorization to WorkOS. It adds provider-neutral external identity mappings fro
 organization subjects to CPGHero accounts and WorkOS user subjects to CPGHero app users. CPGHero
 memberships, roles, entitlements, projects, usage ledgers, billing rules, and report access remain
 the authorization source of truth.
+`0056_customer_auth_provisioning` adds prepared customer-account invitations and signed identity
+webhook audit records. WorkOS invitations can activate only matching prepared CPGHero invitations,
+then bind the authenticated identity back to CPGHero-owned account, workspace, membership, role,
+and entitlement rows.
+`0057_customer_report_access` adds explicit customer report-access grants. A grant binds an
+AnalysisResult to one CPGHero account and, optionally, one workspace. Customer-facing report
+listing must read from this grant table rather than inferring access from legacy organization-level
+report rows.
