@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from fastapi import FastAPI
+import pytest
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 from pytest import MonkeyPatch
 
@@ -10,6 +11,7 @@ from rci_api.customer_principals import CustomerPrincipalResolution
 from rci_api.workos_auth import (
     FLOW_COOKIE_NAME,
     SESSION_COOKIE_NAME,
+    WorkOSCustomerSessionAuthenticator,
     WorkOSLoginComplete,
     WorkOSLoginStart,
     WorkOSSessionIdentity,
@@ -202,6 +204,48 @@ class FakeCustomerPrincipalRepository:
             workos_session_id=identity.session_id,
             workos_organization_id=identity.workos_organization_id,
         )
+
+
+class DummyWorkOSClient:
+    pass
+
+
+def _canary_authenticator(
+    *,
+    enabled: bool = True,
+    allowed_emails: tuple[str, ...] = (),
+    allowed_domains: tuple[str, ...] = (),
+) -> WorkOSCustomerSessionAuthenticator:
+    return WorkOSCustomerSessionAuthenticator(
+        client=DummyWorkOSClient(),  # type: ignore[arg-type]
+        redirect_uri="https://web-production-ee2a4.up.railway.app/api/auth/callback",
+        cookie_password="unused-by-canary-unit-test",
+        canary_enabled=enabled,
+        allowed_emails=allowed_emails,
+        allowed_domains=allowed_domains,
+    )
+
+
+def test_workos_canary_allows_approved_email_or_domain() -> None:
+    by_email = _canary_authenticator(allowed_emails=("buyer@example.com",))
+    by_domain = _canary_authenticator(allowed_domains=("cpghero.com",))
+
+    by_email._assert_canary_user_allowed({"email": "Buyer@Example.com"})
+    by_domain._assert_canary_user_allowed({"email": "owner@cpghero.com"})
+
+
+def test_workos_canary_rejects_unapproved_or_unconfigured_users() -> None:
+    with pytest.raises(HTTPException) as unconfigured:
+        _canary_authenticator()._assert_canary_user_allowed({"email": "buyer@example.com"})
+    with pytest.raises(HTTPException) as rejected:
+        _canary_authenticator(
+            allowed_emails=("owner@example.com",),
+        )._assert_canary_user_allowed({"email": "buyer@example.com"})
+
+    assert unconfigured.value.status_code == 503
+    assert "no allowed users or domains" in unconfigured.value.detail
+    assert rejected.value.status_code == 403
+    assert "limited to approved users" in rejected.value.detail
 
 
 async def test_customer_auth_login_sets_flow_cookie_and_redirects_to_workos() -> None:

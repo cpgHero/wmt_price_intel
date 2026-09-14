@@ -148,10 +148,18 @@ class WorkOSCustomerSessionAuthenticator:
         client: WorkOSClient,
         redirect_uri: str,
         cookie_password: str,
+        canary_enabled: bool,
+        allowed_emails: tuple[str, ...],
+        allowed_domains: tuple[str, ...],
     ) -> None:
         self._client = client
         self._redirect_uri = redirect_uri
         self._cookie_password = cookie_password
+        self._canary_enabled = canary_enabled
+        self._allowed_emails = frozenset(email.lower() for email in allowed_emails)
+        self._allowed_domains = frozenset(
+            domain.removeprefix("@").lower() for domain in allowed_domains
+        )
 
     @classmethod
     def from_env(cls, settings: AppSettings) -> WorkOSCustomerSessionAuthenticator:
@@ -167,6 +175,9 @@ class WorkOSCustomerSessionAuthenticator:
             client=WorkOSClient(api_key=api_key, client_id=client_id),
             redirect_uri=redirect_uri,
             cookie_password=_cookie_password(),
+            canary_enabled=settings.customer_auth_canary_enabled,
+            allowed_emails=settings.customer_auth_allowed_emails,
+            allowed_domains=settings.customer_auth_allowed_domains,
         )
 
     def start_login(self, *, return_to: str) -> WorkOSLoginStart:
@@ -207,6 +218,7 @@ class WorkOSCustomerSessionAuthenticator:
         )
         auth_payload = auth_response.to_dict()
         user_payload = cast("dict[str, Any]", auth_payload["user"])
+        self._assert_canary_user_allowed(user_payload)
         sealed_session = seal_session_from_auth_response(
             access_token=auth_response.access_token,
             refresh_token=auth_response.refresh_token,
@@ -327,6 +339,26 @@ class WorkOSCustomerSessionAuthenticator:
             session_id=session_id,
             sealed_session=sealed_session,
             refreshed=refreshed,
+        )
+
+    def _assert_canary_user_allowed(self, user: dict[str, Any]) -> None:
+        if not self._canary_enabled:
+            return
+        email = (_user_value(user, "email") or "").lower()
+        domain = email.rsplit("@", maxsplit=1)[-1] if "@" in email else ""
+        if not self._allowed_emails and not self._allowed_domains:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "CPGHero customer login canary is enabled, but no allowed users or domains "
+                    "are configured."
+                ),
+            )
+        if email in self._allowed_emails or domain in self._allowed_domains:
+            return
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="This CPGHero customer login canary is limited to approved users.",
         )
 
 

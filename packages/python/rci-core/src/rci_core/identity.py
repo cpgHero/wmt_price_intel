@@ -22,6 +22,12 @@ WORKOS_AUTH_ENV_VARS: tuple[str, ...] = (
 
 WORKOS_WEBHOOK_ENV_VARS: tuple[str, ...] = ("WORKOS_WEBHOOK_SECRET",)
 
+WORKOS_CANARY_ENV_VARS: tuple[str, ...] = (
+    "CPGHERO_CUSTOMER_AUTH_CANARY_ENABLED",
+    "CPGHERO_CUSTOMER_AUTH_ALLOWED_EMAILS",
+    "CPGHERO_CUSTOMER_AUTH_ALLOWED_DOMAINS",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class CustomerIdentityProviderConfig:
@@ -35,6 +41,9 @@ class CustomerIdentityProviderConfig:
     provider: IdentityProviderKey = "disabled"
     workos_client_id: str | None = None
     workos_redirect_uri: str | None = None
+    canary_enabled: bool = False
+    allowed_email_count: int = 0
+    allowed_domain_count: int = 0
 
     @property
     def is_enabled(self) -> bool:

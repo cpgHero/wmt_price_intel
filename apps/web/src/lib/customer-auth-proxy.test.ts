@@ -65,6 +65,78 @@ describe("customer auth proxy", () => {
     });
   });
 
+  it("renders browser navigation auth failures as a CPGHero page instead of raw JSON", async () => {
+    vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json(
+        { detail: "Customer authentication is disabled." },
+        { status: 404 },
+      ),
+    );
+
+    const response = await proxyCustomerAuthGet(
+      new Request("https://app.cpghero.com/api/auth/callback?code=abc", {
+        headers: { accept: "text/html,application/xhtml+xml" },
+      }),
+      "/api/auth/callback",
+    );
+
+    expect(response.status).toBe(404);
+    expect(response.headers.get("content-type")).toBe(
+      "text/html; charset=utf-8",
+    );
+    const html = await response.text();
+    expect(html).toContain("CPGHero customer access");
+    expect(html).toContain("Customer authentication is disabled.");
+  });
+
+  it("masks identity-provider names in browser auth failures", async () => {
+    vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json(
+        {
+          detail:
+            "WorkOS authentication response did not include a usable user.",
+        },
+        { status: 401 },
+      ),
+    );
+
+    const response = await proxyCustomerAuthGet(
+      new Request("https://app.cpghero.com/api/auth/callback?code=abc", {
+        headers: { accept: "text/html" },
+      }),
+      "/api/auth/callback",
+    );
+
+    const html = await response.text();
+    expect(html).toContain("CPGHero identity authentication response");
+    expect(html).not.toContain("WorkOS");
+  });
+
+  it("keeps JSON auth failures as JSON for programmatic callers", async () => {
+    vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      Response.json(
+        { detail: "Customer authentication is required." },
+        { status: 401 },
+      ),
+    );
+
+    const response = await proxyCustomerAuthGet(
+      new Request("https://app.cpghero.com/api/auth/me", {
+        headers: { accept: "application/json" },
+      }),
+      "/api/v1/me",
+    );
+
+    expect(response.status).toBe(401);
+    expect(response.headers.get("content-type")).toContain("application/json");
+    expect(await response.json()).toEqual({
+      detail: "Customer authentication is required.",
+    });
+  });
+
   it("forwards the raw WorkOS webhook body and signature to the API", async () => {
     vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
     const fetchMock = vi

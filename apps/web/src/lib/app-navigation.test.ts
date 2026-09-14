@@ -28,6 +28,7 @@ describe("application navigation", () => {
       "/automation",
       "/data-quality",
       "/admin/operations",
+      "/admin/customer-auth",
       "/admin/docs",
       "/admin/matching-v2",
       "/workspace/brands",
@@ -124,6 +125,7 @@ describe("application navigation", () => {
       "/workspace/brands",
       "/admin/studies",
       "/admin/operations",
+      "/admin/customer-auth",
       "/admin/docs",
     ]);
     expect(hrefs).not.toContain("/price-intelligence");

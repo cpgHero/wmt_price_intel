@@ -14,6 +14,9 @@ def test_customer_auth_defaults_to_disabled_without_workos_secrets(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("CPGHERO_CUSTOMER_AUTH_PROVIDER", raising=False)
+    monkeypatch.delenv("CPGHERO_CUSTOMER_AUTH_CANARY_ENABLED", raising=False)
+    monkeypatch.delenv("CPGHERO_CUSTOMER_AUTH_ALLOWED_EMAILS", raising=False)
+    monkeypatch.delenv("CPGHERO_CUSTOMER_AUTH_ALLOWED_DOMAINS", raising=False)
     monkeypatch.delenv("WORKOS_CLIENT_ID", raising=False)
     monkeypatch.delenv("WORKOS_REDIRECT_URI", raising=False)
 
@@ -33,6 +36,10 @@ def test_workos_auth_provider_exposes_only_non_secret_settings(
     monkeypatch.setenv("WORKOS_COOKIE_PASSWORD", "cookie-secret")
     monkeypatch.setenv("WORKOS_REDIRECT_URI", "https://app.cpghero.com/api/auth/callback")
     monkeypatch.setenv("WORKOS_WEBHOOK_SECRET", "whsec_secret")
+    monkeypatch.setenv(
+        "CPGHERO_CUSTOMER_AUTH_ALLOWED_EMAILS", "Owner@Example.com, buyer@example.com"
+    )
+    monkeypatch.setenv("CPGHERO_CUSTOMER_AUTH_ALLOWED_DOMAINS", "@cpghero.com")
 
     config = AppSettings.from_env().customer_auth
 
@@ -40,10 +47,25 @@ def test_workos_auth_provider_exposes_only_non_secret_settings(
     assert config.is_enabled
     assert config.workos_client_id == "client_123"
     assert config.workos_redirect_uri == "https://app.cpghero.com/api/auth/callback"
+    assert config.canary_enabled is True
+    assert config.allowed_email_count == 2
+    assert config.allowed_domain_count == 1
     assert config.required_env_vars == WORKOS_AUTH_ENV_VARS
     assert "sk_test_must_not_serialize" not in repr(config)
     assert "cookie-secret" not in repr(config)
     assert "whsec_secret" not in repr(config)
+
+
+def test_workos_auth_canary_can_be_disabled_for_explicit_cutover(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CPGHERO_CUSTOMER_AUTH_PROVIDER", "workos")
+    monkeypatch.setenv("CPGHERO_CUSTOMER_AUTH_CANARY_ENABLED", "false")
+
+    config = AppSettings.from_env().customer_auth
+
+    assert config.uses_workos
+    assert config.canary_enabled is False
 
 
 def test_unknown_customer_auth_provider_fails_closed(

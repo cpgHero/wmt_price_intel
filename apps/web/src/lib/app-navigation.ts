@@ -101,6 +101,13 @@ export const applicationNavigation: readonly NavigationGroup[] = [
         match: "prefix",
       },
       {
+        label: "Customer Auth",
+        description: "Customer login rollout and identity webhook readiness",
+        href: "/admin/customer-auth",
+        icon: "operations",
+        match: "prefix",
+      },
+      {
         label: "Platform Docs",
         description: "Owner and administrator operating guide",
         href: "/admin/docs",
@@ -232,6 +239,13 @@ export const simplifiedApplicationNavigation: readonly NavigationGroup[] = [
         label: "System Operations",
         description: "Release, queue, spend, and recovery readiness",
         href: "/admin/operations",
+        icon: "operations",
+        match: "prefix",
+      },
+      {
+        label: "Customer Auth",
+        description: "Customer login rollout and identity webhook readiness",
+        href: "/admin/customer-auth",
         icon: "operations",
         match: "prefix",
       },

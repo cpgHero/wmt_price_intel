@@ -1294,6 +1294,7 @@ export const platformDocumentation: PlatformDocumentation = {
             "The account-access foundation now defines CPGHero accounts, workspaces, memberships, roles, permissions, entitlements, and account/workspace audit-event context. Duplicated admin-token checks for core internal admin paths now resolve through a shared CPGHero system AccessPrincipal. Customer login and account/workspace row-level enforcement remain separate follow-up work.",
             "WorkOS AuthKit/User Management is the selected customer authentication provider. The WorkOS application has callback, homepage, login-initiation, and sign-out URLs configured, and Railway stores WorkOS variables for the web and API services with customer auth still disabled. The API now implements login, callback, logout, /api/v1/me, sealed-session verification, and session-to-CPGHero-principal resolution behind the WorkOS provider flag. CPGHero remains the authorization source of truth for account/workspace membership, roles, permissions, entitlements, projects, report access, Live API usage limits, and billing. Enterprise SSO, Directory Sync, and SCIM are not part of the initial rollout.",
             "Migration 0056 adds the owner-only customer provisioning and identity-event audit foundation: prepared invitations, account/workspace user mappings, role and entitlement assignment, and a signed WorkOS webhook receiver that can activate CPGHero membership only after a matching invitation is accepted. The public Next.js route /api/webhooks/workos forwards raw signed WorkOS payloads to the internal API receiver without forwarding customer cookies or authorization headers. Customer-facing responses remain CPGHero-facing and do not expose provider subject IDs.",
+            "Customer-auth canary guardrails now fail closed by default when WorkOS customer login is enabled: an explicit allowlist of customer emails or domains must be configured before any callback can seal a session. A protected Customer Auth admin page exposes readiness, blockers, invitation state, and recent identity webhook processing; it is an internal operations surface only. Browser navigation failures through the customer-auth proxy render a CPGHero-branded controlled-rollout page instead of raw API JSON.",
             "The non-production customer-principal harness is explicit, opt-in, and header-backed for local/API tests only. Production rejects those headers. Live customer sessions are cryptographically validated through WorkOS and then fail closed unless the WorkOS user and organization subjects are provisioned through CPGHero external-identity and membership rows.",
           ],
         },
@@ -1305,7 +1306,7 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "Customer authentication",
               "WorkOS AuthKit",
-              "Login, callback, logout, PKCE flow state, sealed session cookies, session validation, and a same-origin WorkOS webhook ingress route are implemented behind the provider flag; Railway production still leaves customer login disabled until cutover.",
+              "Login, callback, logout, PKCE flow state, sealed session cookies, session validation, same-origin WorkOS webhook ingress, and an explicit canary allowlist are implemented behind the provider flag; Railway production still leaves customer login disabled until cutover.",
             ],
             [
               "Identity mapping",
@@ -1320,7 +1321,7 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "Internal administration",
               "CPGHero",
-              "Protected Product Pack, matching, recovery, and system operations routes continue to use the existing CPGHero admin principal until the admin-auth cutover is separately designed.",
+              "Protected Product Pack, matching, recovery, system operations, and customer-auth readiness routes continue to use the existing CPGHero admin principal until the admin-auth cutover is separately designed.",
             ],
           ],
         },
@@ -1328,7 +1329,7 @@ export const platformDocumentation: PlatformDocumentation = {
           kind: "callout",
           tone: "attention",
           title: "Current access-control limitation",
-          text: "The durable account/RBAC/entitlement foundation exists, WorkOS AuthKit is externally configured, migration 0055 adds external identity mappings, and migration 0056 adds owner-only invitation/provisioning state plus signed identity webhook audit. The API can resolve either a validated non-production test principal or a live WorkOS sealed session into the CPGHero principal model. Railway production still has CPGHERO_CUSTOMER_AUTH_PROVIDER disabled, so customer login is not live. Customer-facing signup/invite screens, customer API keys, account-administration screens, and cross-account enforcement across existing report and collection routes remain future work.",
+          text: "The durable account/RBAC/entitlement foundation exists, WorkOS AuthKit is externally configured, migration 0055 adds external identity mappings, and migration 0056 adds owner-only invitation/provisioning state plus signed identity webhook audit. The API can resolve either a validated non-production test principal or a live WorkOS sealed session into the CPGHero principal model, and WorkOS callbacks fail closed to a canary allowlist whenever the provider is enabled. Railway production still has CPGHERO_CUSTOMER_AUTH_PROVIDER disabled, so customer login is not live. Customer-facing signup/invite screens, customer API keys, account-administration screens, and cross-account enforcement across existing report and collection routes remain future work.",
         },
       ],
     },
@@ -2983,6 +2984,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification passed; CI verification pending",
+              "Customer-auth canary guardrails and readiness cockpit added.",
+              "WorkOS customer login now has a fail-closed canary gate that requires an explicit allowed email or domain before a successful callback can seal a CPGHero customer session. The API exposes a protected owner-admin readiness endpoint with login/provider state, canary configuration, go/no-go blockers, invitation readiness, and recent signed identity webhook processing. The web app adds an Administration > Customer Auth page for that cockpit and renders CPGHero-branded controlled-rollout pages for browser auth failures instead of raw JSON. This does not enable production customer login, disable the canary, change WorkOS credentials, add SSO/SCIM, issue customer API keys, modify reports, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification passed; CI verification pending",
