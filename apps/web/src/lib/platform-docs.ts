@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.152",
+  version: "1.3.153",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2984,6 +2984,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification passed; CI verification pending",
+              "Customer report workspace wired to grant-gated data.",
+              "The customer report detail page now renders the canonical product-level report workspace from /api/customer/reports/{accessId}/report instead of the placeholder report inventory. The canonical workspace accepts a customer access scope so dataset JSON, exact-product map evidence, product state coverage, and evidence CSV reads use /api/customer/reports/{accessId}/... routes while analyst-only /analyses and /price-monitoring workspace links are hidden in customer mode. The API adds customer report grant wrappers for price-monitoring map, state-coverage, and evidence CSV reads; each wrapper checks customer authentication, analytics.view permission, app_analytics entitlement, account scope, workspace scope, active grant, ready reporting status, and non-archived report before calling the read model. This does not expose admin recompute/write routes, global analysis URLs, internal match or brand workbench mutations, customer API keys, billing workflows, collection requests, source-provider calls, PDP calls, AI calls, PDFs, proximity metrics, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification passed; CI verification pending",

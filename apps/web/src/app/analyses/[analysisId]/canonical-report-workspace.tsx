@@ -51,6 +51,9 @@ type ProductEvidenceTarget = {
   retailerLabel: string;
   roleLabel: string;
 };
+type CanonicalReportDataScope = {
+  customerAccessId?: string;
+};
 type ProductStateCoverageResponse = {
   schema_version: string;
   analysis_id: string;
@@ -349,13 +352,27 @@ function mapEvidenceHref(
   analysisId: string,
   product: ReportProduct,
   detail: "summary" | "full" = "full",
+  dataScope: CanonicalReportDataScope = {},
 ) {
   const parameters = new URLSearchParams({
     retailer: product.retailer_id,
     product_id: product.retailer_product_id,
     detail,
   });
+  if (dataScope.customerAccessId) {
+    return `/api/customer/reports/${encodeURIComponent(dataScope.customerAccessId)}/price-monitoring/map?${parameters.toString()}`;
+  }
   return `/api/price-monitoring/${encodeURIComponent(analysisId)}/map?${parameters.toString()}`;
+}
+
+function stateCoverageHref(
+  analysisId: string,
+  dataScope: CanonicalReportDataScope = {},
+) {
+  if (dataScope.customerAccessId) {
+    return `/api/customer/reports/${encodeURIComponent(dataScope.customerAccessId)}/price-monitoring/state-coverage`;
+  }
+  return `/api/price-monitoring/${encodeURIComponent(analysisId)}/state-coverage`;
 }
 
 function productHref(url: string | null) {
@@ -459,7 +476,10 @@ function brandTypeGroups(dataset: CanonicalDataset) {
   }));
 }
 
-function useCanonicalRelationshipBrowser(dataset: CanonicalDataset) {
+function useCanonicalRelationshipBrowser(
+  dataset: CanonicalDataset,
+  dataScope: CanonicalReportDataScope = {},
+) {
   const [filters, setFilters] = useState<CanonicalRelationshipFilters>(
     DEFAULT_CANONICAL_RELATIONSHIP_FILTERS,
   );
@@ -502,16 +522,13 @@ function useCanonicalRelationshipBrowser(dataset: CanonicalDataset) {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch(
-      `/api/price-monitoring/${encodeURIComponent(dataset.analysis_id)}/state-coverage`,
-      {
-        body: JSON.stringify({ products: stateCoverageRequestProducts }),
-        cache: "no-store",
-        headers: { "content-type": "application/json" },
-        method: "POST",
-        signal: controller.signal,
-      },
-    )
+    fetch(stateCoverageHref(dataset.analysis_id, dataScope), {
+      body: JSON.stringify({ products: stateCoverageRequestProducts }),
+      cache: "no-store",
+      headers: { "content-type": "application/json" },
+      method: "POST",
+      signal: controller.signal,
+    })
       .then(async (response) => {
         if (!response.ok) {
           throw new Error(`State coverage returned ${response.status}`);
@@ -540,6 +557,7 @@ function useCanonicalRelationshipBrowser(dataset: CanonicalDataset) {
       });
     return () => controller.abort();
   }, [
+    dataScope,
     dataset.analysis_id,
     stateCoverageRequestKey,
     stateCoverageRequestProducts,
@@ -654,7 +672,9 @@ function productMonitoringHref(
   analysisId: string,
   product: ReportProduct,
   tab = "overview",
+  dataScope: CanonicalReportDataScope = {},
 ) {
+  if (dataScope.customerAccessId) return null;
   const parameters = new URLSearchParams({
     retailer: product.retailer_id,
     product_id: product.retailer_product_id,
@@ -663,11 +683,18 @@ function productMonitoringHref(
   return `/price-monitoring/${encodeURIComponent(analysisId)}?${parameters.toString()}`;
 }
 
-function productEvidenceCsvHref(analysisId: string, product: ReportProduct) {
+function productEvidenceCsvHref(
+  analysisId: string,
+  product: ReportProduct,
+  dataScope: CanonicalReportDataScope = {},
+) {
   const parameters = new URLSearchParams({
     retailer: product.retailer_id,
     product_id: product.retailer_product_id,
   });
+  if (dataScope.customerAccessId) {
+    return `/api/customer/reports/${encodeURIComponent(dataScope.customerAccessId)}/price-monitoring/evidence.csv?${parameters.toString()}`;
+  }
   return `/api/price-monitoring/${encodeURIComponent(analysisId)}/evidence.csv?${parameters.toString()}`;
 }
 
@@ -835,9 +862,11 @@ function summarizeProductFootprints(
 
 export function CanonicalReportWorkspace({
   analysis,
+  customerAccessId,
   reportView,
 }: Readonly<{
   analysis: AnalysisRecord;
+  customerAccessId?: string;
   reportView: AnalysisReportView;
 }>) {
   const [activeTab, setActiveTab] = useState<CanonicalTab>(canonicalTabs[0]);
@@ -875,6 +904,10 @@ export function CanonicalReportWorkspace({
         .sort(byDistributionThenTitle),
     [dataset.product_relationships],
   );
+  const dataScope = useMemo(() => ({ customerAccessId }), [customerAccessId]);
+  const datasetJsonHref = customerAccessId
+    ? `/api/customer/reports/${encodeURIComponent(customerAccessId)}/canonical-report-dataset`
+    : `/api/analyses/${encodeURIComponent(analysis.analysis_id)}/canonical-report-dataset`;
 
   return (
     <>
@@ -906,15 +939,17 @@ export function CanonicalReportWorkspace({
             {displayLabel(dataset.readiness.status)}
           </span>
           <small>Canonical dataset {dataset.schema_version}</small>
+          {customerAccessId ? null : (
+            <Link
+              className="canonical-dataset-link"
+              href={`/analyses/${encodeURIComponent(analysis.analysis_id)}?experience=legacy`}
+            >
+              Legacy workspace
+            </Link>
+          )}
           <Link
             className="canonical-dataset-link"
-            href={`/analyses/${encodeURIComponent(analysis.analysis_id)}?experience=legacy`}
-          >
-            Legacy workspace
-          </Link>
-          <Link
-            className="canonical-dataset-link"
-            href={`/api/analyses/${encodeURIComponent(analysis.analysis_id)}/canonical-report-dataset`}
+            href={datasetJsonHref}
             target="_blank"
             rel="noreferrer"
           >
@@ -945,18 +980,21 @@ export function CanonicalReportWorkspace({
             dataset={dataset}
             groups={groups}
             brandTypeSummary={brandTypeSummary}
+            dataScope={dataScope}
             retailerFootprints={retailerFootprints}
           />
         ) : null}
         {activeTab === "Product Wins & Losses" ? (
           <ProductWinsLosses
             dataset={dataset}
+            dataScope={dataScope}
             retailerFootprints={retailerFootprints}
           />
         ) : null}
         {activeTab === "Distribution & Assortment" ? (
           <DistributionAssortment
             analysisId={analysis.analysis_id}
+            dataScope={dataScope}
             productFootprints={productFootprints}
             retailerFootprints={retailerFootprints}
             broadWalmartProductCount={
@@ -974,6 +1012,7 @@ export function CanonicalReportWorkspace({
           <PriceArchitecture
             analysisId={analysis.analysis_id}
             brandGroups={brandGroups}
+            dataScope={dataScope}
             relationships={dataset.product_relationships}
             retailerFootprints={retailerFootprints}
           />
@@ -988,18 +1027,23 @@ export function CanonicalReportWorkspace({
 
 function ExecutiveSummary({
   analysisId,
+  dataScope,
   dataset,
   groups,
   brandTypeSummary,
   retailerFootprints,
 }: Readonly<{
   analysisId: string;
+  dataScope?: CanonicalReportDataScope;
   dataset: CanonicalDataset;
   groups: ReturnType<typeof relationshipGroups>;
   brandTypeSummary: ReturnType<typeof summarizeCanonicalBrandTypes>;
   retailerFootprints: Map<string, number>;
 }>) {
-  const relationshipBrowser = useCanonicalRelationshipBrowser(dataset);
+  const relationshipBrowser = useCanonicalRelationshipBrowser(
+    dataset,
+    dataScope,
+  );
   const [outcomeMode, setOutcomeMode] =
     useState<ExecutiveOutcomeMode>("losses");
   const broadLosses = relationshipBrowser.filteredGroups.walmartLosses.filter(
@@ -1180,6 +1224,7 @@ function ExecutiveSummary({
       </section>
       <RelationshipSection
         analysisId={analysisId}
+        dataScope={dataScope}
         emptyLabel={activeEmptyLabel}
         note={
           outcomeMode === "losses"
@@ -1245,13 +1290,18 @@ function ExecutiveSummary({
 }
 
 function ProductWinsLosses({
+  dataScope,
   dataset,
   retailerFootprints,
 }: Readonly<{
+  dataScope?: CanonicalReportDataScope;
   dataset: CanonicalDataset;
   retailerFootprints: Map<string, number>;
 }>) {
-  const relationshipBrowser = useCanonicalRelationshipBrowser(dataset);
+  const relationshipBrowser = useCanonicalRelationshipBrowser(
+    dataset,
+    dataScope,
+  );
   const [sectionMode, setSectionMode] =
     useState<RelationshipSectionMode>("losses");
   const {
@@ -1368,6 +1418,7 @@ function ProductWinsLosses({
       </section>
       <RelationshipSection
         analysisId={dataset.analysis_id}
+        dataScope={dataScope}
         title={activeSection.title}
         note={activeSection.note}
         relationships={activeSection.relationships}
@@ -1684,6 +1735,7 @@ function RelationshipFilterDrawer({
 
 function DistributionAssortment({
   analysisId,
+  dataScope,
   productFootprints,
   retailerFootprints,
   broadWalmartProductCount,
@@ -1691,6 +1743,7 @@ function DistributionAssortment({
   totalRelationships,
 }: Readonly<{
   analysisId: string;
+  dataScope?: CanonicalReportDataScope;
   productFootprints: ProductFootprint[];
   retailerFootprints: Map<string, number>;
   broadWalmartProductCount: number;
@@ -1706,6 +1759,14 @@ function DistributionAssortment({
     ) ??
     productFootprints[0] ??
     null;
+  const selectedMonitoringHref = selectedFootprint
+    ? productMonitoringHref(
+        analysisId,
+        selectedFootprint.product,
+        "overview",
+        dataScope,
+      )
+    : null;
 
   return (
     <>
@@ -1760,23 +1821,22 @@ function DistributionAssortment({
           </div>
           {selectedFootprint ? (
             <div className="canonical-location-actions">
-              <Link
-                className="canonical-dataset-link"
-                href={productMonitoringHref(
-                  analysisId,
-                  selectedFootprint.product,
-                  "overview",
-                )}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open full location view
-              </Link>
+              {selectedMonitoringHref ? (
+                <Link
+                  className="canonical-dataset-link"
+                  href={selectedMonitoringHref}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open full location view
+                </Link>
+              ) : null}
               <Link
                 className="canonical-dataset-link"
                 href={productEvidenceCsvHref(
                   analysisId,
                   selectedFootprint.product,
+                  dataScope,
                 )}
                 target="_blank"
                 rel="noreferrer"
@@ -1811,6 +1871,7 @@ function DistributionAssortment({
             {selectedFootprint ? (
               <ProductLocationEvidencePanel
                 analysisId={analysisId}
+                dataScope={dataScope}
                 footprint={selectedFootprint}
                 retailerFootprints={retailerFootprints}
               />
@@ -1836,6 +1897,7 @@ function DistributionAssortment({
         </header>
         <ProductFootprintTable
           analysisId={analysisId}
+          dataScope={dataScope}
           retailerFootprints={retailerFootprints}
           rows={productFootprints}
         />
@@ -1846,10 +1908,12 @@ function DistributionAssortment({
 
 function ProductFootprintTable({
   analysisId,
+  dataScope,
   retailerFootprints,
   rows,
 }: Readonly<{
   analysisId: string;
+  dataScope?: CanonicalReportDataScope;
   retailerFootprints: Map<string, number>;
   rows: ProductFootprint[];
 }>) {
@@ -1964,13 +2028,25 @@ function ProductFootprintTable({
                 </td>
                 <td>
                   <span className="canonical-table-actions">
-                    <Link
-                      href={productMonitoringHref(analysisId, row.product)}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Map
-                    </Link>
+                    {productMonitoringHref(
+                      analysisId,
+                      row.product,
+                      "overview",
+                      dataScope,
+                    ) ? (
+                      <Link
+                        href={productMonitoringHref(
+                          analysisId,
+                          row.product,
+                          "overview",
+                          dataScope,
+                        )!}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Map
+                      </Link>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() =>
@@ -1987,7 +2063,11 @@ function ProductFootprintTable({
                       Drawer
                     </button>
                     <Link
-                      href={productEvidenceCsvHref(analysisId, row.product)}
+                      href={productEvidenceCsvHref(
+                        analysisId,
+                        row.product,
+                        dataScope,
+                      )}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -2003,6 +2083,7 @@ function ProductFootprintTable({
       {selectedEvidenceTarget ? (
         <StoreEvidenceDrawer
           analysisId={analysisId}
+          dataScope={dataScope}
           target={selectedEvidenceTarget}
           onClose={() => setSelectedEvidenceTarget(null)}
         />
@@ -2029,18 +2110,20 @@ function ProductThumb({
 
 function ProductLocationEvidencePanel({
   analysisId,
+  dataScope,
   footprint,
   retailerFootprints,
 }: Readonly<{
   analysisId: string;
+  dataScope?: CanonicalReportDataScope;
   footprint: ProductFootprint;
   retailerFootprints: Map<string, number>;
 }>) {
   const [selectedEvidenceTarget, setSelectedEvidenceTarget] =
     useState<ProductEvidenceTarget | null>(null);
   const mapRequestPath = useMemo(
-    () => mapEvidenceHref(analysisId, footprint.product, "summary"),
-    [analysisId, footprint.product],
+    () => mapEvidenceHref(analysisId, footprint.product, "summary", dataScope),
+    [analysisId, dataScope, footprint.product],
   );
   const [mapState, setMapState] = useState<{
     requestPath: string;
@@ -2132,6 +2215,7 @@ function ProductLocationEvidencePanel({
       {selectedEvidenceTarget ? (
         <StoreEvidenceDrawer
           analysisId={analysisId}
+          dataScope={dataScope}
           target={selectedEvidenceTarget}
           onClose={() => setSelectedEvidenceTarget(null)}
         />
@@ -2142,16 +2226,18 @@ function ProductLocationEvidencePanel({
 
 function StoreEvidenceDrawer({
   analysisId,
+  dataScope,
   target,
   onClose,
 }: Readonly<{
   analysisId: string;
+  dataScope?: CanonicalReportDataScope;
   target: ProductEvidenceTarget;
   onClose: () => void;
 }>) {
   const requestPath = useMemo(
-    () => mapEvidenceHref(analysisId, target.product, "full"),
-    [analysisId, target.product],
+    () => mapEvidenceHref(analysisId, target.product, "full", dataScope),
+    [analysisId, dataScope, target.product],
   );
   const [mapState, setMapState] = useState<{
     requestPath: string;
@@ -2823,11 +2909,13 @@ function MappedLocationTable({
 
 function PriceArchitecture({
   analysisId,
+  dataScope,
   relationships,
   brandGroups,
   retailerFootprints,
 }: Readonly<{
   analysisId: string;
+  dataScope?: CanonicalReportDataScope;
   relationships: ProductRelationship[];
   brandGroups: Array<{
     brandType: BrandType;
@@ -2851,6 +2939,7 @@ function PriceArchitecture({
         </header>
         <PriceArchitectureTable
           analysisId={analysisId}
+          dataScope={dataScope}
           relationships={relationships}
           retailerFootprints={retailerFootprints}
         />
@@ -2874,6 +2963,7 @@ function PriceArchitecture({
             </header>
             <PriceArchitectureTable
               analysisId={analysisId}
+              dataScope={dataScope}
               relationships={relationships}
               retailerFootprints={retailerFootprints}
             />
@@ -2885,10 +2975,12 @@ function PriceArchitecture({
 
 function PriceArchitectureTable({
   analysisId,
+  dataScope,
   relationships,
   retailerFootprints,
 }: Readonly<{
   analysisId: string;
+  dataScope?: CanonicalReportDataScope;
   relationships: ProductRelationship[];
   retailerFootprints: Map<string, number>;
 }>) {
@@ -3049,6 +3141,7 @@ function PriceArchitectureTable({
       {selectedEvidenceTarget ? (
         <StoreEvidenceDrawer
           analysisId={analysisId}
+          dataScope={dataScope}
           target={selectedEvidenceTarget}
           onClose={() => setSelectedEvidenceTarget(null)}
         />
@@ -3176,6 +3269,7 @@ function EvidenceQa({
 
 function RelationshipSection({
   analysisId,
+  dataScope,
   emptyLabel = "No included relationships in this section.",
   title,
   note,
@@ -3183,6 +3277,7 @@ function RelationshipSection({
   retailerFootprints,
 }: Readonly<{
   analysisId: string;
+  dataScope?: CanonicalReportDataScope;
   emptyLabel?: string;
   title: string;
   note: string;
@@ -3264,6 +3359,7 @@ function RelationshipSection({
               {visibleRelationships.map((relationship) => (
                 <RelationshipCard
                   analysisId={analysisId}
+                  dataScope={dataScope}
                   key={relationship.relationship_id}
                   onSelectEvidenceTarget={setSelectedEvidenceTarget}
                   relationship={relationship}
@@ -3310,6 +3406,7 @@ function RelationshipSection({
       {selectedEvidenceTarget ? (
         <StoreEvidenceDrawer
           analysisId={analysisId}
+          dataScope={dataScope}
           target={selectedEvidenceTarget}
           onClose={() => setSelectedEvidenceTarget(null)}
         />
@@ -3320,11 +3417,13 @@ function RelationshipSection({
 
 function RelationshipCard({
   analysisId,
+  dataScope,
   onSelectEvidenceTarget,
   relationship,
   retailerFootprints,
 }: Readonly<{
   analysisId: string;
+  dataScope?: CanonicalReportDataScope;
   onSelectEvidenceTarget: (target: ProductEvidenceTarget) => void;
   relationship: ProductRelationship;
   retailerFootprints: Map<string, number>;
@@ -3332,6 +3431,18 @@ function RelationshipCard({
   const benchmarkHref = productHref(relationship.benchmark_product.url);
   const competitorHref = productHref(relationship.competitor_product.url);
   const deltaDisplay = relationshipDisplayDelta(relationship);
+  const benchmarkMapHref = productMonitoringHref(
+    analysisId,
+    relationship.benchmark_product,
+    "overview",
+    dataScope,
+  );
+  const competitorMapHref = productMonitoringHref(
+    analysisId,
+    relationship.competitor_product,
+    "overview",
+    dataScope,
+  );
   return (
     <article
       className={`canonical-product-card ${relationship.comparison.outcome}`}
@@ -3382,16 +3493,11 @@ function RelationshipCard({
         </p>
         <small>{deltaDisplay.explanation}</small>
         <div className="canonical-product-card-actions">
-          <Link
-            href={productMonitoringHref(
-              analysisId,
-              relationship.benchmark_product,
-            )}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Walmart map
-          </Link>
+          {benchmarkMapHref ? (
+            <Link href={benchmarkMapHref} target="_blank" rel="noreferrer">
+              Walmart map
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={() =>
@@ -3407,16 +3513,11 @@ function RelationshipCard({
           >
             Walmart store list
           </button>
-          <Link
-            href={productMonitoringHref(
-              analysisId,
-              relationship.competitor_product,
-            )}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Competitor map
-          </Link>
+          {competitorMapHref ? (
+            <Link href={competitorMapHref} target="_blank" rel="noreferrer">
+              Competitor map
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={() =>

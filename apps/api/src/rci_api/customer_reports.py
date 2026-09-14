@@ -12,18 +12,25 @@ import os
 import secrets
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Annotated, Any, Protocol
+from typing import Annotated, Any, Literal, Protocol
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.types import Integer, String
 
+from rci_analytics import PriceMonitoringFilters
 from rci_api.analyses import AnalysisServiceDependency
 from rci_api.customer_access import (
     current_customer_access_principal,
     enforce_customer_access,
+)
+from rci_api.price_monitoring import (
+    BrandFilter,
+)
+from rci_api.price_monitoring import (
+    ServiceDependency as PriceMonitoringServiceDependency,
 )
 from rci_core import AccessPrincipal
 from rci_results.service import AnalysisNotFoundError, ProductEvidenceNotFoundError
@@ -954,6 +961,165 @@ async def get_customer_product_decision_evidence(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except ProductEvidenceNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/reports/{access_id}/price-monitoring/map")
+async def get_customer_price_monitoring_map(
+    access_id: str,
+    principal: CustomerPrincipalDependency,
+    repository: CustomerReportRepositoryDependency,
+    service: PriceMonitoringServiceDependency,
+    retailer: str = Query(min_length=1),
+    brand_type: BrandFilter = "all",
+    state_filter: str | None = Query(default=None, alias="state"),
+    city: str | None = None,
+    zipcode: str | None = None,
+    product_id: str = Query(min_length=1),
+    detail: Literal["summary", "full"] = "full",
+) -> dict[str, Any]:
+    report = await _authorized_customer_report_detail(
+        access_id=access_id,
+        principal=principal,
+        repository=repository,
+    )
+    try:
+        return await service.map_view(
+            report.summary.analysis_id,
+            PriceMonitoringFilters(
+                retailer_id=retailer,
+                brand_type=brand_type,
+                state=state_filter,
+                city=city,
+                zipcode=zipcode,
+                product_id=product_id,
+            ),
+            detail=detail,
+        )
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/reports/{access_id}/price-monitoring/state-coverage")
+async def get_customer_price_monitoring_state_coverage(
+    request: Request,
+    access_id: str,
+    principal: CustomerPrincipalDependency,
+    repository: CustomerReportRepositoryDependency,
+    service: PriceMonitoringServiceDependency,
+) -> dict[str, Any]:
+    report = await _authorized_customer_report_detail(
+        access_id=access_id,
+        principal=principal,
+        repository=repository,
+    )
+    body = await request.json()
+    raw_products = body.get("products") if isinstance(body, dict) else None
+    if not isinstance(raw_products, list):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="products must be a list",
+        )
+    if len(raw_products) > 1_000:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="state coverage is limited to 1,000 products per request",
+        )
+    products = [
+        {
+            "retailer_id": str(row.get("retailer_id") or ""),
+            "product_id": str(row.get("product_id") or ""),
+        }
+        for row in raw_products
+        if isinstance(row, dict)
+    ]
+    try:
+        return await service.state_coverage(report.summary.analysis_id, products)
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get("/reports/{access_id}/price-monitoring/evidence.csv")
+async def get_customer_price_monitoring_evidence_csv(
+    access_id: str,
+    principal: CustomerPrincipalDependency,
+    repository: CustomerReportRepositoryDependency,
+    service: PriceMonitoringServiceDependency,
+    retailer: str = Query(min_length=1),
+    product_id: str = Query(min_length=1),
+    brand_type: BrandFilter = "all",
+    state_filter: str | None = Query(default=None, alias="state"),
+    city: str | None = None,
+    zipcode: str | None = None,
+) -> Response:
+    report = await _authorized_customer_report_detail(
+        access_id=access_id,
+        principal=principal,
+        repository=repository,
+    )
+    try:
+        body = await service.evidence_csv(
+            report.summary.analysis_id,
+            PriceMonitoringFilters(
+                retailer_id=retailer,
+                brand_type=brand_type,
+                state=state_filter,
+                city=city,
+                zipcode=zipcode,
+                product_id=product_id,
+            ),
+        )
+        safe_retailer = "".join(
+            character for character in retailer if character.isalnum() or character in "_-"
+        )
+        safe_product_id = "".join(
+            character for character in product_id if character.isalnum() or character in "_-"
+        )
+        filename = (
+            f"{safe_retailer or 'retailer'}-{safe_product_id or 'product'}-price-evidence.csv"
+        )
+        return Response(
+            content=body,
+            media_type="text/csv; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except AnalysisNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LookupError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=str(exc),
+        ) from exc
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
 
 
 @admin_router.get("", response_model=AdminCustomerReportAccessSnapshotResponse)
