@@ -108,8 +108,9 @@ export const applicationNavigation: readonly NavigationGroup[] = [
         match: "prefix",
       },
       {
-        label: "Customer Auth",
-        description: "Customer login rollout and identity webhook readiness",
+        label: "Accounts & Access",
+        description:
+          "Customer accounts, workspaces, access, and login readiness",
         href: "/admin/customer-auth",
         icon: "operations",
         match: "prefix",
@@ -257,8 +258,9 @@ export const simplifiedApplicationNavigation: readonly NavigationGroup[] = [
         match: "prefix",
       },
       {
-        label: "Customer Auth",
-        description: "Customer login rollout and identity webhook readiness",
+        label: "Accounts & Access",
+        description:
+          "Customer accounts, workspaces, access, and login readiness",
         href: "/admin/customer-auth",
         icon: "operations",
         match: "prefix",

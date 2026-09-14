@@ -37,6 +37,7 @@ function primaryRole(roles: string[]): string {
 
 export function CustomerAccountMenu() {
   const pathname = usePathname();
+  const isAdminWorkspace = pathname?.startsWith("/admin") ?? false;
   const [session, setSession] = useState<CustomerSessionState>({
     status: "loading",
   });
@@ -86,6 +87,17 @@ export function CustomerAccountMenu() {
   }
 
   if (session.status === "anonymous") {
+    if (isAdminWorkspace) {
+      return (
+        <span
+          className={styles.customerSignIn}
+          title="This administrator workspace uses the protected admin session below."
+        >
+          Admin protected
+        </span>
+      );
+    }
+
     return (
       <Link className={styles.customerSignIn} href={loginUrl}>
         Sign in
