@@ -107,4 +107,20 @@ describe("proxy customer route authentication cache", () => {
       error: "Customer authentication is required.",
     });
   });
+
+  it("does not launch customer login for non-document protected route requests", async () => {
+    vi.stubEnv("PRODUCT_PACK_SESSION_SECRET", routeSecret);
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await proxy(
+      new NextRequest("https://app.cpghero.com/proximity", {
+        headers: { accept: "text/x-component" },
+      }),
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(response.status).toBe(401);
+    expect(response.headers.get("location")).toBeNull();
+  });
 });

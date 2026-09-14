@@ -13,6 +13,7 @@ Customer authentication must be initiated by a deliberate browser navigation suc
 - Top-level customer page navigations still redirect to `/api/auth/login`.
 - Normal `/api/auth/login` browser navigations still start hosted login.
 - Requests carrying `_rsc`, `RSC: 1`, `Next-Router-Prefetch: 1`, `Purpose: prefetch`, or `Sec-Purpose: prefetch` fail closed with private no-store `401` responses instead of creating a new login session.
+- Requests that do not present as HTML document navigations also fail closed. This prevents production framework traffic whose internal RSC markers are normalized or stripped before application code from starting hosted login.
 - Protected API routes continue to return private no-store JSON `401` responses when unauthenticated.
 - The customer route-boundary cache and authoritative API permission checks remain unchanged.
 
