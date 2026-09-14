@@ -99,10 +99,12 @@ function upstreamWebhookHeaders(request: Request): Headers {
 
 function setCookieHeaders(headers: Headers): string[] {
   const readable = headers as Headers & { getSetCookie?: () => string[] };
+  const splitCombinedSetCookie = (value: string): string[] =>
+    value.split(/,(?=\s*[^;,=\s]+=)/).map((cookie) => cookie.trim());
   const values = readable.getSetCookie?.();
-  if (values?.length) return values;
+  if (values?.length) return values.flatMap(splitCombinedSetCookie);
   const fallback = headers.get("set-cookie");
-  return fallback ? [fallback] : [];
+  return fallback ? splitCombinedSetCookie(fallback) : [];
 }
 
 export async function proxyCustomerAuthGet(

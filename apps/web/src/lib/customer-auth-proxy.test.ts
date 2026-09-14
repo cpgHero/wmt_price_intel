@@ -49,6 +49,46 @@ describe("customer auth proxy", () => {
     expect(response.headers.get("cache-control")).toBe("private, no-store");
   });
 
+  it("preserves multiple callback set-cookie headers when the runtime combines them", async () => {
+    vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, {
+        status: 303,
+        headers: {
+          location: "/customer",
+          "set-cookie":
+            'cph_customer_session=sealed-session; Max-Age=28800; Path=/; HttpOnly; SameSite=lax, cph_customer_auth_flow=""; expires=Mon, 14 Sep 2026 21:51:00 GMT; Max-Age=0; Path=/; SameSite=lax',
+        },
+      }),
+    );
+
+    const response = await proxyCustomerAuthGet(
+      new Request(
+        "https://app.cpghero.com/api/auth/callback?code=abc&state=state",
+        {
+          headers: {
+            accept: "text/html",
+            cookie: "cph_customer_auth_flow=flow",
+          },
+        },
+      ),
+      "/api/auth/callback",
+    );
+
+    const readable = response.headers as Headers & {
+      getSetCookie?: () => string[];
+    };
+    const setCookies = readable.getSetCookie?.() ?? [
+      response.headers.get("set-cookie") ?? "",
+    ];
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/customer");
+    expect(setCookies).toHaveLength(2);
+    expect(setCookies[0]).toContain("cph_customer_session=sealed-session");
+    expect(setCookies[1]).toContain("cph_customer_auth_flow=");
+  });
+
   it("returns a private no-store outage response when the API cannot be reached", async () => {
     vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("offline"));
