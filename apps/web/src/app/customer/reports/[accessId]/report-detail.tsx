@@ -42,6 +42,14 @@ type LoadState =
   | { message: string; status: "error" }
   | { data: CustomerReportViewResponse; status: "ready" };
 
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export function CustomerReportDetail({
   accessId,
 }: Readonly<{ accessId: string }>) {
@@ -136,6 +144,8 @@ export function CustomerReportDetail({
     );
   }
 
+  const { report } = state.data;
+
   return (
     <main className={styles.workspace}>
       <div className={styles.customerReportToolbar}>
@@ -143,10 +153,46 @@ export function CustomerReportDetail({
           ← Back to customer workspace
         </Link>
         <span>
-          Granted report ·{" "}
-          {state.data.report.category ?? "Product intelligence"}
+          Granted report · {report.category ?? "Product intelligence"}
         </span>
       </div>
+      <section
+        className={styles.reportContext}
+        aria-label="Customer report access summary"
+      >
+        <article>
+          <span>Report</span>
+          <strong>{report.title}</strong>
+          <p>{report.product_pack_version ?? report.schema_version}</p>
+        </article>
+        <article>
+          <span>Status</span>
+          <strong>{report.reporting_status.replaceAll("_", " ")}</strong>
+          <p>Access granted {formatDate(report.granted_at)}</p>
+        </article>
+        <article>
+          <span>Trust boundary</span>
+          <strong>Grant-gated</strong>
+          <p>Report data, evidence, and downloads use this access grant.</p>
+        </article>
+        <details className={styles.reportAudit}>
+          <summary>Audit identifiers</summary>
+          <dl>
+            <div>
+              <dt>Analysis</dt>
+              <dd>{report.analysis_id}</dd>
+            </div>
+            <div>
+              <dt>Result</dt>
+              <dd>{report.analysis_result_id}</dd>
+            </div>
+            <div>
+              <dt>Checksum</dt>
+              <dd>{report.checksum}</dd>
+            </div>
+          </dl>
+        </details>
+      </section>
       <CanonicalReportWorkspace
         analysis={state.data.analysis}
         customerAccessId={accessId}

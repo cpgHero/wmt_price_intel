@@ -72,6 +72,22 @@ function label(value: string): string {
     .join(" ");
 }
 
+function formatDate(value: string): string {
+  return new Date(value).toLocaleDateString("en-US", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function latestGrantDate(reports: CustomerReport[]): string | null {
+  const latest = reports
+    .map((report) => new Date(report.granted_at).getTime())
+    .filter(Number.isFinite)
+    .sort((left, right) => right - left)[0];
+  return latest ? formatDate(new Date(latest).toISOString()) : null;
+}
+
 function Card({
   children,
   kicker,
@@ -217,6 +233,11 @@ export function CustomerWorkspace() {
   const hasExports = principal.permissions.includes("exports.download");
   const hasProjects = principal.permissions.includes("projects.create");
   const hasEntitlements = principal.entitlements.length > 0;
+  const grantedReports = reports.status === "ready" ? reports.data.reports : [];
+  const readyReportCount = grantedReports.filter(
+    (report) => report.reporting_status === "ready",
+  ).length;
+  const latestGrantedAt = latestGrantDate(grantedReports);
 
   return (
     <main className={styles.workspace}>
@@ -336,33 +357,77 @@ export function CustomerWorkspace() {
             </p>
           </div>
         ) : (
-          <div className={styles.reportList}>
-            {reports.data.reports.map((report) => (
-              <article key={report.access_id}>
-                <div>
-                  <span>{report.category ?? "Report"}</span>
-                  <strong>{report.title}</strong>
-                  <small>
-                    {report.product_pack_id
-                      ? `${label(report.product_pack_id)} ${report.product_pack_version ?? ""}`
-                      : report.schema_version}
-                  </small>
-                </div>
-                <div className={styles.reportMeta}>
-                  <span>{label(report.reporting_status)}</span>
-                  <small>
-                    Granted {new Date(report.granted_at).toLocaleDateString()}
-                  </small>
-                </div>
-                <Link
-                  className={styles.reportAction}
-                  href={`/customer/reports/${encodeURIComponent(report.access_id)}`}
-                >
-                  Open report
-                </Link>
+          <>
+            <div
+              className={styles.reportSummaryGrid}
+              aria-label="Granted report summary"
+            >
+              <article>
+                <span>Granted reports</span>
+                <strong>{grantedReports.length.toLocaleString()}</strong>
+                <p>Only reports explicitly granted to this account appear.</p>
               </article>
-            ))}
-          </div>
+              <article>
+                <span>Ready to open</span>
+                <strong>{readyReportCount.toLocaleString()}</strong>
+                <p>Ready reports passed the publication gate before access.</p>
+              </article>
+              <article>
+                <span>Latest grant</span>
+                <strong>{latestGrantedAt ?? "Not recorded"}</strong>
+                <p>Grant timestamps are independent from report generation.</p>
+              </article>
+              <article>
+                <span>Trust boundary</span>
+                <strong>Grant-gated</strong>
+                <p>
+                  Report data, evidence, and downloads stay scoped by access.
+                </p>
+              </article>
+            </div>
+            <div className={styles.reportList}>
+              {grantedReports.map((report) => (
+                <article key={report.access_id}>
+                  <div>
+                    <span>{report.category ?? "Product intelligence"}</span>
+                    <strong>{report.title}</strong>
+                    <small>
+                      {report.product_pack_version
+                        ? `Product Pack ${report.product_pack_version}`
+                        : report.schema_version}
+                    </small>
+                  </div>
+                  <div className={styles.reportMeta}>
+                    <span>{label(report.reporting_status)}</span>
+                    <small>Granted {formatDate(report.granted_at)}</small>
+                  </div>
+                  <details className={styles.reportAudit}>
+                    <summary>Audit</summary>
+                    <dl>
+                      <div>
+                        <dt>Analysis</dt>
+                        <dd>{report.analysis_id}</dd>
+                      </div>
+                      <div>
+                        <dt>Result</dt>
+                        <dd>{report.analysis_result_id}</dd>
+                      </div>
+                      <div>
+                        <dt>Checksum</dt>
+                        <dd>{report.checksum.slice(0, 12)}…</dd>
+                      </div>
+                    </dl>
+                  </details>
+                  <Link
+                    className={styles.reportAction}
+                    href={`/customer/reports/${encodeURIComponent(report.access_id)}`}
+                  >
+                    Open report
+                  </Link>
+                </article>
+              ))}
+            </div>
+          </>
         )}
         <p className={styles.scopeNote}>
           Scope checked by the API: account{" "}
