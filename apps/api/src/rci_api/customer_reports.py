@@ -9,13 +9,14 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Annotated, Any, Literal, Protocol
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import bindparam, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 from sqlalchemy.types import Integer, String
@@ -37,6 +38,52 @@ from rci_results.service import AnalysisNotFoundError, ProductEvidenceNotFoundEr
 
 router = APIRouter(prefix="/api/v1/customer", tags=["customer-reports"])
 admin_router = APIRouter(prefix="/api/v1/admin/customer-report-access", tags=["admin"])
+
+_TECHNICAL_REPORT_TITLE_PATTERN = re.compile(
+    r"(?:^|[-_])(?:[0-9a-f]{8,}|match[-_]?v\d*|r\d+$)",
+    re.IGNORECASE,
+)
+
+
+def _display_label_from_identifier(value: str | None) -> str | None:
+    if value is None:
+        return None
+    parts = [
+        part
+        for part in re.split(r"[-_.\s]+", value.strip())
+        if part and not re.fullmatch(r"[0-9a-f]{8,}", part, flags=re.IGNORECASE)
+    ]
+    if not parts:
+        return None
+    return " ".join(part.capitalize() for part in parts)
+
+
+def _customer_report_display_title(
+    *,
+    title: str,
+    category: str | None,
+    product_pack_id: str | None,
+) -> str:
+    candidate = title.strip()
+    if candidate and not _TECHNICAL_REPORT_TITLE_PATTERN.search(candidate):
+        return candidate
+    label = _display_label_from_identifier(product_pack_id) or _display_label_from_identifier(
+        category
+    )
+    if label:
+        return f"{label} Price Intelligence"
+    return "Product Price Intelligence"
+
+
+def _customer_report_display_category(
+    *,
+    category: str | None,
+    product_pack_id: str | None,
+) -> str | None:
+    candidate = category.strip() if category else ""
+    if candidate:
+        return candidate
+    return _display_label_from_identifier(product_pack_id)
 
 
 @dataclass(frozen=True, slots=True)
@@ -158,7 +205,8 @@ class PostgresCustomerReportRepository:
               COALESCE(
                 result.result #>> '{metadata,category}',
                 result.result #>> '{product_pack,category}',
-                result.result #>> '{category}'
+                result.result #>> '{category}',
+                run.product_pack_id
               ) AS category,
               CASE
                 WHEN jsonb_typeof(result.result #> '{retailers}') = 'array'
@@ -255,7 +303,8 @@ class PostgresCustomerReportRepository:
               COALESCE(
                 result.result #>> '{metadata,category}',
                 result.result #>> '{product_pack,category}',
-                result.result #>> '{category}'
+                result.result #>> '{category}',
+                run.product_pack_id
               ) AS category,
               CASE
                 WHEN jsonb_typeof(result.result #> '{retailers}') = 'array'
@@ -368,7 +417,8 @@ class PostgresCustomerReportRepository:
                           COALESCE(
                             result.result #>> '{metadata,category}',
                             result.result #>> '{product_pack,category}',
-                            result.result #>> '{category}'
+                            result.result #>> '{category}',
+                            run.product_pack_id
                           ) AS category,
                           access.status,
                           access.created_at AS granted_at
@@ -376,6 +426,7 @@ class PostgresCustomerReportRepository:
                         JOIN account ON account.id = access.account_id
                         LEFT JOIN workspace ON workspace.id = access.workspace_id
                         JOIN analysis_result result ON result.id = access.analysis_result_id
+                        LEFT JOIN analysis_run run ON run.id = result.analysis_run_id
                         ORDER BY access.created_at DESC, access.id DESC
                         LIMIT :limit
                         """
@@ -399,7 +450,8 @@ class PostgresCustomerReportRepository:
                           COALESCE(
                             result.result #>> '{metadata,category}',
                             result.result #>> '{product_pack,category}',
-                            result.result #>> '{category}'
+                            result.result #>> '{category}',
+                            run.product_pack_id
                           ) AS category,
                           run.product_pack_id,
                           run.product_pack_version,
@@ -647,7 +699,8 @@ class PostgresCustomerReportRepository:
                           COALESCE(
                             result.result #>> '{metadata,category}',
                             result.result #>> '{product_pack,category}',
-                            result.result #>> '{category}'
+                            result.result #>> '{category}',
+                            run.product_pack_id
                           ) AS category,
                           access.status,
                           access.created_at AS granted_at
@@ -655,6 +708,7 @@ class PostgresCustomerReportRepository:
                         JOIN account ON account.id = access.account_id
                         LEFT JOIN workspace ON workspace.id = access.workspace_id
                         JOIN analysis_result result ON result.id = access.analysis_result_id
+                        LEFT JOIN analysis_run run ON run.id = result.analysis_run_id
                         WHERE access.id = CAST(:access_id AS uuid)
                         """
                         ),
@@ -720,6 +774,19 @@ class CustomerReportSummaryResponse(BaseModel):
     created_at: datetime
     granted_at: datetime
 
+    @model_validator(mode="after")
+    def apply_customer_display_labels(self) -> CustomerReportSummaryResponse:
+        self.category = _customer_report_display_category(
+            category=self.category,
+            product_pack_id=self.product_pack_id,
+        )
+        self.title = _customer_report_display_title(
+            title=self.title,
+            category=self.category,
+            product_pack_id=self.product_pack_id,
+        )
+        return self
+
 
 class CustomerReportListResponse(BaseModel):
     schema_version: str = "1.0.0-customer-report-list"
@@ -766,6 +833,19 @@ class AdminCustomerReportGrantResponse(BaseModel):
     status: str
     granted_at: datetime
 
+    @model_validator(mode="after")
+    def apply_admin_display_labels(self) -> AdminCustomerReportGrantResponse:
+        self.category = _customer_report_display_category(
+            category=self.category,
+            product_pack_id=None,
+        )
+        self.title = _customer_report_display_title(
+            title=self.title,
+            category=self.category,
+            product_pack_id=None,
+        )
+        return self
+
 
 class AdminGrantableReportResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -777,6 +857,19 @@ class AdminGrantableReportResponse(BaseModel):
     product_pack_id: str | None
     product_pack_version: str | None
     created_at: datetime
+
+    @model_validator(mode="after")
+    def apply_admin_display_labels(self) -> AdminGrantableReportResponse:
+        self.category = _customer_report_display_category(
+            category=self.category,
+            product_pack_id=self.product_pack_id,
+        )
+        self.title = _customer_report_display_title(
+            title=self.title,
+            category=self.category,
+            product_pack_id=self.product_pack_id,
+        )
+        return self
 
 
 class AdminCustomerReportAccessSnapshotResponse(BaseModel):

@@ -86,7 +86,7 @@ class FakeCustomerReportRepository:
                 "collection_run_id": "00000000-0000-0000-0000-000000000601",
                 "status": "succeeded",
                 "reporting_status": "ready",
-                "product_pack_id": "fluid_milk",
+                "product_pack_id": "fresh_fluid_milk",
                 "product_pack_version": "1.4.0",
                 "schema_version": "2.0.0",
                 "checksum": "a" * 64,
@@ -101,13 +101,13 @@ class FakeCustomerReportRepository:
             analysis_id="milk-aug-2026",
             analysis_result_id="00000000-0000-0000-0000-000000000501",
             collection_run_id="00000000-0000-0000-0000-000000000601",
-            product_pack_id="fluid_milk",
+            product_pack_id="fresh_fluid_milk",
             product_pack_version="1.4.0",
             reporting_status="ready",
             schema_version="2.0.0",
             checksum="a" * 64,
-            title="Milk price intelligence",
-            category="Milk",
+            title="fresh_fluid_milk-19a350ee-90d7-4ec5-92f9-467a15c116b4-match-v2-r2",
+            category=None,
             retailer_count=4,
             created_at=datetime(2026, 8, 20, 12, 0, tzinfo=UTC),
             granted_at=datetime(2026, 9, 14, 9, 0, tzinfo=UTC),
@@ -124,8 +124,8 @@ class FakeCustomerReportRepository:
             workspace_display_name="Pricing",
             analysis_id="milk-aug-2026",
             analysis_result_id="00000000-0000-0000-0000-000000000501",
-            title="Milk price intelligence",
-            category="Milk",
+            title="fresh_fluid_milk-19a350ee-90d7-4ec5-92f9-467a15c116b4-match-v2-r2",
+            category=None,
             status=status,
             granted_at=datetime(2026, 9, 14, 9, 0, tzinfo=UTC),
         )
@@ -170,9 +170,9 @@ class FakeCustomerReportRepository:
                 AdminGrantableReport(
                     analysis_id="milk-aug-2026",
                     analysis_result_id="00000000-0000-0000-0000-000000000501",
-                    title="Milk price intelligence",
-                    category="Milk",
-                    product_pack_id="fluid_milk",
+                    title=("fresh_fluid_milk-19a350ee-90d7-4ec5-92f9-467a15c116b4-match-v2-r2"),
+                    category=None,
+                    product_pack_id="fresh_fluid_milk",
                     product_pack_version="1.4.0",
                     created_at=datetime(2026, 8, 20, 12, 0, tzinfo=UTC),
                 )
@@ -344,13 +344,13 @@ async def test_customer_report_list_returns_scoped_granted_reports() -> None:
                 "analysis_id": "milk-aug-2026",
                 "analysis_result_id": "00000000-0000-0000-0000-000000000501",
                 "collection_run_id": "00000000-0000-0000-0000-000000000601",
-                "product_pack_id": "fluid_milk",
+                "product_pack_id": "fresh_fluid_milk",
                 "product_pack_version": "1.4.0",
                 "reporting_status": "ready",
                 "schema_version": "2.0.0",
                 "checksum": "a" * 64,
-                "title": "Milk price intelligence",
-                "category": "Milk",
+                "title": "Fresh Fluid Milk Price Intelligence",
+                "category": "Fresh Fluid Milk",
                 "retailer_count": 4,
                 "created_at": "2026-08-20T12:00:00Z",
                 "granted_at": "2026-09-14T09:00:00Z",
@@ -454,7 +454,8 @@ async def test_customer_report_detail_requires_active_grant() -> None:
     ]
     payload = response.json()
     assert payload["schema_version"] == "1.0.0-customer-report-detail"
-    assert payload["report"]["title"] == "Milk price intelligence"
+    assert payload["report"]["title"] == "Fresh Fluid Milk Price Intelligence"
+    assert payload["report"]["category"] == "Fresh Fluid Milk"
     assert payload["analysis"]["analysis_id"] == "milk-aug-2026"
 
 
@@ -492,7 +493,7 @@ async def test_customer_report_view_uses_grant_before_report_service() -> None:
     assert analysis_service.calls == [{"report_view": "milk-aug-2026"}]
     payload = response.json()
     assert payload["schema_version"] == "1.0.0-customer-report-view"
-    assert payload["report"]["title"] == "Milk price intelligence"
+    assert payload["report"]["title"] == "Fresh Fluid Milk Price Intelligence"
     assert payload["view"]["analysis_id"] == "milk-aug-2026"
 
 

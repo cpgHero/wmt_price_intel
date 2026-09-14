@@ -230,6 +230,43 @@
   gap: 0.75rem;
 }
 
+.reportSummaryGrid {
+  display: grid;
+  gap: 0.75rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.reportSummaryGrid article {
+  background: color-mix(in srgb, var(--surface-alt) 86%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  display: grid;
+  gap: 0.35rem;
+  padding: 1rem;
+}
+
+.reportSummaryGrid span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.reportSummaryGrid strong {
+  color: var(--ink);
+  font-size: clamp(1.2rem, 2vw, 1.8rem);
+  letter-spacing: -0.055em;
+  line-height: 1.05;
+}
+
+.reportSummaryGrid p {
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  margin: 0;
+}
+
 .reportList article {
   align-items: center;
   background: var(--surface-alt);
@@ -237,8 +274,9 @@
   border-radius: 18px;
   display: grid;
   gap: 1rem;
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto minmax(7rem, auto) auto;
   padding: 1rem;
+  position: relative;
 }
 
 .reportList article > div {
@@ -269,6 +307,52 @@
   text-align: right;
 }
 
+.reportAudit {
+  justify-self: end;
+  min-width: 7rem;
+}
+
+.reportAudit summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 850;
+}
+
+.reportAudit dl {
+  background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: grid;
+  gap: 0.45rem;
+  margin: 0.55rem 0 0;
+  min-width: 18rem;
+  padding: 0.75rem;
+  position: absolute;
+  right: 5rem;
+  z-index: 2;
+}
+
+.reportAudit div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.reportAudit dt {
+  color: var(--green);
+  font-size: 0.64rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.reportAudit dd {
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
 .pendingAction,
 .reportAction {
   background: color-mix(in srgb, var(--surface) 82%, transparent);
@@ -293,7 +377,8 @@
 }
 
 @media (max-width: 1180px) {
-  .grid {
+  .grid,
+  .reportSummaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -302,12 +387,20 @@
   .hero,
   .grid,
   .permissionGrid,
+  .reportSummaryGrid,
   .reportList article {
     grid-template-columns: 1fr;
   }
 
-  .reportMeta {
+  .reportMeta,
+  .reportAudit {
+    justify-self: stretch;
     text-align: left;
+  }
+
+  .reportAudit dl {
+    min-width: 0;
+    position: static;
   }
 
   .panel header {
