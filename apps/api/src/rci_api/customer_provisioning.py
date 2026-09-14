@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from typing import Annotated, Any, Protocol, cast
 
-from fastapi import APIRouter, Header, HTTPException, Request, status
+from fastapi import APIRouter, Header, HTTPException, Query, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
@@ -180,6 +180,55 @@ class PrepareCustomerAccountResponse(BaseModel):
     customer_auth_provider: str
 
 
+class CustomerAuthCanaryStatus(BaseModel):
+    enabled: bool
+    configured: bool
+    allowed_email_count: int
+    allowed_domain_count: int
+
+
+class CustomerAuthInvitationStatus(BaseModel):
+    email: str
+    account_slug: str
+    account_display_name: str
+    workspace_slug: str | None = None
+    workspace_display_name: str | None = None
+    invitation_status: str
+    account_membership_status: str | None = None
+    workspace_membership_status: str | None = None
+    role_keys: tuple[str, ...] = ()
+    entitlement_keys: tuple[str, ...] = ()
+    has_external_user_mapping: bool
+    has_external_organization_mapping: bool
+    has_workos_invitation: bool
+    accepted: bool
+    prepared_at: str
+    updated_at: str
+
+
+class CustomerAuthWebhookEventStatus(BaseModel):
+    event_type: str
+    processing_status: str
+    email_snapshot: str | None = None
+    has_workos_user: bool
+    has_workos_organization: bool
+    has_workos_invitation: bool
+    processed: bool
+    received_at: str
+    processed_at: str | None = None
+
+
+class CustomerAuthReadinessResponse(BaseModel):
+    schema_version: str = "1.0.0-customer-auth-readiness"
+    customer_auth_provider: str
+    customer_login_enabled: bool
+    canary: CustomerAuthCanaryStatus
+    cutover_ready: bool
+    blockers: tuple[str, ...]
+    invitations: tuple[CustomerAuthInvitationStatus, ...]
+    recent_webhook_events: tuple[CustomerAuthWebhookEventStatus, ...]
+
+
 @dataclass(frozen=True, slots=True)
 class WebhookProcessingResult:
     event_id: str
@@ -202,12 +251,246 @@ class CustomerProvisioningRepository(Protocol):
         payload_sha256: str,
     ) -> WebhookProcessingResult: ...
 
+    async def customer_auth_readiness(
+        self,
+        *,
+        email: str | None = None,
+        limit: int = 25,
+    ) -> CustomerAuthReadinessResponse: ...
+
 
 class PostgresCustomerProvisioningRepository:
     """Provision CPGHero-owned access rows before customer login is enabled."""
 
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
+
+    async def customer_auth_readiness(
+        self,
+        *,
+        email: str | None = None,
+        limit: int = 25,
+    ) -> CustomerAuthReadinessResponse:
+        normalized_email = _normalize_email(email) if email else None
+        safe_limit = max(1, min(limit, 100))
+        async with self._engine.begin() as connection:
+            invitations = await self._customer_auth_invitation_statuses(
+                connection,
+                email=normalized_email,
+                limit=safe_limit,
+            )
+            events = await self._customer_auth_webhook_event_statuses(
+                connection,
+                email=normalized_email,
+                limit=safe_limit,
+            )
+        canary = self._canary_status()
+        provider = os.getenv("CPGHERO_CUSTOMER_AUTH_PROVIDER", "disabled").strip().lower()
+        blockers = self._customer_auth_blockers(
+            provider=provider,
+            canary=canary,
+            invitations=invitations,
+        )
+        return CustomerAuthReadinessResponse(
+            customer_auth_provider=provider,
+            customer_login_enabled=provider == "workos",
+            canary=canary,
+            cutover_ready=not blockers,
+            blockers=tuple(blockers),
+            invitations=tuple(invitations),
+            recent_webhook_events=tuple(events),
+        )
+
+    def _canary_status(self) -> CustomerAuthCanaryStatus:
+        canary_enabled = os.getenv(
+            "CPGHERO_CUSTOMER_AUTH_CANARY_ENABLED", "true"
+        ).strip().lower() not in {"0", "false", "disabled", "no", "off"}
+        allowed_email_count = len(
+            [
+                part
+                for part in os.getenv("CPGHERO_CUSTOMER_AUTH_ALLOWED_EMAILS", "").split(",")
+                if part.strip()
+            ]
+        )
+        allowed_domain_count = len(
+            [
+                part
+                for part in os.getenv("CPGHERO_CUSTOMER_AUTH_ALLOWED_DOMAINS", "").split(",")
+                if part.strip()
+            ]
+        )
+        return CustomerAuthCanaryStatus(
+            enabled=canary_enabled,
+            configured=(not canary_enabled) or bool(allowed_email_count or allowed_domain_count),
+            allowed_email_count=allowed_email_count,
+            allowed_domain_count=allowed_domain_count,
+        )
+
+    def _customer_auth_blockers(
+        self,
+        *,
+        provider: str,
+        canary: CustomerAuthCanaryStatus,
+        invitations: list[CustomerAuthInvitationStatus],
+    ) -> list[str]:
+        blockers: list[str] = []
+        if provider != "workos":
+            blockers.append("Production customer login is still disabled.")
+        if canary.enabled and not canary.configured:
+            blockers.append("Customer login canary is enabled without an allowlist.")
+        if not invitations:
+            blockers.append("No prepared customer invitations are visible for this check.")
+        if not any(invitation.has_external_user_mapping for invitation in invitations):
+            blockers.append("No invited user has a verified identity-provider user binding yet.")
+        if not any(
+            invitation.accepted or invitation.account_membership_status == "active"
+            for invitation in invitations
+        ):
+            blockers.append(
+                "No invited user has accepted access or active CPGHero account membership yet."
+            )
+        if not any(
+            invitation.workspace_membership_status in {None, "active"} for invitation in invitations
+        ):
+            blockers.append("No invited user has active CPGHero workspace access yet.")
+        return blockers
+
+    async def _customer_auth_invitation_statuses(
+        self,
+        connection: AsyncConnection,
+        *,
+        email: str | None,
+        limit: int,
+    ) -> list[CustomerAuthInvitationStatus]:
+        rows = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT
+                          invitation.email,
+                          account.slug AS account_slug,
+                          account.display_name AS account_display_name,
+                          workspace.slug AS workspace_slug,
+                          workspace.display_name AS workspace_display_name,
+                          invitation.status AS invitation_status,
+                          account_membership.status AS account_membership_status,
+                          workspace_membership.status AS workspace_membership_status,
+                          invitation.role_keys,
+                          invitation.entitlement_keys,
+                          invitation.workos_user_id IS NOT NULL AS has_external_user_mapping,
+                          invitation.workos_organization_id IS NOT NULL
+                            AS has_external_organization_mapping,
+                          invitation.workos_invitation_id IS NOT NULL AS has_workos_invitation,
+                          invitation.accepted_at IS NOT NULL AS accepted,
+                          invitation.created_at::text AS prepared_at,
+                          invitation.updated_at::text AS updated_at
+                        FROM customer_account_invitation invitation
+                        JOIN account ON account.id = invitation.account_id
+                        LEFT JOIN workspace ON workspace.id = invitation.workspace_id
+                        LEFT JOIN account_membership
+                          ON account_membership.account_id = invitation.account_id
+                         AND account_membership.user_id = invitation.user_id
+                        LEFT JOIN workspace_membership
+                          ON workspace_membership.workspace_id = invitation.workspace_id
+                         AND workspace_membership.account_membership_id = account_membership.id
+                        WHERE (
+                          CAST(:email AS text) IS NULL
+                          OR invitation.email = CAST(:email AS text)
+                        )
+                        ORDER BY invitation.updated_at DESC, invitation.created_at DESC
+                        LIMIT :limit
+                        """
+                    ),
+                    {"email": email, "limit": limit},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return [
+            CustomerAuthInvitationStatus(
+                email=str(row["email"]),
+                account_slug=str(row["account_slug"]),
+                account_display_name=str(row["account_display_name"]),
+                workspace_slug=str(row["workspace_slug"]) if row["workspace_slug"] else None,
+                workspace_display_name=(
+                    str(row["workspace_display_name"]) if row["workspace_display_name"] else None
+                ),
+                invitation_status=str(row["invitation_status"]),
+                account_membership_status=(
+                    str(row["account_membership_status"])
+                    if row["account_membership_status"]
+                    else None
+                ),
+                workspace_membership_status=(
+                    str(row["workspace_membership_status"])
+                    if row["workspace_membership_status"]
+                    else None
+                ),
+                role_keys=tuple(str(value) for value in row["role_keys"] or []),
+                entitlement_keys=tuple(str(value) for value in row["entitlement_keys"] or []),
+                has_external_user_mapping=bool(row["has_external_user_mapping"]),
+                has_external_organization_mapping=bool(row["has_external_organization_mapping"]),
+                has_workos_invitation=bool(row["has_workos_invitation"]),
+                accepted=bool(row["accepted"]),
+                prepared_at=str(row["prepared_at"]),
+                updated_at=str(row["updated_at"]),
+            )
+            for row in rows
+        ]
+
+    async def _customer_auth_webhook_event_statuses(
+        self,
+        connection: AsyncConnection,
+        *,
+        email: str | None,
+        limit: int,
+    ) -> list[CustomerAuthWebhookEventStatus]:
+        rows = (
+            (
+                await connection.execute(
+                    text(
+                        """
+                        SELECT
+                          event_type,
+                          processing_status,
+                          email_snapshot,
+                          workos_user_id IS NOT NULL AS has_workos_user,
+                          workos_organization_id IS NOT NULL AS has_workos_organization,
+                          workos_invitation_id IS NOT NULL AS has_workos_invitation,
+                          processed_at IS NOT NULL AS processed,
+                          received_at::text AS received_at,
+                          processed_at::text AS processed_at
+                        FROM customer_identity_webhook_event
+                        WHERE (
+                          CAST(:email AS text) IS NULL
+                          OR email_snapshot = CAST(:email AS text)
+                        )
+                        ORDER BY received_at DESC
+                        LIMIT :limit
+                        """
+                    ),
+                    {"email": email, "limit": limit},
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return [
+            CustomerAuthWebhookEventStatus(
+                event_type=str(row["event_type"]),
+                processing_status=str(row["processing_status"]),
+                email_snapshot=str(row["email_snapshot"]) if row["email_snapshot"] else None,
+                has_workos_user=bool(row["has_workos_user"]),
+                has_workos_organization=bool(row["has_workos_organization"]),
+                has_workos_invitation=bool(row["has_workos_invitation"]),
+                processed=bool(row["processed"]),
+                received_at=str(row["received_at"]),
+                processed_at=str(row["processed_at"]) if row["processed_at"] else None,
+            )
+            for row in rows
+        ]
 
     async def prepare_customer_account(
         self,
@@ -1116,6 +1399,21 @@ async def prepare_customer_account(
     principal = require_platform_admin(request, x_rci_admin_token)
     repository = _customer_provisioning_repository(request)
     return await repository.prepare_customer_account(body, prepared_by=principal)
+
+
+@router.get(
+    "/admin/customer-provisioning/readiness",
+    tags=["admin", "customer-auth"],
+)
+async def customer_auth_readiness(
+    request: Request,
+    email: Annotated[str | None, Query(min_length=3, max_length=320)] = None,
+    limit: Annotated[int, Query(ge=1, le=100)] = 25,
+    x_rci_admin_token: Annotated[str | None, Header(alias="X-RCI-Admin-Token")] = None,
+) -> CustomerAuthReadinessResponse:
+    require_platform_admin(request, x_rci_admin_token)
+    repository = _customer_provisioning_repository(request)
+    return await repository.customer_auth_readiness(email=email, limit=limit)
 
 
 def _verify_workos_webhook(request: Request, event_body: bytes, signature: str | None) -> None:

@@ -6,6 +6,10 @@ from typing import Any
 from httpx import ASGITransport, AsyncClient
 
 from rci_api.customer_provisioning import (
+    CustomerAuthCanaryStatus,
+    CustomerAuthInvitationStatus,
+    CustomerAuthReadinessResponse,
+    CustomerAuthWebhookEventStatus,
     PostgresCustomerProvisioningRepository,
     PrepareCustomerAccountRequest,
     PrepareCustomerAccountResponse,
@@ -56,6 +60,59 @@ class FakeCustomerProvisioningRepository:
             event_id=str(payload["id"]),
             event_type=str(payload["event"]),
             processing_status="processed",
+        )
+
+    async def customer_auth_readiness(
+        self,
+        *,
+        email: str | None = None,
+        limit: int = 25,
+    ) -> CustomerAuthReadinessResponse:
+        assert limit == 25
+        return CustomerAuthReadinessResponse(
+            customer_auth_provider="disabled",
+            customer_login_enabled=False,
+            canary=CustomerAuthCanaryStatus(
+                enabled=True,
+                configured=False,
+                allowed_email_count=0,
+                allowed_domain_count=0,
+            ),
+            cutover_ready=False,
+            blockers=("Production customer login is still disabled.",),
+            invitations=(
+                CustomerAuthInvitationStatus(
+                    email=email or "admin@acme.example",
+                    account_slug="acme-foods",
+                    account_display_name="Acme Foods",
+                    workspace_slug="default",
+                    workspace_display_name="Default workspace",
+                    invitation_status="sent",
+                    account_membership_status="invited",
+                    workspace_membership_status="invited",
+                    role_keys=("account_owner",),
+                    entitlement_keys=("analytics.price_intelligence",),
+                    has_external_user_mapping=True,
+                    has_external_organization_mapping=True,
+                    has_workos_invitation=True,
+                    accepted=False,
+                    prepared_at="2026-09-14 01:00:00+00",
+                    updated_at="2026-09-14 01:30:00+00",
+                ),
+            ),
+            recent_webhook_events=(
+                CustomerAuthWebhookEventStatus(
+                    event_type="user.created",
+                    processing_status="processed",
+                    email_snapshot=email or "admin@acme.example",
+                    has_workos_user=True,
+                    has_workos_organization=False,
+                    has_workos_invitation=False,
+                    processed=True,
+                    received_at="2026-09-14 01:29:56+00",
+                    processed_at="2026-09-14 01:29:56+00",
+                ),
+            ),
         )
 
 
@@ -152,6 +209,35 @@ async def test_prepare_customer_account_rejects_system_roles() -> None:
     assert response.status_code == 422
     assert "system roles cannot be assigned to customer accounts" in response.text
     assert repository.prepared is None
+
+
+async def test_customer_auth_readiness_is_admin_guarded(monkeypatch: Any) -> None:
+    monkeypatch.setenv("PRODUCT_PACK_ADMIN_TOKEN", "private-admin-token")
+    app, _repository = _app(app_env="production")
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        missing = await client.get("/api/v1/admin/customer-provisioning/readiness")
+        ready = await client.get(
+            "/api/v1/admin/customer-provisioning/readiness?email=Admin@Acme.example",
+            headers={"X-RCI-Admin-Token": "private-admin-token"},
+        )
+
+    assert missing.status_code == 401
+    assert ready.status_code == 200
+    body = ready.json()
+    assert body["schema_version"] == "1.0.0-customer-auth-readiness"
+    assert body["customer_auth_provider"] == "disabled"
+    assert body["customer_login_enabled"] is False
+    assert body["cutover_ready"] is False
+    assert body["canary"] == {
+        "enabled": True,
+        "configured": False,
+        "allowed_email_count": 0,
+        "allowed_domain_count": 0,
+    }
+    assert body["invitations"][0]["email"] == "Admin@Acme.example"
+    assert "workos_user_id" not in body["invitations"][0]
+    assert body["recent_webhook_events"][0]["processing_status"] == "processed"
 
 
 def test_workos_webhook_extracts_event_type_specific_ids() -> None:

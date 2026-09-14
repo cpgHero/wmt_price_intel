@@ -1,0 +1,245 @@
+.workspace {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.hero {
+  align-items: center;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(95, 230, 200, 0.16), transparent 24rem),
+    linear-gradient(120deg, #0d2028, #071115);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: white;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 1.25rem 1.35rem;
+}
+
+.hero h2 {
+  font-size: 1.45rem;
+  letter-spacing: -0.035em;
+  margin: 0.25rem 0;
+}
+
+.hero p,
+.panel p {
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.kicker {
+  color: var(--green);
+  font-size: 0.51rem;
+  font-weight: 850;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.toolbar {
+  align-items: end;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  display: flex;
+  gap: 0.8rem;
+  justify-content: space-between;
+  padding: 0.75rem;
+}
+
+.toolbar label {
+  color: var(--muted);
+  display: grid;
+  flex: 1;
+  font-size: 0.52rem;
+  font-weight: 820;
+  gap: 0.35rem;
+  letter-spacing: 0.07em;
+  max-width: 26rem;
+  text-transform: uppercase;
+}
+
+.toolbar input,
+.toolbar button,
+.workspace input {
+  border-radius: 10px;
+  font: inherit;
+}
+
+.toolbar input,
+.workspace input {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 0.6rem 0.7rem;
+}
+
+.toolbar button,
+.workspace button {
+  background: var(--green);
+  border: 0;
+  color: #04251e;
+  cursor: pointer;
+  font-size: 0.66rem;
+  font-weight: 850;
+  padding: 0.65rem 0.85rem;
+}
+
+.metrics {
+  display: grid;
+  gap: 0.65rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metrics article,
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+
+.metrics article {
+  display: grid;
+  gap: 0.22rem;
+  padding: 0.8rem;
+}
+
+.metrics small {
+  color: var(--muted);
+  font-size: 0.49rem;
+  font-weight: 820;
+  letter-spacing: 0.065em;
+  text-transform: uppercase;
+}
+
+.metrics strong {
+  font-size: 1.3rem;
+  letter-spacing: -0.04em;
+}
+
+.metrics span {
+  color: var(--muted);
+  font-size: 0.54rem;
+  line-height: 1.4;
+}
+
+.panel {
+  min-width: 0;
+  padding: 0.9rem;
+}
+
+.panel > header {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  margin: -0.1rem 0 0.75rem;
+  padding: 0 0 0.65rem;
+}
+
+.panel h3 {
+  font-size: 0.95rem;
+  margin: 0.18rem 0 0;
+}
+
+.grid {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.tableWrap table {
+  border-collapse: collapse;
+  font-size: 0.58rem;
+  min-width: 48rem;
+  width: 100%;
+}
+
+.tableWrap th {
+  color: var(--muted);
+  font-size: 0.48rem;
+  font-weight: 850;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.tableWrap th,
+.tableWrap td {
+  border-bottom: 1px solid var(--soft-line);
+  padding: 0.48rem 0.4rem;
+  vertical-align: top;
+}
+
+.tableWrap td span:not(.pill) {
+  color: var(--muted);
+  display: block;
+  margin-top: 0.15rem;
+}
+
+.pill {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.5rem;
+  font-weight: 820;
+  margin: 0.08rem;
+  padding: 0.26rem 0.45rem;
+  white-space: nowrap;
+}
+
+.pill.good {
+  background: color-mix(in srgb, var(--green) 14%, var(--card));
+  border-color: color-mix(in srgb, var(--green) 30%, var(--line));
+  color: var(--green);
+}
+
+.pill.warn {
+  background: color-mix(in srgb, #d18a00 14%, var(--card));
+  border-color: color-mix(in srgb, #d18a00 30%, var(--line));
+  color: #d18a00;
+}
+
+.blockers {
+  display: grid;
+  gap: 0.45rem;
+  margin: 0;
+  padding-left: 1rem;
+}
+
+.blockers li,
+.error {
+  color: #ffb4b4;
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
+.error {
+  background: color-mix(in srgb, #c83e45 13%, var(--card));
+  border: 1px solid color-mix(in srgb, #c83e45 28%, var(--line));
+  border-radius: 12px;
+  margin: 0 0 0.8rem;
+  padding: 0.65rem 0.75rem;
+}
+
+@media (max-width: 1000px) {
+  .grid,
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .hero,
+  .toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

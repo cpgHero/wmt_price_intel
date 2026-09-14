@@ -21,6 +21,18 @@ def _optional_env(name: str) -> str | None:
     return value.strip() or None
 
 
+def _bool_env(name: str, *, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() not in {"0", "false", "disabled", "no", "off"}
+
+
+def _csv_env_values(name: str) -> tuple[str, ...]:
+    value = os.getenv(name, "")
+    return tuple(part.strip().lower() for part in value.split(",") if part.strip())
+
+
 @dataclass(frozen=True, slots=True)
 class AppSettings:
     """Non-secret service settings.
@@ -35,6 +47,9 @@ class AppSettings:
     customer_identity_provider: IdentityProviderKey = "disabled"
     workos_client_id: str | None = None
     workos_redirect_uri: str | None = None
+    customer_auth_canary_enabled: bool = False
+    customer_auth_allowed_emails: tuple[str, ...] = ()
+    customer_auth_allowed_domains: tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls) -> AppSettings:
@@ -50,6 +65,12 @@ class AppSettings:
             customer_identity_provider=customer_identity_provider,
             workos_client_id=_optional_env("WORKOS_CLIENT_ID"),
             workos_redirect_uri=_optional_env("WORKOS_REDIRECT_URI"),
+            customer_auth_canary_enabled=_bool_env(
+                "CPGHERO_CUSTOMER_AUTH_CANARY_ENABLED",
+                default=customer_identity_provider == "workos",
+            ),
+            customer_auth_allowed_emails=_csv_env_values("CPGHERO_CUSTOMER_AUTH_ALLOWED_EMAILS"),
+            customer_auth_allowed_domains=_csv_env_values("CPGHERO_CUSTOMER_AUTH_ALLOWED_DOMAINS"),
         )
 
     @property
@@ -62,4 +83,7 @@ class AppSettings:
             provider=self.customer_identity_provider,
             workos_client_id=self.workos_client_id,
             workos_redirect_uri=self.workos_redirect_uri,
+            canary_enabled=self.customer_auth_canary_enabled,
+            allowed_email_count=len(self.customer_auth_allowed_emails),
+            allowed_domain_count=len(self.customer_auth_allowed_domains),
         )
