@@ -174,6 +174,40 @@
   padding: 0.65rem 0.85rem;
 }
 
+.tabs {
+  background: color-mix(in srgb, var(--card) 78%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.35rem;
+}
+
+.tabs button,
+.inlineActions .secondaryButton,
+.inlineActions button:not(.activeChip) {
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  color: var(--text);
+}
+
+.tabs button {
+  border-radius: 10px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.66rem;
+  font-weight: 820;
+  padding: 0.6rem 0.8rem;
+}
+
+.tabs .activeTab,
+.inlineActions .activeChip {
+  background: color-mix(in srgb, var(--green) 18%, var(--card));
+  border-color: color-mix(in srgb, var(--green) 55%, var(--line));
+  color: var(--green);
+}
+
 .metrics {
   display: grid;
   gap: 0.65rem;
@@ -235,6 +269,139 @@
   display: grid;
   gap: 0.8rem;
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+}
+
+.split {
+  display: grid;
+  gap: 0.8rem;
+  grid-template-columns: minmax(18rem, 0.85fr) minmax(0, 1.5fr);
+}
+
+.meta {
+  color: var(--muted);
+  font-size: 0.57rem;
+  font-weight: 800;
+}
+
+.accountList,
+.detailStack,
+.compactRows {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.accountCard {
+  align-items: start;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 0.28rem;
+  justify-items: stretch;
+  padding: 0.72rem;
+  text-align: left;
+}
+
+.accountCard:hover,
+.accountCard.selected {
+  border-color: color-mix(in srgb, var(--green) 48%, var(--line));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--green) 22%, transparent);
+}
+
+.accountCard small,
+.compactRows small {
+  color: var(--muted);
+  display: block;
+  font-size: 0.56rem;
+  margin-top: 0.12rem;
+}
+
+.accountCard > span:last-child,
+.compactRows > div > span:last-child {
+  color: var(--muted);
+  font-size: 0.58rem;
+}
+
+.detailPanel {
+  background:
+    radial-gradient(
+      circle at 85% 0%,
+      rgba(95, 230, 200, 0.12),
+      transparent 18rem
+    ),
+    var(--card);
+}
+
+.metaGrid {
+  display: grid;
+  gap: 0.55rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.metaGrid > span {
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 12px;
+  display: grid;
+  gap: 0.22rem;
+  min-width: 0;
+  padding: 0.62rem;
+}
+
+.metaGrid small {
+  color: var(--muted);
+  font-size: 0.48rem;
+  font-weight: 850;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.metaGrid strong {
+  font-size: 0.66rem;
+  overflow-wrap: anywhere;
+}
+
+.subsection {
+  border-top: 1px solid var(--soft-line);
+  padding-top: 0.7rem;
+}
+
+.subsection h4 {
+  font-size: 0.72rem;
+  margin: 0 0 0.45rem;
+}
+
+.compactRows > div {
+  align-items: start;
+  background: var(--surface-alt);
+  border: 1px solid var(--soft-line);
+  border-radius: 12px;
+  display: flex;
+  gap: 0.8rem;
+  justify-content: space-between;
+  padding: 0.62rem;
+}
+
+.linkButton {
+  background: transparent;
+  border: 0;
+  color: var(--green);
+  cursor: pointer;
+  font-size: 0.58rem;
+  font-weight: 850;
+  padding: 0;
+}
+
+.emptyState {
+  background: color-mix(in srgb, var(--surface-alt) 72%, transparent);
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.62rem;
+  line-height: 1.5;
+  padding: 0.8rem;
 }
 
 .tableWrap {
@@ -319,7 +486,9 @@
 
 @media (max-width: 1000px) {
   .grid,
-  .metrics {
+  .metrics,
+  .split,
+  .metaGrid {
     grid-template-columns: 1fr;
   }
 

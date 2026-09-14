@@ -7,13 +7,14 @@ export default function CustomerAuthPage() {
     <main>
       <header className="page-header compact product-pack-page-header">
         <div>
-          <p className="eyebrow">Controlled rollout</p>
-          <h1>Customer Auth</h1>
+          <p className="eyebrow">Administration</p>
+          <h1>Accounts &amp; Access</h1>
         </div>
         <div className="page-header-actions">
           <p>
-            Verify CPGHero customer login readiness, canary guardrails,
-            invitation status, and WorkOS webhook processing before any cutover.
+            Manage customer account readiness, workspace scopes, identity
+            webhook health, entitlements, and report access before broader
+            self-service administration is enabled.
           </p>
         </div>
       </header>
