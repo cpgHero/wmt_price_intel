@@ -308,7 +308,7 @@ async def test_customer_auth_callback_recovers_missing_flow_cookie() -> None:
     )
 
 
-async def test_customer_auth_callback_sets_session_cookie_and_clears_flow_cookie() -> None:
+async def test_customer_auth_callback_commits_session_on_first_party_page() -> None:
     app = _test_app(provider="workos")
     app.state.customer_session_authenticator = FakeCustomerSessionAuthenticator()
 
@@ -319,8 +319,11 @@ async def test_customer_auth_callback_sets_session_cookie_and_clears_flow_cookie
             follow_redirects=False,
         )
 
-    assert response.status_code == 303
-    assert response.headers["location"] == "/reports"
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "private, no-store"
+    assert "Finishing sign-in" in response.text
+    assert "window.location.replace('/reports')" in response.text
+    assert '<a href="/reports">Continue to CPGHero</a>' in response.text
     assert response.cookies[SESSION_COOKIE_NAME] == "sealed-session"
     assert f"{FLOW_COOKIE_NAME}=" in response.headers["set-cookie"]
 

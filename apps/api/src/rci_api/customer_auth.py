@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from html import escape
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from rci_api.customer_identity import _customer_authenticator
 from rci_api.workos_auth import (
@@ -18,6 +19,84 @@ from rci_api.workos_auth import (
 )
 
 router = APIRouter(prefix="/api/auth", tags=["customer-auth"])
+
+
+def _callback_complete_response(return_to: str) -> HTMLResponse:
+    """Commit the CPGHero session cookie before entering protected app routes.
+
+    Chrome can fail to present freshly set cookies on the immediate next hop when
+    an OAuth callback both sets cookies and responds with another server-side
+    redirect. Returning a tiny first-party document gives the browser a stable
+    CPGHero response to store the cookie before the same-origin navigation.
+    """
+
+    safe_return = safe_return_path(return_to)
+    escaped_return = escape(safe_return, quote=True)
+    return HTMLResponse(
+        f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="1;url={escaped_return}">
+  <title>Finishing sign-in · CPGHero</title>
+  <style>
+    :root {{
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+        "Segoe UI", sans-serif;
+    }}
+    body {{
+      min-height: 100vh;
+      margin: 0;
+      display: grid;
+      place-items: center;
+      background: radial-gradient(
+          circle at 18% 12%,
+          rgba(82, 230, 198, 0.18),
+          transparent 30rem
+        ),
+        #071115;
+      color: #eef8fb;
+    }}
+    main {{
+      width: min(32rem, calc(100vw - 2rem));
+      border: 1px solid rgba(148, 178, 190, 0.28);
+      border-radius: 1.25rem;
+      background: rgba(12, 28, 36, 0.9);
+      box-shadow: 0 2rem 5rem rgba(0, 0, 0, 0.4);
+      padding: 2rem;
+    }}
+    .brand {{
+      color: #5fe6c8;
+      font-size: 0.72rem;
+      font-weight: 850;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }}
+    h1 {{
+      font-size: clamp(1.7rem, 5vw, 2.4rem);
+      letter-spacing: -0.06em;
+      line-height: 1;
+      margin: 0.55rem 0 0.8rem;
+    }}
+    p {{ color: #abc1cb; line-height: 1.55; margin: 0; }}
+    a {{ color: #5fe6c8; font-weight: 800; }}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="brand">CPGHero customer access</div>
+    <h1>Finishing sign-in.</h1>
+    <p>Your customer session has been created. Taking you to CPGHero now.</p>
+    <p><a href="{escaped_return}">Continue to CPGHero</a></p>
+  </main>
+  <script>window.location.replace({safe_return!r});</script>
+</body>
+</html>""",
+        status_code=status.HTTP_200_OK,
+        headers={"cache-control": "private, no-store"},
+    )
 
 
 @router.get("/login")
@@ -43,7 +122,7 @@ def callback(
     request: Request,
     code: str | None = None,
     state: str | None = None,
-) -> RedirectResponse:
+) -> Response:
     if not code or not state:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -64,16 +143,16 @@ def callback(
         flow_cookie=flow_cookie,
         request=request,
     )
-    response = RedirectResponse(url=completed.return_to, status_code=303)
+    complete_response = _callback_complete_response(completed.return_to)
     set_customer_cookie(
-        response,
+        complete_response,
         settings=request.app.state.settings,
         name=SESSION_COOKIE_NAME,
         value=completed.sealed_session,
         max_age=SESSION_MAX_AGE_SECONDS,
     )
-    response.delete_cookie(FLOW_COOKIE_NAME, path="/")
-    return response
+    complete_response.delete_cookie(FLOW_COOKIE_NAME, path="/")
+    return complete_response
 
 
 @router.get("/logout")
