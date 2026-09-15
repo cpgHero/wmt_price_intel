@@ -309,7 +309,7 @@ async def test_customer_auth_callback_recovers_missing_flow_cookie() -> None:
 
 
 async def test_customer_auth_callback_commits_session_on_first_party_page() -> None:
-    app = _test_app(provider="workos")
+    app = _test_app(provider="workos", app_env="production")
     app.state.customer_session_authenticator = FakeCustomerSessionAuthenticator()
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -322,10 +322,18 @@ async def test_customer_auth_callback_commits_session_on_first_party_page() -> N
     assert response.status_code == 200
     assert response.headers["cache-control"] == "private, no-store"
     assert "Finishing sign-in" in response.text
-    assert "window.location.replace('/reports')" in response.text
-    assert '<a href="/reports">Continue to CPGHero</a>' in response.text
+    assert 'fetch("/api/auth/me"' in response.text
+    assert "window.location.replace(destination)" in response.text
+    assert 'const destination = "/reports"' in response.text
+    assert "Automatic retries have" in response.text
+    assert "been stopped to avoid identity-provider rate limits" in response.text
+    assert '<a class="button" href="/api/auth/login?return_to=%2Freports">' in response.text
     assert response.cookies[SESSION_COOKIE_NAME] == "sealed-session"
-    assert f"{FLOW_COOKIE_NAME}=" in response.headers["set-cookie"]
+    set_cookie = response.headers["set-cookie"].lower()
+    assert f"{SESSION_COOKIE_NAME}=sealed-session" in set_cookie
+    assert f"{FLOW_COOKIE_NAME}=" in set_cookie
+    assert "samesite=none" in set_cookie
+    assert "secure" in set_cookie
 
 
 async def test_customer_me_resolves_workos_session_through_cpg_principal_repository() -> None:
