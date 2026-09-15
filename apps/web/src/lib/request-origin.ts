@@ -83,3 +83,24 @@ export function assertSameOrigin(request: Request): boolean {
 
   return allowed.has(suppliedOrigin);
 }
+
+export function publicRequestOrigin(request: Request): string {
+  const requestUrl = new URL(request.url);
+  const forwardedProtocol =
+    firstHeaderValue(request.headers.get("x-forwarded-proto")) ??
+    requestUrl.protocol;
+  const protocol = forwardedProtocol.endsWith(":")
+    ? forwardedProtocol
+    : `${forwardedProtocol}:`;
+  const forwardedHost = firstHeaderValue(
+    request.headers.get("x-forwarded-host"),
+  );
+  const host = forwardedHost ?? firstHeaderValue(request.headers.get("host"));
+
+  if (host) {
+    const candidate = normalizedWebOrigin(`${protocol}//${host}`);
+    if (candidate) return candidate;
+  }
+
+  return requestUrl.origin;
+}

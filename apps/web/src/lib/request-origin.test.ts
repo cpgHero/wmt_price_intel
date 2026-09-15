@@ -1,9 +1,31 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { assertSameOrigin } from "./request-origin";
+import { assertSameOrigin, publicRequestOrigin } from "./request-origin";
 
 afterEach(() => {
   vi.unstubAllEnvs();
+});
+
+describe("publicRequestOrigin", () => {
+  it("prefers Railway forwarded HTTPS host over the internal request URL", () => {
+    const request = new Request("http://0.0.0.0:3000/api/auth/login", {
+      headers: {
+        host: "0.0.0.0:3000",
+        "x-forwarded-host": "web-production-ee2a4.up.railway.app",
+        "x-forwarded-proto": "https",
+      },
+    });
+
+    expect(publicRequestOrigin(request)).toBe(
+      "https://web-production-ee2a4.up.railway.app",
+    );
+  });
+
+  it("falls back to the request origin when no usable public host is supplied", () => {
+    const request = new Request("https://app.cpghero.com/api/auth/login");
+
+    expect(publicRequestOrigin(request)).toBe("https://app.cpghero.com");
+  });
 });
 
 describe("assertSameOrigin", () => {

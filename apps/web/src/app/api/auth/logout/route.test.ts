@@ -35,4 +35,21 @@ describe("customer auth logout route", () => {
     );
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
+
+  it("uses the forwarded public origin when Railway supplies an internal request URL", () => {
+    const response = GET(
+      new Request("http://0.0.0.0:3000/api/auth/logout", {
+        headers: {
+          host: "0.0.0.0:3000",
+          "x-forwarded-host": "web-production-ee2a4.up.railway.app",
+          "x-forwarded-proto": "https",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "https://web-production-ee2a4.up.railway.app/",
+    );
+  });
 });

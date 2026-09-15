@@ -37,4 +37,21 @@ describe("customer auth login route", () => {
     expect(response.status).toBe(307);
     expect(response.headers.get("location")).toBe("https://app.cpghero.com/");
   });
+
+  it("uses the forwarded public origin when Railway supplies an internal request URL", () => {
+    const response = GET(
+      new Request("http://0.0.0.0:3000/api/auth/login?return_to=/customer", {
+        headers: {
+          host: "0.0.0.0:3000",
+          "x-forwarded-host": "web-production-ee2a4.up.railway.app",
+          "x-forwarded-proto": "https",
+        },
+      }),
+    );
+
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "https://web-production-ee2a4.up.railway.app/",
+    );
+  });
 });

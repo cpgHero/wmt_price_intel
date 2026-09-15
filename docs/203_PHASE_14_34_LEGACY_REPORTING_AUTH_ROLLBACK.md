@@ -13,8 +13,8 @@ intelligence reporting path while keeping Proximity available.
 - Dormant customer pages redirect to legacy destinations: `/customer` goes to
   `/`, and customer report detail URLs go to `/analyses`.
 - Customer auth endpoints are disabled or redirected: login, callback, and
-  logout send users back to the root app; `/api/auth/me` returns a private
-  no-store 401 response.
+  logout send users back to the root app using the public forwarded request
+  origin; `/api/auth/me` returns a private no-store 401 response.
 - Customer report APIs return a private no-store disabled response instead of
   proxying or serving the newer customer/canonical report experience.
 - Administration authorization is restored to the legacy password session through
@@ -38,7 +38,7 @@ intelligence reporting path while keeping Proximity available.
   - `/customer/reports/test-access` redirects to `/analyses`.
   - `/api/auth/me` returns 401 with `cache-control: private, no-store`.
   - `/api/auth/login`, `/api/auth/callback`, and `/api/auth/logout` redirect to
-    `/`.
+    `/` on the public app origin.
   - `/api/customer/reports` and customer report detail API paths return 404 with
     `cache-control: private, no-store`.
   - `/api/webhooks/workos` acknowledges with 204 and `cache-control: private,

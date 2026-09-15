@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 15, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.171",
+  version: "1.3.172",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2986,6 +2986,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-15",
+              "Implemented and verification-gated",
+              "Disabled auth redirects now use the public request origin.",
+              "Production HTTP probes after the legacy rollback showed the disabled /api/auth/login, /api/auth/callback, and /api/auth/logout routes returning the expected 307 status but pointing to Railway's internal https://0.0.0.0:3000 origin. Those routes now build their root redirect from the forwarded public host and protocol when present, falling back to the request origin only when no usable proxy headers exist. This preserves the rollback behavior while preventing broken external redirects; it does not re-enable WorkOS customer login, customer report APIs, customer account menus, route-cache validation, canonical report routing, Proximity auth gating, source-provider calls, report calculations, or database/secrets cleanup.",
+            ],
             [
               "2026-09-15",
               "Documentation gate complete",

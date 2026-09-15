@@ -3,6 +3,7 @@ import {
   ADMIN_ROUTE_CACHE_COOKIE_NAME,
   CUSTOMER_ROUTE_CACHE_COOKIE_NAME,
 } from "../../../../lib/route-auth-cache";
+import { publicRequestOrigin } from "../../../../lib/request-origin";
 
 export const dynamic = "force-dynamic";
 
@@ -12,9 +13,7 @@ function expiredRouteCacheCookie(name: string): string {
 }
 
 export function GET(request: Request) {
-  const url = new URL(request.url);
-  url.pathname = "/";
-  url.search = "";
+  const url = new URL("/", publicRequestOrigin(request));
   const response = NextResponse.redirect(url);
   const headers = response.headers;
   headers.append(
