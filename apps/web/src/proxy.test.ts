@@ -145,4 +145,105 @@ describe("proxy customer route authentication cache", () => {
     expect(response.status).toBe(401);
     expect(response.headers.get("location")).toBeNull();
   });
+
+  it("allows admin pages when the customer session has system admin access", async () => {
+    vi.stubEnv("PRODUCT_PACK_SESSION_SECRET", routeSecret);
+    const fetchSpy = vi.fn().mockResolvedValue(
+      Response.json({
+        authenticated: true,
+        source: "customer_system",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await proxy(
+      requestWithCookie(
+        "/admin/matching-v2",
+        `${CUSTOMER_SESSION_COOKIE_NAME}=${sessionCookie}`,
+      ),
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe(
+      "https://app.cpghero.com/api/admin/session",
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("allows admin API routes when the customer session has system admin access", async () => {
+    vi.stubEnv("PRODUCT_PACK_SESSION_SECRET", routeSecret);
+    const fetchSpy = vi.fn().mockResolvedValue(
+      Response.json({
+        authenticated: true,
+        source: "customer_system",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await proxy(
+      requestWithCookie(
+        "/api/admin/matching-v2/review-queues",
+        `${CUSTOMER_SESSION_COOKIE_NAME}=${sessionCookie}`,
+      ),
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(String(fetchSpy.mock.calls[0]?.[0])).toBe(
+      "https://app.cpghero.com/api/admin/session",
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("redirects admin pages when the customer session is not a system admin", async () => {
+    vi.stubEnv("PRODUCT_PACK_SESSION_SECRET", routeSecret);
+    const fetchSpy = vi.fn().mockResolvedValue(
+      Response.json({
+        authenticated: false,
+        customer: { email: "owner@example.com", roles: ["account_owner"] },
+        source: "none",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await proxy(
+      requestWithCookie(
+        "/admin/matching-v2",
+        `${CUSTOMER_SESSION_COOKIE_NAME}=${sessionCookie}`,
+      ),
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "https://app.cpghero.com/admin/login?return_to=%2Fadmin%2Fmatching-v2",
+    );
+  });
+
+  it("returns admin JSON 401 when the customer session is not a system admin", async () => {
+    vi.stubEnv("PRODUCT_PACK_SESSION_SECRET", routeSecret);
+    const fetchSpy = vi.fn().mockResolvedValue(
+      Response.json({
+        authenticated: false,
+        customer: { email: "owner@example.com", roles: ["account_owner"] },
+        source: "none",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await proxy(
+      requestWithCookie(
+        "/api/admin/matching-v2/review-queues",
+        `${CUSTOMER_SESSION_COOKIE_NAME}=${sessionCookie}`,
+      ),
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(401);
+    expect(response.headers.get("location")).toBeNull();
+    expect(await response.json()).toEqual({
+      error: "Administrator authentication is required.",
+    });
+  });
 });

@@ -137,6 +137,11 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   const cookieName = sessionCookieName(decision.session);
   const sessionCookie = cookieValueFromRequest(request, cookieName);
+  const customerSessionCookie =
+    decision.session === "admin"
+      ? cookieValueFromRequest(request, sessionCookieName("customer"))
+      : null;
+
   if (sessionCookie) {
     if (
       decision.session === "customer" &&
@@ -149,6 +154,11 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
       if (decision.session === "customer") {
         return withCustomerRouteCache(NextResponse.next(), sessionCookie);
       }
+      return NextResponse.next();
+    }
+  }
+  if (decision.session === "admin" && customerSessionCookie) {
+    if (await validateSession(request, "admin")) {
       return NextResponse.next();
     }
   }
