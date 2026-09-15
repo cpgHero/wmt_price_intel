@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from html import escape
 from typing import Annotated
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -31,14 +33,15 @@ def _callback_complete_response(return_to: str) -> HTMLResponse:
     """
 
     safe_return = safe_return_path(return_to)
-    escaped_return = escape(safe_return, quote=True)
+    safe_return_json = json.dumps(safe_return)
+    retry_url = f"/api/auth/login?return_to={quote(safe_return, safe='')}"
+    escaped_retry_url = escape(retry_url, quote=True)
     return HTMLResponse(
         f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="refresh" content="1;url={escaped_return}">
   <title>Finishing sign-in · CPGHero</title>
   <style>
     :root {{
@@ -82,16 +85,64 @@ def _callback_complete_response(return_to: str) -> HTMLResponse:
     }}
     p {{ color: #abc1cb; line-height: 1.55; margin: 0; }}
     a {{ color: #5fe6c8; font-weight: 800; }}
+    .detail {{ margin-top: 1rem; }}
+    .actions {{ display: flex; flex-wrap: wrap; gap: 0.8rem; margin-top: 1.4rem; }}
+    .button {{
+      align-items: center;
+      border: 1px solid rgba(95, 230, 200, 0.45);
+      border-radius: 999px;
+      display: inline-flex;
+      padding: 0.65rem 0.9rem;
+      text-decoration: none;
+    }}
+    .button.secondary {{
+      border-color: rgba(148, 178, 190, 0.28);
+      color: #abc1cb;
+    }}
+    .hidden {{ display: none; }}
   </style>
 </head>
 <body>
   <main>
     <div class="brand">CPGHero customer access</div>
     <h1>Finishing sign-in.</h1>
-    <p>Your customer session has been created. Taking you to CPGHero now.</p>
-    <p><a href="{escaped_return}">Continue to CPGHero</a></p>
+    <p id="status-message">
+      Your customer session has been created. Verifying CPGHero access before opening the app.
+    </p>
+    <p id="error-message" class="detail hidden">
+      CPGHero could not read the new customer session in this browser. Automatic retries have
+      been stopped to avoid identity-provider rate limits.
+    </p>
+    <div id="manual-actions" class="actions hidden">
+      <a class="button" href="{escaped_retry_url}">Try sign-in again</a>
+      <a class="button secondary" href="/">Return to public home</a>
+    </div>
   </main>
-  <script>window.location.replace({safe_return!r});</script>
+  <script>
+    (async () => {{
+      const destination = {safe_return_json};
+      const statusMessage = document.getElementById("status-message");
+      const errorMessage = document.getElementById("error-message");
+      const actions = document.getElementById("manual-actions");
+      try {{
+        const response = await fetch("/api/auth/me", {{
+          cache: "no-store",
+          credentials: "include",
+          headers: {{ accept: "application/json" }},
+        }});
+        if (response.ok) {{
+          window.location.replace(destination);
+          return;
+        }}
+      }} catch (error) {{
+        // Fall through to the controlled manual-retry state.
+      }}
+      statusMessage.textContent =
+        "Sign-in reached CPGHero, but the customer session is not readable yet.";
+      errorMessage.classList.remove("hidden");
+      actions.classList.remove("hidden");
+    }})();
+  </script>
 </body>
 </html>""",
         status_code=status.HTTP_200_OK,
