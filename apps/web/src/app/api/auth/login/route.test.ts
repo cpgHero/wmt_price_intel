@@ -99,4 +99,28 @@ describe("customer auth login route", () => {
       "https://identity.example.test/authorize",
     );
   });
+
+  it("defaults customer sign-in to My Workspace instead of the public home page", async () => {
+    vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(null, {
+        status: 307,
+        headers: {
+          location: "https://identity.example.test/authorize",
+          "set-cookie": "cph_customer_auth_flow=sealed; Path=/; HttpOnly",
+        },
+      }),
+    );
+
+    await GET(
+      new Request("https://app.cpghero.com/api/auth/login?return_to=/", {
+        headers: { accept: "text/html" },
+      }),
+    );
+
+    const [url] = fetchSpy.mock.calls[0];
+    expect(String(url)).toBe(
+      "http://api.internal/api/auth/login?return_to=%2Fcustomer",
+    );
+  });
 });
