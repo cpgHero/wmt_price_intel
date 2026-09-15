@@ -18,6 +18,8 @@ import {
 } from "../../../../lib/route-auth-cache";
 import { CUSTOMER_SESSION_COOKIE_NAME } from "../../../../lib/route-access-policy";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   const status = await adminSessionStatus(request);
   const response = NextResponse.json(status, {

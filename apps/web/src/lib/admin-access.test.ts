@@ -42,7 +42,13 @@ describe("admin access", () => {
       }),
     );
     const request = new Request("https://app.cpghero.com/admin/customer-auth", {
-      headers: { cookie: "cph_customer_session=sealed-session" },
+      headers: {
+        cookie: "cph_customer_session=sealed-session",
+        "user-agent": "admin-access-regression-test",
+        "x-forwarded-for": "203.0.113.9",
+        "x-forwarded-host": "app.cpghero.com",
+        "x-forwarded-proto": "https",
+      },
     });
 
     await expect(adminSessionStatus(request)).resolves.toEqual({
@@ -58,6 +64,16 @@ describe("admin access", () => {
     expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
       "http://api.internal/api/v1/me",
     );
+    const upstreamHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
+    expect(upstreamHeaders.get("cookie")).toBe(
+      "cph_customer_session=sealed-session",
+    );
+    expect(upstreamHeaders.get("user-agent")).toBe(
+      "admin-access-regression-test",
+    );
+    expect(upstreamHeaders.get("x-forwarded-for")).toBe("203.0.113.9");
+    expect(upstreamHeaders.get("x-forwarded-host")).toBe("app.cpghero.com");
+    expect(upstreamHeaders.get("x-forwarded-proto")).toBe("https");
   });
 
   it("does not accept an account owner without system admin permission", async () => {
