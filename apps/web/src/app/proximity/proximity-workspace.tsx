@@ -18,6 +18,7 @@ import type {
   ProximityView,
 } from "@/lib/api";
 import {
+  customerLoginUrlForReturnTo,
   competitorFootprintStatesForView,
   type ComparisonScope,
   recommendedScopeForView,
@@ -1068,6 +1069,15 @@ function resolveInitialComparisonScope(
   return initialComparisonScope ?? recommendedScopeForView(initialView);
 }
 
+function currentCustomerLoginUrl() {
+  if (typeof window === "undefined") {
+    return customerLoginUrlForReturnTo("/");
+  }
+  return customerLoginUrlForReturnTo(
+    `${window.location.pathname}${window.location.search}`,
+  );
+}
+
 export function ProximityWorkspace({
   initialView,
   initialRetailers,
@@ -1141,6 +1151,7 @@ export function ProximityWorkspace({
   const competitorRetailerIdRef = useRef(competitorRetailerId);
   const radiusRef = useRef(radius);
   const retailersRef = useRef(retailers);
+  const loadSequenceRef = useRef(0);
   const shortlistStorageKey = `proximity-shortlist:${country}:${competitorRetailerId}`;
   const savedKeys = useMemo(
     () => new Set(savedByComparison[shortlistStorageKey] ?? []),
@@ -1192,6 +1203,9 @@ export function ProximityWorkspace({
     competitorRetailerId?: string;
     radius?: number;
   }) {
+    const loadSequence = loadSequenceRef.current + 1;
+    loadSequenceRef.current = loadSequence;
+    const isLatestLoad = () => loadSequenceRef.current === loadSequence;
     const currentCountry = countryRef.current;
     const nextCountry = next.country ?? currentCountry;
     setLoading(true);
@@ -1203,6 +1217,13 @@ export function ProximityWorkspace({
           `/api/proximity/retailers?country=${encodeURIComponent(nextCountry)}`,
           { cache: "no-store" },
         );
+        if (retailerResponse.status === 401) {
+          if (isLatestLoad()) {
+            setError("Your CPGHero session expired. Redirecting to sign in…");
+            window.location.assign(currentCustomerLoginUrl());
+          }
+          return;
+        }
         const retailerBody: unknown = await retailerResponse.json();
         if (!retailerResponse.ok || !Array.isArray(retailerBody)) {
           throw new Error("Retailer locations could not be loaded.");
@@ -1248,10 +1269,18 @@ export function ProximityWorkspace({
       const response = await fetch(`/api/proximity?${parameters.toString()}`, {
         cache: "no-store",
       });
+      if (response.status === 401) {
+        if (isLatestLoad()) {
+          setError("Your CPGHero session expired. Redirecting to sign in…");
+          window.location.assign(currentCustomerLoginUrl());
+        }
+        return;
+      }
       const body = await response.json();
       if (!response.ok) {
         throw new Error(body.error || "Proximity data could not be loaded.");
       }
+      if (!isLatestLoad()) return;
       const nextView = body as ProximityView;
       setView(nextView);
       if (comparisonChanged) {
@@ -1274,6 +1303,7 @@ export function ProximityWorkspace({
         );
       }
     } catch (caught) {
+      if (!isLatestLoad()) return;
       setError(
         caught instanceof Error
           ? caught.message
@@ -1281,7 +1311,9 @@ export function ProximityWorkspace({
       );
       setView(null);
     } finally {
-      setLoading(false);
+      if (isLatestLoad()) {
+        setLoading(false);
+      }
     }
   }
 

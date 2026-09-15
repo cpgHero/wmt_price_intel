@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.165",
+  version: "1.3.166",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2986,6 +2986,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification complete",
+              "Proximity stale-session handling and request ordering stabilized.",
+              "Production validation showed an expired or stale Proximity browser tab could still display server-rendered location content, while client-side radius or retailer reloads returned a customer-authentication 401 at the web route boundary. Proximity now treats a 401 from the retailer or proximity reload path as an expired customer session and routes the user through CPGHero sign-in with the current page/query preserved, instead of leaving a misleading partial view. Proximity also ignores stale responses from older in-flight reloads once a newer retailer, country, or radius request has started, preventing out-of-order responses from overwriting the user's latest selection. This changes Proximity client-session recovery and request ordering only; it does not grant production roles, broaden account-owner access, change WorkOS credentials, change canary allowlists, alter location rows, coordinates, retailer eligibility, nearest-location Haversine math, proximity metrics, product Search evidence, observed product distribution, matching, report calculations, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification complete",
