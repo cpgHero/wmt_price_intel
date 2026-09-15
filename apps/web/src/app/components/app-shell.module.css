@@ -363,12 +363,20 @@
 }
 
 .customerMenuItem {
+  background: transparent;
   border: 1px solid transparent;
   border-radius: 0.65rem;
   color: var(--muted);
+  cursor: pointer;
   font-size: 0.72rem;
   font-weight: 820;
   padding: 0.65rem 0.75rem;
+  text-align: left;
+}
+
+.customerMenuItem:disabled {
+  cursor: progress;
+  opacity: 0.68;
 }
 
 .customerSessionSkeleton {
