@@ -1,9 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import {
+  ADMIN_ROUTE_CACHE_COOKIE_NAME,
   CUSTOMER_ROUTE_CACHE_COOKIE_NAME,
   CUSTOMER_ROUTE_CACHE_SECONDS,
   createCustomerRouteCacheCookie,
+  verifyAdminRouteCacheCookie,
   verifyCustomerRouteCacheCookie,
 } from "./lib/route-auth-cache";
 import {
@@ -105,6 +107,17 @@ async function hasValidCustomerRouteCache(
   );
 }
 
+async function hasValidAdminRouteCache(
+  request: NextRequest,
+  sessionCookie: string,
+): Promise<boolean> {
+  return verifyAdminRouteCacheCookie(
+    cookieValueFromRequest(request, ADMIN_ROUTE_CACHE_COOKIE_NAME),
+    sessionCookie,
+    customerRouteCacheSecret(),
+  );
+}
+
 async function withCustomerRouteCache(
   response: NextResponse,
   sessionCookie: string,
@@ -158,6 +171,10 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     }
   }
   if (decision.session === "admin" && customerSessionCookie) {
+    if (await hasValidAdminRouteCache(request, customerSessionCookie)) {
+      return NextResponse.next();
+    }
+
     if (await validateSession(request, "admin")) {
       return NextResponse.next();
     }

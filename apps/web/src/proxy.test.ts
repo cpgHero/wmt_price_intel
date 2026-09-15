@@ -2,7 +2,9 @@ import { NextRequest } from "next/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ADMIN_ROUTE_CACHE_COOKIE_NAME,
   CUSTOMER_ROUTE_CACHE_COOKIE_NAME,
+  createAdminRouteCacheCookie,
   createCustomerRouteCacheCookie,
 } from "./lib/route-auth-cache";
 import { CUSTOMER_SESSION_COOKIE_NAME } from "./lib/route-access-policy";
@@ -169,6 +171,56 @@ describe("proxy customer route authentication cache", () => {
     );
     expect(response.status).toBe(200);
     expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("uses a valid admin route cache without revalidating through /api/admin/session", async () => {
+    vi.stubEnv("PRODUCT_PACK_SESSION_SECRET", routeSecret);
+    const adminCacheCookie = await createAdminRouteCacheCookie(
+      sessionCookie,
+      routeSecret,
+    );
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await proxy(
+      requestWithCookie(
+        "/admin/matching-v2",
+        `${CUSTOMER_SESSION_COOKIE_NAME}=${sessionCookie}; ${ADMIN_ROUTE_CACHE_COOKIE_NAME}=${adminCacheCookie}`,
+      ),
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("does not accept a customer route cache as administrator route access", async () => {
+    vi.stubEnv("PRODUCT_PACK_SESSION_SECRET", routeSecret);
+    const customerCacheCookie = await createCustomerRouteCacheCookie(
+      sessionCookie,
+      routeSecret,
+    );
+    const fetchSpy = vi.fn().mockResolvedValue(
+      Response.json({
+        authenticated: false,
+        customer: { email: "owner@example.com", roles: ["account_owner"] },
+        source: "none",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await proxy(
+      requestWithCookie(
+        "/admin/matching-v2",
+        `${CUSTOMER_SESSION_COOKIE_NAME}=${sessionCookie}; ${ADMIN_ROUTE_CACHE_COOKIE_NAME}=${customerCacheCookie}`,
+      ),
+    );
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(response.status).toBe(307);
+    expect(response.headers.get("location")).toBe(
+      "https://app.cpghero.com/admin/login?return_to=%2Fadmin%2Fmatching-v2",
+    );
   });
 
   it("allows admin API routes when the customer session has system admin access", async () => {

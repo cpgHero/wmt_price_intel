@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CUSTOMER_ROUTE_CACHE_COOKIE_NAME } from "../../../../lib/route-auth-cache";
+import {
+  ADMIN_ROUTE_CACHE_COOKIE_NAME,
+  CUSTOMER_ROUTE_CACHE_COOKIE_NAME,
+} from "../../../../lib/route-auth-cache";
 
 import { GET } from "./route";
 
@@ -40,7 +43,7 @@ describe("customer auth logout route", () => {
     expect(response.status).toBe(401);
   });
 
-  it("clears the customer route-auth cache while forwarding logout", async () => {
+  it("clears the route-auth caches while forwarding logout", async () => {
     vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(null, {
@@ -66,6 +69,9 @@ describe("customer auth logout route", () => {
     expect(response.headers.get("location")).toBe("/");
     expect(response.headers.get("set-cookie")).toContain(
       `${CUSTOMER_ROUTE_CACHE_COOKIE_NAME}=`,
+    );
+    expect(response.headers.get("set-cookie")).toContain(
+      `${ADMIN_ROUTE_CACHE_COOKIE_NAME}=`,
     );
     expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });

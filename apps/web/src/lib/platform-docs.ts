@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.167",
+  version: "1.3.168",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2986,6 +2986,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification complete",
+              "WorkOS-backed administrator sessions now receive an admin-only route-cache handoff.",
+              "Production browser evidence after the prior route-proxy change still showed /customer resolving brian@cpghero.com as System owner, /api/admin/session returning HTTP 200 from /admin/login, and the following /admin/matching-v2 navigation returning HTTP 307 back to /admin/login. The remaining confirmed defect was the handoff between a verified WorkOS-backed system-owner session and the protected /admin/* route boundary. /api/admin/session now issues a short-lived cph_admin_route_auth cookie only when adminSessionStatus returns authenticated true with source customer_system. That cache is HttpOnly, Secure in production, SameSite Strict, five minutes long, cryptographically bound to the current cph_customer_session value, and scoped separately from the customer route-auth cache. The proxy accepts the admin route cache for admin page shells and admin API route-boundary entry, while downstream admin API handlers still run verifyAdminAccess as the authoritative permission check. Customer logout expires both customer and admin route caches. Customer route-cache tokens cannot be replayed as admin route-cache tokens, account_owner alone still cannot create the admin route cache, and this changes route-boundary handoff only; it does not grant roles, change WorkOS credentials, change canary allowlists, alter entitlements, location rows, retailer eligibility, proximity metrics, product Search evidence, observed product distribution, matching, report calculations, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification complete",
