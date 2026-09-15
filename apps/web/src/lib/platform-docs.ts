@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.166",
+  version: "1.3.167",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2986,6 +2986,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification complete",
+              "WorkOS-backed system-owner access now reaches admin route shells and displays the system-owner pill label.",
+              "Production browser evidence showed /admin/login could verify a WorkOS-backed CPGHero principal through /api/admin/session and then immediately redirect back to /admin/login when the requested /admin/* page was protected by the route proxy. The confirmed cause was that the admin login client and /api/admin/session accepted customer principals with system.admin, but the route proxy only looked for the legacy administrator cookie before validating admin page and admin API requests. The proxy now permits admin page shells and admin API routes when either the legacy admin cookie is valid or a customer session is present and /api/admin/session returns authenticated true. Account-owner-only customers remain blocked, admin JSON routes still return private 401 responses when unauthorized, and customer route caching remains customer-route-only. The customer identity pill now prioritizes system-level roles, so a principal with both account_owner and system_owner displays System owner in the top navigation while the full role set remains visible in My Workspace. This changes the admin route boundary and identity-label presentation only; it does not broaden account_owner permissions, grant roles, change WorkOS credentials, change canary allowlists, alter location rows, retailer eligibility, proximity metrics, product Search evidence, observed product distribution, matching, report calculations, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification complete",

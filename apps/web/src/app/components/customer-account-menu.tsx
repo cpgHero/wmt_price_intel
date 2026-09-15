@@ -4,6 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { customerPrimaryRoleLabel } from "@/lib/customer-role-display";
+
 import styles from "./app-shell.module.css";
 
 interface CustomerPrincipalResponse {
@@ -25,14 +27,6 @@ function initialsForEmail(email: string): string {
   const parts = name.split(/[._+-]+/).filter(Boolean);
   const letters = parts.length > 1 ? [parts[0], parts[1]] : [name.slice(0, 2)];
   return letters.map((part) => part.charAt(0).toUpperCase()).join("");
-}
-
-function primaryRole(roles: string[]): string {
-  if (roles.includes("account_owner")) return "Account owner";
-  if (roles.includes("account_admin")) return "Account admin";
-  if (roles.includes("analyst")) return "Analyst";
-  if (roles.includes("viewer")) return "Viewer";
-  return roles.at(0)?.replaceAll("_", " ") ?? "Customer";
 }
 
 function navigateByDocument(path: string) {
@@ -174,7 +168,7 @@ export function CustomerAccountMenu() {
         </span>
         <span>
           <strong>{principal.email}</strong>
-          <small>{primaryRole(principal.roles)}</small>
+          <small>{customerPrimaryRoleLabel(principal.roles)}</small>
         </span>
       </button>
       {menuOpen ? (
