@@ -2989,6 +2989,12 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "2026-09-14",
               "Local verification complete",
+              "Customer workspace navigation handoff added.",
+              "The signed-in account menu's My workspace action now explicitly rechecks /api/auth/me before navigating, which primes the short-lived route-auth cache and then uses a full browser navigation to /customer. If the check fails, the user is routed through customer login with return_to=/customer. This changes account-menu navigation only; it does not change WorkOS credentials, user provisioning, canary allowlists, roles, entitlements, report calculations, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
+            [
+              "2026-09-14",
+              "Local verification complete",
               "Customer account-menu and return-destination polish added.",
               "The signed-in email/role pill now opens an explicit account menu with My workspace and Sign out actions instead of navigating directly. Generic customer sign-in requests default to /customer when the supplied return destination is missing or the public home page, logout clears the short-lived customer route-auth cache, and the customer session indicator refreshes after route changes to reduce stale signed-in display. This changes customer-login and account-menu user experience only; it does not change WorkOS credentials, user provisioning, canary allowlists, roles, entitlements, report calculations, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
             ],

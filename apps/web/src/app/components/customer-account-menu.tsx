@@ -35,11 +35,16 @@ function primaryRole(roles: string[]): string {
   return roles.at(0)?.replaceAll("_", " ") ?? "Customer";
 }
 
+function navigateByDocument(path: string) {
+  window.location.assign(new URL(path, window.location.origin).toString());
+}
+
 export function CustomerAccountMenu() {
   const pathname = usePathname();
   const isAdminWorkspace = pathname?.startsWith("/admin") ?? false;
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [workspaceOpening, setWorkspaceOpening] = useState(false);
   const [session, setSession] = useState<CustomerSessionState>({
     status: "loading",
   });
@@ -102,6 +107,32 @@ export function CustomerAccountMenu() {
     };
   }, [menuOpen]);
 
+  async function openCustomerWorkspace() {
+    if (workspaceOpening) return;
+    setWorkspaceOpening(true);
+    try {
+      const response = await fetch("/api/auth/me", {
+        cache: "no-store",
+        credentials: "include",
+        headers: { accept: "application/json" },
+      });
+      if (!response.ok) {
+        setSession({ status: "anonymous" });
+        navigateByDocument("/api/auth/login?return_to=%2Fcustomer");
+        return;
+      }
+      setMenuOpen(false);
+      window.requestAnimationFrame(() => {
+        navigateByDocument("/customer");
+      });
+    } catch {
+      setSession({ status: "anonymous" });
+      navigateByDocument("/api/auth/login?return_to=%2Fcustomer");
+    } finally {
+      setWorkspaceOpening(false);
+    }
+  }
+
   if (session.status === "loading") {
     return (
       <span className={styles.customerSessionSkeleton} aria-hidden="true" />
@@ -148,14 +179,15 @@ export function CustomerAccountMenu() {
       </button>
       {menuOpen ? (
         <div className={styles.customerMenu} role="menu">
-          <Link
+          <button
             className={styles.customerMenuItem}
-            href="/customer"
+            disabled={workspaceOpening}
             role="menuitem"
-            onClick={() => setMenuOpen(false)}
+            type="button"
+            onClick={openCustomerWorkspace}
           >
-            My workspace
-          </Link>
+            {workspaceOpening ? "Opening workspace…" : "My workspace"}
+          </button>
           <Link
             className={styles.customerMenuItem}
             href={logoutUrl}
