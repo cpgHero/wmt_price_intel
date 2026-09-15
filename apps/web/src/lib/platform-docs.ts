@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 15, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.170",
+  version: "1.3.171",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2986,6 +2986,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-15",
+              "Documentation gate complete",
+              "Legacy rollback production formatting follow-up documented.",
+              "No additional runtime behavior changed beyond the legacy restore mode recorded immediately below. This follow-up records that the production rollback source was formatted for CI compliance after the first push and keeps the owner/admin documentation gate synchronized with the touched admin/reporting source files. Active behavior remains: customer WorkOS login and customer report APIs are disabled, the root and /analyses routes use the legacy app/reporting experience, legacy administrator password sessions authorize Administration, and Proximity remains active in its current implementation.",
+            ],
             [
               "2026-09-15",
               "Implemented and verification-gated",
