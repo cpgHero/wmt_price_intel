@@ -2989,6 +2989,12 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "2026-09-14",
               "Local verification complete",
+              "Logout prefetch guard added.",
+              "Production logs showed framework background requests to /api/auth/logout?_rsc immediately after successful customer session checks, which could clear the session before the user intentionally selected Sign out. Logout now rejects RSC, prefetch, and non-document requests without forwarding them to the API, and logout controls are ordinary browser anchors rather than Next.js Link components. This changes customer logout safety only; it does not change WorkOS credentials, user provisioning, canary allowlists, roles, entitlements, report calculations, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
+            [
+              "2026-09-14",
+              "Local verification complete",
               "Customer workspace navigation handoff added.",
               "The signed-in account menu's My workspace action now explicitly rechecks /api/auth/me before navigating, which primes the short-lived route-auth cache and then uses a full browser navigation to /customer. If the check fails, the user is routed through customer login with return_to=/customer. This changes account-menu navigation only; it does not change WorkOS credentials, user provisioning, canary allowlists, roles, entitlements, report calculations, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
             ],
