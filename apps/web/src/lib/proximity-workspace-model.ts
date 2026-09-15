@@ -60,3 +60,9 @@ export function selectCompetitorForProximityLoad({
     ? requestedCompetitor
     : competitorOptions[0]?.id || "";
 }
+
+export function customerLoginUrlForReturnTo(returnTo: string) {
+  const parameters = new URLSearchParams();
+  parameters.set("return_to", returnTo || "/");
+  return `/api/auth/login?${parameters.toString()}`;
+}
