@@ -45,6 +45,28 @@ describe("proxy customer route authentication cache", () => {
     expect(response.headers.get("location")).toBeNull();
   });
 
+  it("recognizes quoted sealed customer cookies at the route boundary", async () => {
+    vi.stubEnv("PRODUCT_PACK_SESSION_SECRET", routeSecret);
+    const paddedSessionCookie = "sealed-customer-session.with=padding";
+    const cacheCookie = await createCustomerRouteCacheCookie(
+      paddedSessionCookie,
+      routeSecret,
+    );
+    const fetchSpy = vi.fn();
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const response = await proxy(
+      requestWithCookie(
+        "/customer",
+        `${CUSTOMER_SESSION_COOKIE_NAME}="${paddedSessionCookie}"; ${CUSTOMER_ROUTE_CACHE_COOKIE_NAME}=${cacheCookie}`,
+      ),
+    );
+
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(response.headers.get("location")).toBeNull();
+  });
+
   it("sets the customer route cache after a successful customer session validation", async () => {
     vi.stubEnv("PRODUCT_PACK_SESSION_SECRET", routeSecret);
     const fetchSpy = vi

@@ -63,6 +63,31 @@ function hasTestRouteBypass(request: NextRequest): boolean {
   );
 }
 
+function unquoteCookieValue(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
+    return value.slice(1, -1);
+  }
+  return value;
+}
+
+function cookieValueFromRequest(
+  request: NextRequest,
+  name: string,
+): string | undefined {
+  const parsed = unquoteCookieValue(request.cookies.get(name)?.value);
+  if (parsed) return parsed;
+
+  const rawCookieHeader = request.headers.get("cookie");
+  if (!rawCookieHeader) return undefined;
+  for (const segment of rawCookieHeader.split(";")) {
+    const trimmed = segment.trim();
+    if (!trimmed.startsWith(`${name}=`)) continue;
+    return unquoteCookieValue(trimmed.slice(name.length + 1).trim());
+  }
+  return undefined;
+}
+
 async function validateSession(
   request: NextRequest,
   session: ProtectedSessionKind,
@@ -99,7 +124,7 @@ async function hasValidCustomerRouteCache(
   sessionCookie: string,
 ): Promise<boolean> {
   return verifyCustomerRouteCacheCookie(
-    request.cookies.get(CUSTOMER_ROUTE_CACHE_COOKIE_NAME)?.value,
+    cookieValueFromRequest(request, CUSTOMER_ROUTE_CACHE_COOKIE_NAME),
     sessionCookie,
     routeCacheSecret(),
   );
@@ -136,7 +161,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   }
 
   const cookieName = sessionCookieName(decision.session);
-  const sessionCookie = request.cookies.get(cookieName)?.value;
+  const sessionCookie = cookieValueFromRequest(request, cookieName);
   if (sessionCookie) {
     if (
       decision.session === "customer" &&
