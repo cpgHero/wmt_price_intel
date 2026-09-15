@@ -7,6 +7,10 @@ import {
   verifyCustomerRouteCacheCookie,
 } from "./lib/route-auth-cache";
 import {
+  cookieValueFromRequest,
+  customerRouteCacheSecret,
+} from "./lib/customer-auth-cookies";
+import {
   routeAccessDecision,
   sessionCookieName,
   type ProtectedSessionKind,
@@ -63,31 +67,6 @@ function hasTestRouteBypass(request: NextRequest): boolean {
   );
 }
 
-function unquoteCookieValue(value: string | undefined): string | undefined {
-  if (value === undefined) return undefined;
-  if (value.length >= 2 && value.startsWith('"') && value.endsWith('"')) {
-    return value.slice(1, -1);
-  }
-  return value;
-}
-
-function cookieValueFromRequest(
-  request: NextRequest,
-  name: string,
-): string | undefined {
-  const parsed = unquoteCookieValue(request.cookies.get(name)?.value);
-  if (parsed) return parsed;
-
-  const rawCookieHeader = request.headers.get("cookie");
-  if (!rawCookieHeader) return undefined;
-  for (const segment of rawCookieHeader.split(";")) {
-    const trimmed = segment.trim();
-    if (!trimmed.startsWith(`${name}=`)) continue;
-    return unquoteCookieValue(trimmed.slice(name.length + 1).trim());
-  }
-  return undefined;
-}
-
 async function validateSession(
   request: NextRequest,
   session: ProtectedSessionKind,
@@ -115,10 +94,6 @@ async function validateSession(
   }
 }
 
-function routeCacheSecret(): string | null {
-  return process.env.PRODUCT_PACK_SESSION_SECRET?.trim() || null;
-}
-
 async function hasValidCustomerRouteCache(
   request: NextRequest,
   sessionCookie: string,
@@ -126,7 +101,7 @@ async function hasValidCustomerRouteCache(
   return verifyCustomerRouteCacheCookie(
     cookieValueFromRequest(request, CUSTOMER_ROUTE_CACHE_COOKIE_NAME),
     sessionCookie,
-    routeCacheSecret(),
+    customerRouteCacheSecret(),
   );
 }
 
@@ -136,7 +111,7 @@ async function withCustomerRouteCache(
 ): Promise<NextResponse> {
   const cacheCookie = await createCustomerRouteCacheCookie(
     sessionCookie,
-    routeCacheSecret(),
+    customerRouteCacheSecret(),
   );
   if (!cacheCookie) return response;
 
