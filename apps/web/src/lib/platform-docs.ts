@@ -88,11 +88,11 @@ const proximityLastVerified = "September 13, 2026";
 const visibilityBoundaryLastVerified = "September 13, 2026";
 const accountAccessLastVerified = "September 13, 2026";
 const principalEnforcementLastVerified = "September 13, 2026";
-const customerAuthLastVerified = "September 14, 2026";
+const customerAuthLastVerified = "September 15, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.168",
+  version: "1.3.169",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2986,6 +2986,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-15",
+              "Local verification complete",
+              "Administrator authorization now resolves WorkOS customer principals through the same customer-auth proxy path as My Workspace.",
+              "Production browser and HTTP-log evidence after the admin route-cache deployment showed /customer resolving brian@cpghero.com as System owner with the system.admin permission, while /api/admin/session continued returning the anonymous-sized unauthenticated response during /admin/matching-v2 navigation loops. The remaining confirmed defect was the duplicate administrator customer-principal resolver, not the role grant or missing Railway secrets. Administrator access now resolves WorkOS-backed customer sessions by reusing the same same-origin customer-auth proxy path that powers /api/auth/me, preserving the forwarded customer session context before checking for the system.admin permission. /api/admin/session is explicitly force-dynamic and still issues the separate short-lived admin route-cache only after customer_system authentication. Legacy password admin sessions remain supported, account_owner without system.admin remains blocked, and every protected /api/admin/* handler continues to run verifyAdminAccess as the authoritative operation guard. This changes administrator customer-principal resolution and route-handler cache declaration only; it does not grant roles, change WorkOS credentials, change canary allowlists, alter entitlements, location rows, retailer eligibility, proximity metrics, product Search evidence, observed product distribution, matching, report calculations, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification complete",

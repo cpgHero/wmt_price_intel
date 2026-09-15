@@ -4,7 +4,7 @@ import {
   adminAuthenticationConfigured,
   verifyAdminSession,
 } from "./admin-session";
-import { loadServerConfig } from "./config";
+import { proxyCustomerAuthGet } from "./customer-auth-proxy";
 
 export type AdminSessionSource = "customer_system" | "legacy_admin" | "none";
 
@@ -39,16 +39,8 @@ async function customerPrincipalStatus(
   const cookie = request.headers.get("cookie");
   if (!cookie) return null;
 
-  const upstreamUrl = new URL("/api/v1/me", loadServerConfig().apiInternalUrl);
   try {
-    const upstream = await fetch(upstreamUrl, {
-      cache: "no-store",
-      headers: {
-        accept: "application/json",
-        cookie,
-      },
-      signal: AbortSignal.timeout(15_000),
-    });
+    const upstream = await proxyCustomerAuthGet(request, "/api/v1/me");
     if (!upstream.ok) return null;
 
     const payload = (await upstream.json()) as CustomerPrincipalResponse;
