@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ADMIN_ROUTE_CACHE_SECONDS,
   CUSTOMER_ROUTE_CACHE_SECONDS,
+  createAdminRouteCacheCookie,
   createCustomerRouteCacheCookie,
+  verifyAdminRouteCacheCookie,
   verifyCustomerRouteCacheCookie,
 } from "./route-auth-cache";
 
@@ -96,6 +99,56 @@ describe("customer route authentication cache", () => {
     ).resolves.toBe(false);
     await expect(
       verifyCustomerRouteCacheCookie("token", "sealed-session-cookie", "", 100),
+    ).resolves.toBe(false);
+  });
+});
+
+describe("administrator route authentication cache", () => {
+  it("creates an administrator token bound to the current customer session cookie", async () => {
+    const token = await createAdminRouteCacheCookie(
+      "sealed-session-cookie",
+      "route-secret",
+      100,
+    );
+
+    expect(token).toBeTruthy();
+    await expect(
+      verifyAdminRouteCacheCookie(
+        token,
+        "sealed-session-cookie",
+        "route-secret",
+        100 + ADMIN_ROUTE_CACHE_SECONDS - 1,
+      ),
+    ).resolves.toBe(true);
+  });
+
+  it("does not accept customer route tokens as administrator route tokens", async () => {
+    const customerToken = await createCustomerRouteCacheCookie(
+      "sealed-session-cookie",
+      "route-secret",
+      100,
+    );
+    const adminToken = await createAdminRouteCacheCookie(
+      "sealed-session-cookie",
+      "route-secret",
+      100,
+    );
+
+    await expect(
+      verifyAdminRouteCacheCookie(
+        customerToken,
+        "sealed-session-cookie",
+        "route-secret",
+        101,
+      ),
+    ).resolves.toBe(false);
+    await expect(
+      verifyCustomerRouteCacheCookie(
+        adminToken,
+        "sealed-session-cookie",
+        "route-secret",
+        101,
+      ),
     ).resolves.toBe(false);
   });
 });

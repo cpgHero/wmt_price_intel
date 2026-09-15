@@ -1,18 +1,44 @@
 import { NextResponse } from "next/server";
 
 import {
-  adminAuthenticationConfigured,
   adminSessionCookie,
   assertSameOrigin,
   createAdminSession,
   verifyAdminPassword,
-} from "@/lib/admin-session";
-import { adminSessionStatus } from "@/lib/admin-access";
+} from "../../../../lib/admin-session";
+import { adminSessionStatus } from "../../../../lib/admin-access";
+import {
+  cookieValueFromHeaders,
+  customerRouteCacheSecret,
+} from "../../../../lib/customer-auth-cookies";
+import {
+  ADMIN_ROUTE_CACHE_COOKIE_NAME,
+  ADMIN_ROUTE_CACHE_SECONDS,
+  createAdminRouteCacheCookie,
+} from "../../../../lib/route-auth-cache";
+import { CUSTOMER_SESSION_COOKIE_NAME } from "../../../../lib/route-access-policy";
 
 export async function GET(request: Request) {
-  return NextResponse.json(await adminSessionStatus(request), {
+  const status = await adminSessionStatus(request);
+  const response = NextResponse.json(status, {
     headers: { "cache-control": "private, no-store" },
   });
+  if (status.authenticated && status.source === "customer_system") {
+    const cacheCookie = await createAdminRouteCacheCookie(
+      cookieValueFromHeaders(request.headers, CUSTOMER_SESSION_COOKIE_NAME),
+      customerRouteCacheSecret(),
+    );
+    if (cacheCookie) {
+      response.cookies.set(ADMIN_ROUTE_CACHE_COOKIE_NAME, cacheCookie, {
+        httpOnly: true,
+        maxAge: ADMIN_ROUTE_CACHE_SECONDS,
+        path: "/",
+        sameSite: "strict",
+        secure: process.env.NODE_ENV === "production",
+      });
+    }
+  }
+  return response;
 }
 
 export async function POST(request: Request) {

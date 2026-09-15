@@ -1,11 +1,14 @@
 import { proxyCustomerAuthGet } from "../../../../lib/customer-auth-proxy";
-import { CUSTOMER_ROUTE_CACHE_COOKIE_NAME } from "../../../../lib/route-auth-cache";
+import {
+  ADMIN_ROUTE_CACHE_COOKIE_NAME,
+  CUSTOMER_ROUTE_CACHE_COOKIE_NAME,
+} from "../../../../lib/route-auth-cache";
 
 export const dynamic = "force-dynamic";
 
-function expiredRouteCacheCookie(): string {
+function expiredRouteCacheCookie(name: string): string {
   const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
-  return `${CUSTOMER_ROUTE_CACHE_COOKIE_NAME}=; HttpOnly; Max-Age=0; Path=/; SameSite=Strict${secure}`;
+  return `${name}=; HttpOnly; Max-Age=0; Path=/; SameSite=Strict${secure}`;
 }
 
 function isBackgroundAuthRequest(request: Request): boolean {
@@ -35,7 +38,14 @@ export async function GET(request: Request) {
 
   const response = await proxyCustomerAuthGet(request, "/api/auth/logout");
   const headers = new Headers(response.headers);
-  headers.append("set-cookie", expiredRouteCacheCookie());
+  headers.append(
+    "set-cookie",
+    expiredRouteCacheCookie(CUSTOMER_ROUTE_CACHE_COOKIE_NAME),
+  );
+  headers.append(
+    "set-cookie",
+    expiredRouteCacheCookie(ADMIN_ROUTE_CACHE_COOKIE_NAME),
+  );
   return new Response(response.body, {
     status: response.status,
     statusText: response.statusText,

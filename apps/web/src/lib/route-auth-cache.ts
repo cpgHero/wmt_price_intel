@@ -1,7 +1,10 @@
 export const CUSTOMER_ROUTE_CACHE_COOKIE_NAME = "cph_customer_route_auth";
 export const CUSTOMER_ROUTE_CACHE_SECONDS = 60;
+export const ADMIN_ROUTE_CACHE_COOKIE_NAME = "cph_admin_route_auth";
+export const ADMIN_ROUTE_CACHE_SECONDS = 5 * 60;
 
 const TOKEN_VERSION = "v1";
+type RouteCacheScope = "admin" | "customer";
 
 function textBytes(value: string): ArrayBuffer {
   const bytes = new TextEncoder().encode(value);
@@ -44,15 +47,48 @@ export async function createCustomerRouteCacheCookie(
   secret: string | null | undefined,
   nowSeconds = Math.floor(Date.now() / 1000),
 ): Promise<string | null> {
+  return createRouteCacheCookie(
+    sessionCookie,
+    secret,
+    "customer",
+    CUSTOMER_ROUTE_CACHE_SECONDS,
+    nowSeconds,
+  );
+}
+
+export async function createAdminRouteCacheCookie(
+  sessionCookie: string | null | undefined,
+  secret: string | null | undefined,
+  nowSeconds = Math.floor(Date.now() / 1000),
+): Promise<string | null> {
+  return createRouteCacheCookie(
+    sessionCookie,
+    secret,
+    "admin",
+    ADMIN_ROUTE_CACHE_SECONDS,
+    nowSeconds,
+  );
+}
+
+async function createRouteCacheCookie(
+  sessionCookie: string | null | undefined,
+  secret: string | null | undefined,
+  scope: RouteCacheScope,
+  maxAgeSeconds: number,
+  nowSeconds: number,
+): Promise<string | null> {
   if (!usable(sessionCookie) || !usable(secret)) return null;
 
-  const expiresAt = nowSeconds + CUSTOMER_ROUTE_CACHE_SECONDS;
+  const expiresAt = nowSeconds + maxAgeSeconds;
   const sessionFingerprint = await hmacSha256(
-    `session:${sessionCookie}`,
+    `${scope}-session:${sessionCookie}`,
     secret,
   );
   const unsignedPayload = `${TOKEN_VERSION}.${expiresAt}.${sessionFingerprint}`;
-  const signature = await hmacSha256(`route-cache:${unsignedPayload}`, secret);
+  const signature = await hmacSha256(
+    `${scope}-route-cache:${unsignedPayload}`,
+    secret,
+  );
 
   return `${unsignedPayload}.${signature}`;
 }
@@ -62,6 +98,37 @@ export async function verifyCustomerRouteCacheCookie(
   sessionCookie: string | null | undefined,
   secret: string | null | undefined,
   nowSeconds = Math.floor(Date.now() / 1000),
+): Promise<boolean> {
+  return verifyRouteCacheCookie(
+    cacheCookie,
+    sessionCookie,
+    secret,
+    "customer",
+    nowSeconds,
+  );
+}
+
+export async function verifyAdminRouteCacheCookie(
+  cacheCookie: string | null | undefined,
+  sessionCookie: string | null | undefined,
+  secret: string | null | undefined,
+  nowSeconds = Math.floor(Date.now() / 1000),
+): Promise<boolean> {
+  return verifyRouteCacheCookie(
+    cacheCookie,
+    sessionCookie,
+    secret,
+    "admin",
+    nowSeconds,
+  );
+}
+
+async function verifyRouteCacheCookie(
+  cacheCookie: string | null | undefined,
+  sessionCookie: string | null | undefined,
+  secret: string | null | undefined,
+  scope: RouteCacheScope,
+  nowSeconds: number,
 ): Promise<boolean> {
   if (!usable(cacheCookie) || !usable(sessionCookie) || !usable(secret)) {
     return false;
@@ -85,14 +152,14 @@ export async function verifyCustomerRouteCacheCookie(
   }
 
   const expectedSessionFingerprint = await hmacSha256(
-    `session:${sessionCookie}`,
+    `${scope}-session:${sessionCookie}`,
     secret,
   );
   if (sessionFingerprint !== expectedSessionFingerprint) return false;
 
   const unsignedPayload = `${version}.${expiresAtText}.${sessionFingerprint}`;
   const expectedSignature = await hmacSha256(
-    `route-cache:${unsignedPayload}`,
+    `${scope}-route-cache:${unsignedPayload}`,
     secret,
   );
   return signature === expectedSignature;
