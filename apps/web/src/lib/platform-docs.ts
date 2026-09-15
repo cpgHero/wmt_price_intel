@@ -2989,6 +2989,12 @@ export const platformDocumentation: PlatformDocumentation = {
             [
               "2026-09-14",
               "Local verification complete",
+              "Customer account-menu and return-destination polish added.",
+              "The signed-in email/role pill now opens an explicit account menu with My workspace and Sign out actions instead of navigating directly. Generic customer sign-in requests default to /customer when the supplied return destination is missing or the public home page, logout clears the short-lived customer route-auth cache, and the customer session indicator refreshes after route changes to reduce stale signed-in display. This changes customer-login and account-menu user experience only; it does not change WorkOS credentials, user provisioning, canary allowlists, roles, entitlements, report calculations, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
+            ],
+            [
+              "2026-09-14",
+              "Local verification complete",
               "Customer auth route-cache priming added.",
               "Successful /api/auth/me checks now set the short-lived CPGHero-signed route-auth cache before the callback completion page navigates into protected customer routes. The cache remains bound to the exact customer session cookie, and failed session checks do not set it. The callback completion page also has an eight-second verification timeout so it cannot sit indefinitely on the finishing screen. This changes customer-login callback/session handoff only; it does not change WorkOS credentials, user provisioning, canary allowlists, roles, entitlements, report calculations, proximity metrics, collection requests, source-provider calls, PDP calls, AI calls, PDFs, or historical artifacts.",
             ],

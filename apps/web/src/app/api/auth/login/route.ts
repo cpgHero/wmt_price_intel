@@ -19,6 +19,15 @@ function isBackgroundAuthRequest(request: Request): boolean {
   );
 }
 
+function requestWithCustomerDefaultReturnTo(request: Request): Request {
+  const url = new URL(request.url);
+  const returnTo = url.searchParams.get("return_to");
+  if (!returnTo || returnTo === "/") {
+    url.searchParams.set("return_to", "/customer");
+  }
+  return new Request(url, { headers: request.headers, method: request.method });
+}
+
 export async function GET(request: Request) {
   if (isBackgroundAuthRequest(request)) {
     return Response.json(
@@ -26,5 +35,8 @@ export async function GET(request: Request) {
       { status: 401, headers: { "cache-control": "private, no-store" } },
     );
   }
-  return proxyCustomerAuthGet(request, "/api/auth/login");
+  return proxyCustomerAuthGet(
+    requestWithCustomerDefaultReturnTo(request),
+    "/api/auth/login",
+  );
 }

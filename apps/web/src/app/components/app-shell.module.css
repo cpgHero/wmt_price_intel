@@ -263,13 +263,16 @@
   align-items: center;
   display: flex;
   gap: 0.45rem;
+  position: relative;
 }
 
 .customerIdentity {
   align-items: center;
+  background: color-mix(in srgb, var(--surface-alt) 78%, transparent);
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--ink);
+  cursor: pointer;
   display: flex;
   gap: 0.55rem;
   min-height: 36px;
@@ -281,7 +284,9 @@
 .customerSignIn:hover,
 .customerSignIn:focus-visible,
 .customerSignOut:hover,
-.customerSignOut:focus-visible {
+.customerSignOut:focus-visible,
+.customerMenuItem:hover,
+.customerMenuItem:focus-visible {
   border-color: color-mix(in srgb, var(--green) 42%, var(--line));
   color: var(--ink);
   outline: none;
@@ -340,6 +345,30 @@
 .customerSignIn {
   background: color-mix(in srgb, var(--green) 12%, transparent);
   color: var(--ink);
+}
+
+.customerMenu {
+  background: color-mix(in srgb, var(--surface) 94%, #000);
+  border: 1px solid var(--line);
+  border-radius: 0.9rem;
+  box-shadow: 0 1rem 2.8rem rgba(0, 0, 0, 0.34);
+  display: grid;
+  gap: 0.25rem;
+  min-width: 12rem;
+  padding: 0.45rem;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.5rem);
+  z-index: 50;
+}
+
+.customerMenuItem {
+  border: 1px solid transparent;
+  border-radius: 0.65rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 820;
+  padding: 0.65rem 0.75rem;
 }
 
 .customerSessionSkeleton {

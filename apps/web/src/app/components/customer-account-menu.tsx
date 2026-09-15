@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import styles from "./app-shell.module.css";
 
@@ -38,12 +38,16 @@ function primaryRole(roles: string[]): string {
 export function CustomerAccountMenu() {
   const pathname = usePathname();
   const isAdminWorkspace = pathname?.startsWith("/admin") ?? false;
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [session, setSession] = useState<CustomerSessionState>({
     status: "loading",
   });
+  const currentDestination =
+    pathname && pathname !== "/" ? pathname : "/customer";
   const loginUrl = useMemo(
-    () => `/api/auth/login?return_to=${encodeURIComponent(pathname || "/")}`,
-    [pathname],
+    () => `/api/auth/login?return_to=${encodeURIComponent(currentDestination)}`,
+    [currentDestination],
   );
   const logoutUrl = useMemo(
     () => `/api/auth/logout?return_to=${encodeURIComponent("/")}`,
@@ -78,7 +82,25 @@ export function CustomerAccountMenu() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onPointerDown(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setMenuOpen(false);
+      }
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [menuOpen]);
 
   if (session.status === "loading") {
     return (
@@ -107,11 +129,14 @@ export function CustomerAccountMenu() {
 
   const { principal } = session;
   return (
-    <div className={styles.customerSession}>
-      <Link
+    <div className={styles.customerSession} ref={menuRef}>
+      <button
         className={styles.customerIdentity}
-        href="/customer"
-        title={`Open customer workspace for ${principal.email}`}
+        type="button"
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
+        title={`Open account menu for ${principal.email}`}
+        onClick={() => setMenuOpen((open) => !open)}
       >
         <span className={styles.customerAvatar} aria-hidden="true">
           {initialsForEmail(principal.email)}
@@ -120,10 +145,27 @@ export function CustomerAccountMenu() {
           <strong>{principal.email}</strong>
           <small>{primaryRole(principal.roles)}</small>
         </span>
-      </Link>
-      <Link className={styles.customerSignOut} href={logoutUrl}>
-        Sign out
-      </Link>
+      </button>
+      {menuOpen ? (
+        <div className={styles.customerMenu} role="menu">
+          <Link
+            className={styles.customerMenuItem}
+            href="/customer"
+            role="menuitem"
+            onClick={() => setMenuOpen(false)}
+          >
+            My workspace
+          </Link>
+          <Link
+            className={styles.customerMenuItem}
+            href={logoutUrl}
+            role="menuitem"
+            onClick={() => setMenuOpen(false)}
+          >
+            Sign out
+          </Link>
+        </div>
+      ) : null}
     </div>
   );
 }
