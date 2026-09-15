@@ -124,11 +124,14 @@ def _callback_complete_response(return_to: str) -> HTMLResponse:
       const statusMessage = document.getElementById("status-message");
       const errorMessage = document.getElementById("error-message");
       const actions = document.getElementById("manual-actions");
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 8000);
       try {{
         const response = await fetch("/api/auth/me", {{
           cache: "no-store",
           credentials: "include",
           headers: {{ accept: "application/json" }},
+          signal: controller.signal,
         }});
         if (response.ok) {{
           window.location.replace(destination);
@@ -136,6 +139,8 @@ def _callback_complete_response(return_to: str) -> HTMLResponse:
         }}
       }} catch (error) {{
         // Fall through to the controlled manual-retry state.
+      }} finally {{
+        window.clearTimeout(timeout);
       }}
       statusMessage.textContent =
         "Sign-in reached CPGHero, but the customer session is not readable yet.";

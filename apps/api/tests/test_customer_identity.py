@@ -323,6 +323,8 @@ async def test_customer_auth_callback_commits_session_on_first_party_page() -> N
     assert response.headers["cache-control"] == "private, no-store"
     assert "Finishing sign-in" in response.text
     assert 'fetch("/api/auth/me"' in response.text
+    assert "new AbortController()" in response.text
+    assert "window.setTimeout(() => controller.abort(), 8000)" in response.text
     assert "window.location.replace(destination)" in response.text
     assert 'const destination = "/reports"' in response.text
     assert "Automatic retries have" in response.text
