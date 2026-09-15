@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { verifyAdminSession } from "@/lib/admin-session";
+import { verifyAdminAccess } from "@/lib/admin-access";
 import { loadServerConfig } from "@/lib/config";
 
 interface RouteContext {
@@ -10,7 +10,7 @@ interface RouteContext {
 const SAFE_IDENTIFIER = /^[a-zA-Z0-9._-]+$/;
 
 export async function GET(request: Request, context: RouteContext) {
-  if (!verifyAdminSession(request)) {
+  if (!(await verifyAdminAccess(request))) {
     return NextResponse.json(
       { error: "Administrator authentication is required." },
       { status: 401 },

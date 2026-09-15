@@ -60,7 +60,7 @@ describe("customer account foundation admin source contract", () => {
 
   it("keeps the account foundation proxy behind the administrator session and internal API", () => {
     expect(accountFoundationProxySource).toContain(
-      "verifyAdminSession(request)",
+      "verifyAdminAccess(request)",
     );
     expect(accountFoundationProxySource).toContain(
       "/api/v1/admin/customer-provisioning/account-foundation",

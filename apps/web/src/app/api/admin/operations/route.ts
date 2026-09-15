@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { verifyAdminSession } from "@/lib/admin-session";
+import { verifyAdminAccess } from "@/lib/admin-access";
 import { loadServerConfig } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
-  if (!verifyAdminSession(request)) {
+  if (!(await verifyAdminAccess(request))) {
     return NextResponse.json(
       { error: "Administrator authentication is required." },
       { status: 401 },

@@ -7,21 +7,27 @@ function safeReturnTo(): string {
   const requested =
     new URLSearchParams(window.location.search).get("return_to") ??
     "/admin/customer-auth";
-  if (
-    !requested.startsWith("/") ||
-    requested.startsWith("//") ||
-    requested.startsWith("/api/") ||
-    requested === "/admin/login"
-  ) {
+  if (!requested.startsWith("/") || requested.startsWith("//")) {
     return "/admin/customer-auth";
   }
-  return requested;
+  const target = new URL(requested, window.location.origin);
+  if (target.origin !== window.location.origin) return "/admin/customer-auth";
+  if (target.pathname.startsWith("/api/")) return "/admin/customer-auth";
+  if (target.pathname === "/admin/login") return "/admin/customer-auth";
+  return `${target.pathname}${target.search}${target.hash}`;
 }
 
 export function AdminLoginWorkspace() {
+  const [customer, setCustomer] = useState<{
+    email: string;
+    permissions: string[];
+    roles: string[];
+  } | null>(null);
+  const [checking, setChecking] = useState(true);
   const [configured, setConfigured] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState("");
+  const [redirecting, setRedirecting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -36,15 +42,25 @@ export function AdminLoginWorkspace() {
         const payload = (await response.json()) as {
           authenticated?: boolean;
           configured?: boolean;
+          customer?: {
+            email: string;
+            permissions: string[];
+            roles: string[];
+          };
         };
         if (cancelled) return;
         setConfigured(payload.configured !== false);
+        setCustomer(payload.customer ?? null);
         if (payload.authenticated) {
-          window.location.assign(safeReturnTo());
+          setRedirecting(true);
+          window.location.replace(safeReturnTo());
+          return;
         }
+        setChecking(false);
       } catch {
         if (!cancelled) {
           setError("Administrator authentication is temporarily unavailable.");
+          setChecking(false);
         }
       }
     }
@@ -73,7 +89,8 @@ export function AdminLoginWorkspace() {
         setError("Administrator credentials were not accepted.");
         return;
       }
-      window.location.assign(safeReturnTo());
+      setRedirecting(true);
+      window.location.replace(safeReturnTo());
     } catch {
       setError("Administrator authentication is temporarily unavailable.");
     } finally {
@@ -86,14 +103,28 @@ export function AdminLoginWorkspace() {
       <section className="admin-auth-card">
         <div>
           <p className="eyebrow">Administrator session required</p>
-          <h2>Sign in to CPGHero administration</h2>
+          <h2>
+            {checking || redirecting
+              ? "Checking CPGHero administration access"
+              : "Sign in to CPGHero administration"}
+          </h2>
           <p>
-            Admin workspaces are blocked at the route boundary. Sign in to
-            continue to the requested protected page.
+            {checking
+              ? "Verifying the current CPGHero session before opening the requested page."
+              : redirecting
+                ? "Access verified. Opening the requested Administration page."
+                : "Administration is available to CPGHero system administrators. The password unlock remains available as a temporary internal fallback."}
           </p>
         </div>
         {error ? <p className="empty-inline">{error}</p> : null}
-        {configured ? (
+        {!checking && !redirecting && customer ? (
+          <p className="empty-inline">
+            Signed in as {customer.email} with roles{" "}
+            {customer.roles.length ? customer.roles.join(", ") : "none"}. This
+            area requires the system.admin permission.
+          </p>
+        ) : null}
+        {checking || redirecting ? null : configured ? (
           <form onSubmit={submit}>
             <input
               aria-label="Administrator password"
