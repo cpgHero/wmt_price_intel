@@ -21,7 +21,9 @@ describe("canonicalReportExperienceEnabled", () => {
     expect(
       canonicalReportExperienceEnabled({ reportExperience: "canonical" }, {}),
     ).toBe(false);
-    expect(canonicalReportExperienceEnabled({ canonical: "1" }, {})).toBe(false);
+    expect(canonicalReportExperienceEnabled({ canonical: "1" }, {})).toBe(
+      false,
+    );
     expect(canonicalReportExperienceEnabled({ canonical: "true" }, {})).toBe(
       false,
     );

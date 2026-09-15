@@ -12,7 +12,9 @@ describe("proxy legacy restore mode", () => {
     const fetchSpy = vi.fn();
     vi.stubGlobal("fetch", fetchSpy);
 
-    const response = proxy(new NextRequest("https://app.cpghero.com/proximity"));
+    const response = proxy(
+      new NextRequest("https://app.cpghero.com/proximity"),
+    );
 
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(response.status).toBe(200);

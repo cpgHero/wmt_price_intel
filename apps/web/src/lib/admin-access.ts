@@ -13,9 +13,7 @@ export interface AdminSessionStatus {
   source: AdminSessionSource;
 }
 
-export function adminSessionStatus(
-  request: Request,
-): AdminSessionStatus {
+export function adminSessionStatus(request: Request): AdminSessionStatus {
   const legacyConfigured = adminAuthenticationConfigured();
   if (verifyAdminSession(request)) {
     return {

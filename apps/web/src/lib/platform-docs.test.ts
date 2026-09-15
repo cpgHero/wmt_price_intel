@@ -355,9 +355,7 @@ describe("platform owner and administrator documentation", () => {
     expect(guides["change-orders"]).toContain(
       "renders the legacy blueprint competitive intelligence workspace",
     );
-    expect(guides["change-orders"]).toContain(
-      "proximity remains active",
-    );
+    expect(guides["change-orders"]).toContain("proximity remains active");
   });
 
   it("documents positive-price store distribution without inventory claims", () => {
@@ -454,12 +452,8 @@ describe("platform owner and administrator documentation", () => {
     expect(guides["change-orders"]).toContain(
       "does not drop account/rbac database tables, remove railway workos secrets",
     );
-    expect(guides["analytics-reporting"]).toContain(
-      "state-footprint context",
-    );
-    expect(guides["analytics-reporting"]).toContain(
-      "source-backed filters",
-    );
+    expect(guides["analytics-reporting"]).toContain("state-footprint context");
+    expect(guides["analytics-reporting"]).toContain("source-backed filters");
     expect(guides["analytics-reporting"]).toContain(
       "a normalized $/gallon value is never labeled as shelf or package price",
     );

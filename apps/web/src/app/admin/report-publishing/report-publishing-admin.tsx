@@ -664,288 +664,296 @@ export function ReportPublishingAdmin() {
       ) : null}
       {CUSTOMER_REPORT_ACCESS_ENABLED ? (
         <section
-        className={styles.customerAccessPanel}
-        aria-label="Customer report access"
-      >
-        <header>
-          <div>
-            <span className="section-kicker">Customer access</span>
-            <h2>Grant reports to customer accounts</h2>
-            <p>
-              Only ready, non-archived reports can be granted. Customer report
-              detail pages remain keyed by the grant ID, not by a global
-              analysis URL.
-            </p>
-          </div>
-          <button
-            className="button secondary"
-            onClick={() => void loadCustomerAccess()}
-            type="button"
-          >
-            Refresh access
-          </button>
-        </header>
-        <div className={styles.accessMetricGrid} aria-label="Access overview">
-          <article>
-            <span>Active grants</span>
-            <strong>{accessOverview.activeGrants.toLocaleString()}</strong>
-            <p>Reports currently visible to customer users.</p>
-          </article>
-          <article>
-            <span>Revoked grants</span>
-            <strong>{accessOverview.revokedGrants.toLocaleString()}</strong>
-            <p>Access history preserved for audit review.</p>
-          </article>
-          <article>
-            <span>Accounts with access</span>
-            <strong>{accessOverview.accountCount.toLocaleString()}</strong>
-            <p>Customer accounts represented in the grant ledger.</p>
-          </article>
-          <article>
-            <span>Workspaces in scope</span>
-            <strong>{accessOverview.workspaceCount.toLocaleString()}</strong>
-            <p>Active account-level or workspace-specific scopes.</p>
-          </article>
-          <article>
-            <span>Ready reports</span>
-            <strong>{accessOverview.readyReports.toLocaleString()}</strong>
-            <p>Eligible reports that can be granted safely.</p>
-          </article>
-        </div>
-        <div className={styles.accessSummaryGrid}>
-          <section aria-label="Customer accounts with report access">
-            <div className={styles.subsectionHeader}>
-              <h3>Accounts</h3>
-              <span>{accountSummaries.length} shown</span>
+          className={styles.customerAccessPanel}
+          aria-label="Customer report access"
+        >
+          <header>
+            <div>
+              <span className="section-kicker">Customer access</span>
+              <h2>Grant reports to customer accounts</h2>
+              <p>
+                Only ready, non-archived reports can be granted. Customer report
+                detail pages remain keyed by the grant ID, not by a global
+                analysis URL.
+              </p>
             </div>
-            <div className={styles.summaryCards}>
-              {accountSummaries.length ? (
-                accountSummaries.map((account) => (
-                  <article
-                    className={styles.summaryCard}
-                    key={account.key}
-                    title={`${account.label} has ${account.active} active report grants`}
-                  >
-                    <strong>{account.label}</strong>
-                    <span>{account.slug}</span>
-                    <p>
-                      {account.active} active · {account.revoked} revoked ·{" "}
-                      {account.workspaces.size} workspace scopes
-                    </p>
-                  </article>
-                ))
-              ) : (
-                <p className={styles.muted}>No customer grants yet.</p>
-              )}
-            </div>
-          </section>
-          <section aria-label="Customer workspaces with report access">
-            <div className={styles.subsectionHeader}>
-              <h3>Workspace scopes</h3>
-              <span>{workspaceSummaries.length} shown</span>
-            </div>
-            <div className={styles.summaryCards}>
-              {workspaceSummaries.length ? (
-                workspaceSummaries.map((workspace) => (
-                  <article
-                    className={styles.summaryCard}
-                    key={workspace.key}
-                    title={`${workspace.workspaceLabel} has ${workspace.active} active report grants`}
-                  >
-                    <strong>{workspace.workspaceLabel}</strong>
-                    <span>{workspace.accountLabel}</span>
-                    <p>
-                      {workspace.active} active · {workspace.revoked} revoked ·{" "}
-                      {workspace.reports.size} reports
-                    </p>
-                  </article>
-                ))
-              ) : (
-                <p className={styles.muted}>No workspace scopes yet.</p>
-              )}
-            </div>
-          </section>
-        </div>
-        <form className={styles.grantForm} onSubmit={grantCustomerReport}>
-          <label>
-            <span>Account slug or ID</span>
-            <input
-              onChange={(event) => setGrantAccount(event.target.value)}
-              placeholder="ghretail"
-              required
-              value={grantAccount}
-            />
-          </label>
-          <label>
-            <span>Workspace slug or ID</span>
-            <input
-              onChange={(event) => setGrantWorkspace(event.target.value)}
-              placeholder="Optional"
-              value={grantWorkspace}
-            />
-          </label>
-          <label>
-            <span>Find ready report</span>
-            <input
-              onChange={(event) => setReportSearch(event.target.value)}
-              placeholder="Search category, title, pack, analysis"
-              title="Filter the ready reports available in the report picker."
-              value={reportSearch}
-            />
-          </label>
-          <label>
-            <span>Ready report</span>
-            <select
-              disabled={!customerAccess?.grantable_reports.length}
-              onChange={(event) => setGrantAnalysisResultId(event.target.value)}
-              required
-              value={grantAnalysisResultId}
-              title="Only ready, non-archived reports are eligible."
+            <button
+              className="button secondary"
+              onClick={() => void loadCustomerAccess()}
+              type="button"
             >
-              {grantableReportOptions.length ? (
-                grantableReportOptions.map((report) => (
-                  <option
-                    key={report.analysis_result_id}
-                    value={report.analysis_result_id}
-                  >
-                    {report.title} · {report.category ?? "Uncategorized"} ·{" "}
-                    {report.analysis_id}
-                  </option>
-                ))
-              ) : (
-                <option value="">No ready reports match</option>
-              )}
-            </select>
-          </label>
-          <button
-            className="button primary"
-            disabled={busy || !grantAnalysisResultId}
-            title="Grant the selected ready report to the account or workspace scope."
-            type="submit"
-          >
-            {busy ? "Saving…" : "Grant access"}
-          </button>
-        </form>
-        {customerAccess ? (
-          <div className={styles.grantLedger}>
-            <div className={styles.ledgerToolbar}>
-              <label>
-                <span>Find grants</span>
-                <input
-                  onChange={(event) => setGrantSearch(event.target.value)}
-                  placeholder="Search account, workspace, report, category"
-                  title="Filter the customer report grant ledger."
-                  value={grantSearch}
-                />
-              </label>
-              <div className={styles.segmentedControl} role="group">
-                {(["active", "revoked", "all"] as const).map((statusFilter) => (
-                  <button
-                    aria-pressed={grantStatusFilter === statusFilter}
-                    key={statusFilter}
-                    onClick={() => setGrantStatusFilter(statusFilter)}
-                    title={`Show ${statusFilter} customer report grants.`}
-                    type="button"
-                  >
-                    {statusFilter}
-                  </button>
-                ))}
+              Refresh access
+            </button>
+          </header>
+          <div className={styles.accessMetricGrid} aria-label="Access overview">
+            <article>
+              <span>Active grants</span>
+              <strong>{accessOverview.activeGrants.toLocaleString()}</strong>
+              <p>Reports currently visible to customer users.</p>
+            </article>
+            <article>
+              <span>Revoked grants</span>
+              <strong>{accessOverview.revokedGrants.toLocaleString()}</strong>
+              <p>Access history preserved for audit review.</p>
+            </article>
+            <article>
+              <span>Accounts with access</span>
+              <strong>{accessOverview.accountCount.toLocaleString()}</strong>
+              <p>Customer accounts represented in the grant ledger.</p>
+            </article>
+            <article>
+              <span>Workspaces in scope</span>
+              <strong>{accessOverview.workspaceCount.toLocaleString()}</strong>
+              <p>Active account-level or workspace-specific scopes.</p>
+            </article>
+            <article>
+              <span>Ready reports</span>
+              <strong>{accessOverview.readyReports.toLocaleString()}</strong>
+              <p>Eligible reports that can be granted safely.</p>
+            </article>
+          </div>
+          <div className={styles.accessSummaryGrid}>
+            <section aria-label="Customer accounts with report access">
+              <div className={styles.subsectionHeader}>
+                <h3>Accounts</h3>
+                <span>{accountSummaries.length} shown</span>
+              </div>
+              <div className={styles.summaryCards}>
+                {accountSummaries.length ? (
+                  accountSummaries.map((account) => (
+                    <article
+                      className={styles.summaryCard}
+                      key={account.key}
+                      title={`${account.label} has ${account.active} active report grants`}
+                    >
+                      <strong>{account.label}</strong>
+                      <span>{account.slug}</span>
+                      <p>
+                        {account.active} active · {account.revoked} revoked ·{" "}
+                        {account.workspaces.size} workspace scopes
+                      </p>
+                    </article>
+                  ))
+                ) : (
+                  <p className={styles.muted}>No customer grants yet.</p>
+                )}
+              </div>
+            </section>
+            <section aria-label="Customer workspaces with report access">
+              <div className={styles.subsectionHeader}>
+                <h3>Workspace scopes</h3>
+                <span>{workspaceSummaries.length} shown</span>
+              </div>
+              <div className={styles.summaryCards}>
+                {workspaceSummaries.length ? (
+                  workspaceSummaries.map((workspace) => (
+                    <article
+                      className={styles.summaryCard}
+                      key={workspace.key}
+                      title={`${workspace.workspaceLabel} has ${workspace.active} active report grants`}
+                    >
+                      <strong>{workspace.workspaceLabel}</strong>
+                      <span>{workspace.accountLabel}</span>
+                      <p>
+                        {workspace.active} active · {workspace.revoked} revoked
+                        · {workspace.reports.size} reports
+                      </p>
+                    </article>
+                  ))
+                ) : (
+                  <p className={styles.muted}>No workspace scopes yet.</p>
+                )}
+              </div>
+            </section>
+          </div>
+          <form className={styles.grantForm} onSubmit={grantCustomerReport}>
+            <label>
+              <span>Account slug or ID</span>
+              <input
+                onChange={(event) => setGrantAccount(event.target.value)}
+                placeholder="ghretail"
+                required
+                value={grantAccount}
+              />
+            </label>
+            <label>
+              <span>Workspace slug or ID</span>
+              <input
+                onChange={(event) => setGrantWorkspace(event.target.value)}
+                placeholder="Optional"
+                value={grantWorkspace}
+              />
+            </label>
+            <label>
+              <span>Find ready report</span>
+              <input
+                onChange={(event) => setReportSearch(event.target.value)}
+                placeholder="Search category, title, pack, analysis"
+                title="Filter the ready reports available in the report picker."
+                value={reportSearch}
+              />
+            </label>
+            <label>
+              <span>Ready report</span>
+              <select
+                disabled={!customerAccess?.grantable_reports.length}
+                onChange={(event) =>
+                  setGrantAnalysisResultId(event.target.value)
+                }
+                required
+                value={grantAnalysisResultId}
+                title="Only ready, non-archived reports are eligible."
+              >
+                {grantableReportOptions.length ? (
+                  grantableReportOptions.map((report) => (
+                    <option
+                      key={report.analysis_result_id}
+                      value={report.analysis_result_id}
+                    >
+                      {report.title} · {report.category ?? "Uncategorized"} ·{" "}
+                      {report.analysis_id}
+                    </option>
+                  ))
+                ) : (
+                  <option value="">No ready reports match</option>
+                )}
+              </select>
+            </label>
+            <button
+              className="button primary"
+              disabled={busy || !grantAnalysisResultId}
+              title="Grant the selected ready report to the account or workspace scope."
+              type="submit"
+            >
+              {busy ? "Saving…" : "Grant access"}
+            </button>
+          </form>
+          {customerAccess ? (
+            <div className={styles.grantLedger}>
+              <div className={styles.ledgerToolbar}>
+                <label>
+                  <span>Find grants</span>
+                  <input
+                    onChange={(event) => setGrantSearch(event.target.value)}
+                    placeholder="Search account, workspace, report, category"
+                    title="Filter the customer report grant ledger."
+                    value={grantSearch}
+                  />
+                </label>
+                <div className={styles.segmentedControl} role="group">
+                  {(["active", "revoked", "all"] as const).map(
+                    (statusFilter) => (
+                      <button
+                        aria-pressed={grantStatusFilter === statusFilter}
+                        key={statusFilter}
+                        onClick={() => setGrantStatusFilter(statusFilter)}
+                        title={`Show ${statusFilter} customer report grants.`}
+                        type="button"
+                      >
+                        {statusFilter}
+                      </button>
+                    ),
+                  )}
+                </div>
+              </div>
+              <div className={styles.grantTableWrap}>
+                <table className={styles.grantTable}>
+                  <thead>
+                    <tr>
+                      <th>Account</th>
+                      <th>Workspace</th>
+                      <th>Report</th>
+                      <th>Status</th>
+                      <th>Granted</th>
+                      <th>Customer view</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredGrants.map((grant) => (
+                      <tr key={grant.access_id}>
+                        <td>
+                          <strong>{grant.account_display_name}</strong>
+                          <span>{grant.account_slug}</span>
+                        </td>
+                        <td>
+                          {grant.workspace_display_name ?? "Account-level"}
+                          <span>
+                            {grant.workspace_slug ?? grant.workspace_id ?? "—"}
+                          </span>
+                        </td>
+                        <td>
+                          <strong>{grant.title}</strong>
+                          <span>
+                            {grant.category ?? "Uncategorized"} ·{" "}
+                            {grant.analysis_id}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className={`${styles.grantStatus} ${styles[grant.status] ?? ""}`}
+                          >
+                            {grant.status}
+                          </span>
+                        </td>
+                        <td>{formatDateTime(grant.granted_at)}</td>
+                        <td>
+                          {grant.status === "active" ? (
+                            <Link
+                              className={styles.inlineLink}
+                              href={`/customer/reports/${grant.access_id}`}
+                              title="Open the customer-facing report page for this grant."
+                            >
+                              Open
+                            </Link>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td>
+                          {grant.status === "active" ? (
+                            <button
+                              className="button secondary"
+                              onClick={() => {
+                                if (
+                                  revokeCandidateAccessId !== grant.access_id
+                                ) {
+                                  setRevokeCandidateAccessId(grant.access_id);
+                                  return;
+                                }
+                                void revokeCustomerReport(grant.access_id);
+                              }}
+                              title="Soft-revoke this report grant without deleting the audit row."
+                              type="button"
+                            >
+                              {revokeCandidateAccessId === grant.access_id
+                                ? "Confirm revoke"
+                                : "Revoke"}
+                            </button>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {!filteredGrants.length ? (
+                      <tr>
+                        <td colSpan={7}>
+                          <div className={styles.tableEmpty}>
+                            No report grants match the current filters.
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </tbody>
+                </table>
               </div>
             </div>
-            <div className={styles.grantTableWrap}>
-              <table className={styles.grantTable}>
-                <thead>
-                  <tr>
-                    <th>Account</th>
-                    <th>Workspace</th>
-                    <th>Report</th>
-                    <th>Status</th>
-                    <th>Granted</th>
-                    <th>Customer view</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredGrants.map((grant) => (
-                    <tr key={grant.access_id}>
-                      <td>
-                        <strong>{grant.account_display_name}</strong>
-                        <span>{grant.account_slug}</span>
-                      </td>
-                      <td>
-                        {grant.workspace_display_name ?? "Account-level"}
-                        <span>
-                          {grant.workspace_slug ?? grant.workspace_id ?? "—"}
-                        </span>
-                      </td>
-                      <td>
-                        <strong>{grant.title}</strong>
-                        <span>
-                          {grant.category ?? "Uncategorized"} ·{" "}
-                          {grant.analysis_id}
-                        </span>
-                      </td>
-                      <td>
-                        <span
-                          className={`${styles.grantStatus} ${styles[grant.status] ?? ""}`}
-                        >
-                          {grant.status}
-                        </span>
-                      </td>
-                      <td>{formatDateTime(grant.granted_at)}</td>
-                      <td>
-                        {grant.status === "active" ? (
-                          <Link
-                            className={styles.inlineLink}
-                            href={`/customer/reports/${grant.access_id}`}
-                            title="Open the customer-facing report page for this grant."
-                          >
-                            Open
-                          </Link>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td>
-                        {grant.status === "active" ? (
-                          <button
-                            className="button secondary"
-                            onClick={() => {
-                              if (revokeCandidateAccessId !== grant.access_id) {
-                                setRevokeCandidateAccessId(grant.access_id);
-                                return;
-                              }
-                              void revokeCustomerReport(grant.access_id);
-                            }}
-                            title="Soft-revoke this report grant without deleting the audit row."
-                            type="button"
-                          >
-                            {revokeCandidateAccessId === grant.access_id
-                              ? "Confirm revoke"
-                              : "Revoke"}
-                          </button>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {!filteredGrants.length ? (
-                    <tr>
-                      <td colSpan={7}>
-                        <div className={styles.tableEmpty}>
-                          No report grants match the current filters.
-                        </div>
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
+          ) : (
+            <div className="builder-loading">
+              Loading customer access grants…
             </div>
-          </div>
-        ) : (
-          <div className="builder-loading">Loading customer access grants…</div>
-        )}
+          )}
         </section>
       ) : null}
       {error ? <p className="form-error">{error}</p> : null}

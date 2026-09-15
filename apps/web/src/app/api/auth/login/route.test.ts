@@ -21,9 +21,7 @@ describe("customer auth login route", () => {
 
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe(
-      "https://app.cpghero.com/",
-    );
+    expect(response.headers.get("location")).toBe("https://app.cpghero.com/");
   });
 
   it("also redirects stale background login attempts to the restored app home", () => {
@@ -37,8 +35,6 @@ describe("customer auth login route", () => {
 
     expect(fetchSpy).not.toHaveBeenCalled();
     expect(response.status).toBe(307);
-    expect(response.headers.get("location")).toBe(
-      "https://app.cpghero.com/",
-    );
+    expect(response.headers.get("location")).toBe("https://app.cpghero.com/");
   });
 });

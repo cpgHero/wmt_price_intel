@@ -73,5 +73,4 @@ describe("proximity workspace selection rules", () => {
       "all-walmart",
     );
   });
-
 });

@@ -56,9 +56,9 @@ describe("application navigation", () => {
       true,
     );
     expect(activeNavigationItem("/workspace/matches")).toBeNull();
-    expect(activeNavigationItem("/price-intelligence/analysis-123")?.label).toBe(
-      "Price Intelligence",
-    );
+    expect(
+      activeNavigationItem("/price-intelligence/analysis-123")?.label,
+    ).toBe("Price Intelligence");
     expect(activeNavigationItem("/proximity")?.label).toBe("Proximity");
     expect(
       activeNavigationItem(
@@ -110,7 +110,9 @@ describe("application navigation", () => {
     expect(applicationNavigationForExperience(false)).toBe(
       applicationNavigation,
     );
-    expect(applicationNavigationForExperience(true)).toBe(applicationNavigation);
+    expect(applicationNavigationForExperience(true)).toBe(
+      applicationNavigation,
+    );
 
     const hrefs = [
       homeNavigationItem.href,
