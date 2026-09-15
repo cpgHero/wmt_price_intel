@@ -3,13 +3,14 @@ import { expect, test } from "@playwright/test";
 test("shows durable report progress and trust audit evidence", async ({
   page,
 }) => {
-  await page.route("**/api/admin/session", async (route) => {
+  let customerAccessRequests = 0;
+  await page.route("**/api/admin/session*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
     });
   });
-  await page.route("**/api/admin/report-publishing", async (route) => {
+  await page.route(/\/api\/admin\/report-publishing(?:\?|$)/, async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify([
@@ -78,6 +79,7 @@ test("shows durable report progress and trust audit evidence", async ({
   await page.route(
     "**/api/admin/customer-report-access?limit=100",
     async (route) => {
+      customerAccessRequests += 1;
       await route.fulfill({
         contentType: "application/json",
         body: JSON.stringify({
@@ -130,8 +132,9 @@ test("shows durable report progress and trust audit evidence", async ({
   await expect(page.getByText("6 competitive views")).toBeVisible();
   await expect(
     page.getByText("Grant reports to customer accounts"),
-  ).toBeVisible();
+  ).toHaveCount(0);
   await expect(
     page.locator("td strong").filter({ hasText: /^GHRetail$/ }),
-  ).toBeVisible();
+  ).toHaveCount(0);
+  expect(customerAccessRequests).toBe(0);
 });

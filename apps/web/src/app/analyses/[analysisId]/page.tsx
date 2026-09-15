@@ -6,10 +6,6 @@ import {
   type AnalysisRecord,
   type AnalysisReportView,
 } from "@/lib/api";
-import {
-  canonicalReportExperienceEnabled,
-  type CanonicalReportExperienceSearchParams,
-} from "@/lib/canonical-report-experience";
 
 import { AnalysisWorkspace } from "./workspace";
 
@@ -17,12 +13,10 @@ export const dynamic = "force-dynamic";
 
 export default async function AnalysisPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ analysisId: string }>;
-  searchParams: Promise<CanonicalReportExperienceSearchParams>;
 }) {
-  const [{ analysisId }, query] = await Promise.all([params, searchParams]);
+  const { analysisId } = await params;
   const response = await getApi<AnalysisRecord>(
     `/api/v1/analyses/${encodeURIComponent(analysisId)}`,
     30_000,
@@ -59,7 +53,6 @@ export default async function AnalysisPage({
       <AnalysisWorkspace
         analysis={response.data}
         reportView={reportResponse?.data ?? null}
-        canonicalReport={canonicalReportExperienceEnabled(query)}
       />
     </main>
   );

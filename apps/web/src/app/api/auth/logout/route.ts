@@ -1,4 +1,4 @@
-import { proxyCustomerAuthGet } from "../../../../lib/customer-auth-proxy";
+import { NextResponse } from "next/server";
 import {
   ADMIN_ROUTE_CACHE_COOKIE_NAME,
   CUSTOMER_ROUTE_CACHE_COOKIE_NAME,
@@ -11,33 +11,12 @@ function expiredRouteCacheCookie(name: string): string {
   return `${name}=; HttpOnly; Max-Age=0; Path=/; SameSite=Strict${secure}`;
 }
 
-function isBackgroundAuthRequest(request: Request): boolean {
+export function GET(request: Request) {
   const url = new URL(request.url);
-  const accept = request.headers.get("accept") ?? "";
-  const secFetchMode = request.headers.get("sec-fetch-mode") ?? "";
-  const secFetchDest = request.headers.get("sec-fetch-dest") ?? "";
-  return (
-    url.searchParams.has("_rsc") ||
-    request.headers.get("rsc") === "1" ||
-    request.headers.get("next-router-prefetch") === "1" ||
-    request.headers.get("purpose") === "prefetch" ||
-    request.headers.get("sec-purpose") === "prefetch" ||
-    (secFetchMode !== "" && secFetchMode !== "navigate") ||
-    (secFetchDest !== "" && secFetchDest !== "document") ||
-    (accept !== "" && !accept.includes("text/html"))
-  );
-}
-
-export async function GET(request: Request) {
-  if (isBackgroundAuthRequest(request)) {
-    return Response.json(
-      { error: "Customer logout requires a browser navigation." },
-      { status: 401, headers: { "cache-control": "private, no-store" } },
-    );
-  }
-
-  const response = await proxyCustomerAuthGet(request, "/api/auth/logout");
-  const headers = new Headers(response.headers);
+  url.pathname = "/";
+  url.search = "";
+  const response = NextResponse.redirect(url);
+  const headers = response.headers;
   headers.append(
     "set-cookie",
     expiredRouteCacheCookie(CUSTOMER_ROUTE_CACHE_COOKIE_NAME),
@@ -46,9 +25,5 @@ export async function GET(request: Request) {
     "set-cookie",
     expiredRouteCacheCookie(ADMIN_ROUTE_CACHE_COOKIE_NAME),
   );
-  return new Response(response.body, {
-    status: response.status,
-    statusText: response.statusText,
-    headers,
-  });
+  return response;
 }

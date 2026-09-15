@@ -146,7 +146,7 @@ const snapshot = {
 };
 
 test("protects System Operations", async ({ page }) => {
-  await page.route("**/api/admin/session", (route) =>
+  await page.route("**/api/admin/session*", (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: false }),
@@ -164,13 +164,13 @@ test("protects System Operations", async ({ page }) => {
 });
 
 test("renders safe recent analysis failure details", async ({ page }) => {
-  await page.route("**/api/admin/session", (route) =>
+  await page.route("**/api/admin/session*", (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
     }),
   );
-  await page.route("**/api/admin/operations", (route) =>
+  await page.route("**/api/admin/operations*", (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(snapshot),
@@ -199,13 +199,13 @@ test("renders safe recent analysis failure details", async ({ page }) => {
 test("renders recent report materialization failure details", async ({
   page,
 }) => {
-  await page.route("**/api/admin/session", (route) =>
+  await page.route("**/api/admin/session*", (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
     }),
   );
-  await page.route("**/api/admin/operations", (route) =>
+  await page.route("**/api/admin/operations*", (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(snapshot),
@@ -237,13 +237,13 @@ test("renders recent report materialization failure details", async ({
 test("renders live release, queue, spend, and recovery state", async ({
   page,
 }) => {
-  await page.route("**/api/admin/session", (route) =>
+  await page.route("**/api/admin/session*", (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
     }),
   );
-  await page.route("**/api/admin/operations", (route) =>
+  await page.route("**/api/admin/operations*", (route) =>
     route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(snapshot),

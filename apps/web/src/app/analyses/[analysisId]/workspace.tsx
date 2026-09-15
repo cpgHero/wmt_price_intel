@@ -13,7 +13,6 @@ import {
   useApplicationContextDefinition,
 } from "@/app/components/application-context";
 import { ComparableCohortExplorer } from "./cohort-explorer";
-import { CanonicalReportWorkspace } from "./canonical-report-workspace";
 import { ProductLeadershipWorkspace } from "./product-leadership-workspace";
 import {
   comparableCohort,
@@ -123,17 +122,10 @@ function brandTypesSummary(
 export function AnalysisWorkspace({
   analysis,
   reportView,
-  canonicalReport = false,
 }: Readonly<{
   analysis: AnalysisRecord;
   reportView: AnalysisReportView | null;
-  canonicalReport?: boolean;
 }>) {
-  if (reportView && canonicalReport) {
-    return (
-      <CanonicalReportWorkspace analysis={analysis} reportView={reportView} />
-    );
-  }
   return reportView ? (
     <BlueprintAnalysisWorkspace analysis={analysis} reportView={reportView} />
   ) : (

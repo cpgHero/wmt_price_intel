@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import type { LocationRetailer } from "@/lib/api";
 
 import {
-  customerLoginUrlForReturnTo,
   recommendedComparisonScopeForStateCounts,
   selectCompetitorForProximityLoad,
 } from "../../lib/proximity-workspace-model";
@@ -75,17 +74,4 @@ describe("proximity workspace selection rules", () => {
     );
   });
 
-  it("builds customer sign-in URLs that preserve the current page and query", () => {
-    expect(
-      customerLoginUrlForReturnTo("/proximity?competitor=heb_us&radius=3"),
-    ).toBe(
-      "/api/auth/login?return_to=%2Fproximity%3Fcompetitor%3Dheb_us%26radius%3D3",
-    );
-  });
-
-  it("falls back to the customer app root when return_to is empty", () => {
-    expect(customerLoginUrlForReturnTo("")).toBe(
-      "/api/auth/login?return_to=%2F",
-    );
-  });
 });

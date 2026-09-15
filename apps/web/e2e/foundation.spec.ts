@@ -6,18 +6,20 @@ test("serves the application shell, workflow routes, and health route", async ({
   const home = await request.get("/");
   expect(home.ok()).toBe(true);
   const homeHtml = await home.text();
-  expect(homeHtml).toContain(
-    "Source-backed CPG intelligence for retail teams.",
-  );
-  expect(homeHtml).toContain("Sign in to CPGHero");
-  expect(homeHtml).toContain("Live APIs");
+  expect(homeHtml).toContain("Your competitive intelligence workspace.");
+  expect(homeHtml).toContain("New collection");
+  expect(homeHtml).toContain("Browse reports");
+  expect(homeHtml).not.toContain("Sign in to CPGHero");
 
-  const customer = await request.get("/customer");
-  expect(customer.ok()).toBe(true);
-  const customerHtml = await customer.text();
-  expect(customerHtml).toContain("Application navigation");
-  expect(customerHtml).toContain("My Workspace");
-  expect(customerHtml).toContain("Reports");
+  const customer = await request.get("/customer", { maxRedirects: 0 });
+  expect(customer.status()).toBe(307);
+  expect(customer.headers().location).toBe("/");
+
+  const customerReport = await request.get("/customer/reports/test-access", {
+    maxRedirects: 0,
+  });
+  expect(customerReport.status()).toBe(307);
+  expect(customerReport.headers().location).toBe("/analyses");
 
   const collections = await request.get("/collections");
   expect(collections.ok()).toBe(true);
@@ -69,20 +71,22 @@ test("serves the branded shell and no-flash theme controls", async ({
   request,
 }) => {
   const response = await request.get("/customer");
+  expect(response.url()).toMatch(/\/$/);
   const html = await response.text();
 
   expect(response.ok()).toBe(true);
   expect(html).toContain("CPGHero");
   expect(html).toContain("Application navigation");
-  expect(html).toContain("My Workspace");
+  expect(html).toContain("Home");
   expect(html).toContain("Analytics");
-  expect(html).not.toContain(">Workspace<");
+  expect(html).toContain("Price Intelligence");
+  expect(html).toContain("Competitive Intelligence");
   expect(html).toContain("Match Certification");
-  expect(html).toContain("Brand Governance");
-  expect(html).toContain("Reports");
-  expect(html).toContain("Pipeline Status");
+  expect(html).toContain("Brand Workbench");
+  expect(html).toContain("Report Publishing");
   expect(html).toContain("Study Discovery");
   expect(html).not.toContain("Price Intelligence (Coming soon)");
+  expect(html).not.toContain("Sign in to CPGHero");
   expect(html).toContain("theme-init");
   expect(html).toContain("rci-theme");
   expect(html).toContain("Toggle light and dark theme");
@@ -90,12 +94,12 @@ test("serves the branded shell and no-flash theme controls", async ({
 
 test("supports the responsive application navigation", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/customer");
+  await page.goto("/");
 
   const sidebar = page.getByLabel("Application sidebar");
   await expect(sidebar).toBeVisible();
   await expect(
-    sidebar.getByRole("link", { name: "My Workspace", exact: true }),
+    sidebar.getByRole("link", { name: "Home", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await expect(
     sidebar.getByRole("button", { name: "Analytics" }),
@@ -110,7 +114,7 @@ test("supports the responsive application navigation", async ({ page }) => {
     sidebar.getByRole("link", { name: "Match Certification" }),
   ).toBeVisible();
   await expect(
-    sidebar.getByRole("link", { name: "Brand Governance" }),
+    sidebar.getByRole("link", { name: "Brand Workbench" }),
   ).toBeVisible();
 
   const operationsGroup = sidebar.getByRole("button", { name: "Operations" });
@@ -145,7 +149,7 @@ test("supports the responsive application navigation", async ({ page }) => {
   });
   await expect(mobileNavigation).toBeVisible();
   await expect(
-    mobileNavigation.getByText("Reports", { exact: true }),
+    mobileNavigation.getByText("Competitive Intelligence", { exact: true }),
   ).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(mobileNavigation).toBeHidden();

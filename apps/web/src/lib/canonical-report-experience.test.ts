@@ -3,43 +3,43 @@ import { describe, expect, it } from "vitest";
 import { canonicalReportExperienceEnabled } from "./canonical-report-experience";
 
 describe("canonicalReportExperienceEnabled", () => {
-  it("uses the simplified report by default", () => {
-    expect(canonicalReportExperienceEnabled(undefined, {})).toBe(true);
-    expect(canonicalReportExperienceEnabled({}, {})).toBe(true);
+  it("uses the legacy report by default", () => {
+    expect(canonicalReportExperienceEnabled(undefined, {})).toBe(false);
+    expect(canonicalReportExperienceEnabled({}, {})).toBe(false);
     expect(canonicalReportExperienceEnabled({ experience: "legacy" }, {})).toBe(
       false,
     );
   });
 
-  it("enables the simplified report for explicit preview flags", () => {
+  it("does not enable the discarded simplified report for explicit preview flags", () => {
     expect(
       canonicalReportExperienceEnabled({ experience: "canonical" }, {}),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       canonicalReportExperienceEnabled({ experience: "simplified" }, {}),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       canonicalReportExperienceEnabled({ reportExperience: "canonical" }, {}),
-    ).toBe(true);
-    expect(canonicalReportExperienceEnabled({ canonical: "1" }, {})).toBe(true);
+    ).toBe(false);
+    expect(canonicalReportExperienceEnabled({ canonical: "1" }, {})).toBe(false);
     expect(canonicalReportExperienceEnabled({ canonical: "true" }, {})).toBe(
-      true,
+      false,
     );
   });
 
-  it("keeps explicit simplified flags compatible", () => {
+  it("ignores previous simplified-default environment flags", () => {
     expect(
       canonicalReportExperienceEnabled(
         {},
         { RCI_CANONICAL_REPORT_DEFAULT: "1" },
       ),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       canonicalReportExperienceEnabled(
         {},
         { RCI_CANONICAL_REPORT_DEFAULT: "enabled" },
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("lets explicit legacy flags override the default report path", () => {

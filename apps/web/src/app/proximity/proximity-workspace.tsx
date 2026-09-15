@@ -18,7 +18,6 @@ import type {
   ProximityView,
 } from "@/lib/api";
 import {
-  customerLoginUrlForReturnTo,
   competitorFootprintStatesForView,
   type ComparisonScope,
   recommendedScopeForView,
@@ -1069,15 +1068,6 @@ function resolveInitialComparisonScope(
   return initialComparisonScope ?? recommendedScopeForView(initialView);
 }
 
-function currentCustomerLoginUrl() {
-  if (typeof window === "undefined") {
-    return customerLoginUrlForReturnTo("/");
-  }
-  return customerLoginUrlForReturnTo(
-    `${window.location.pathname}${window.location.search}`,
-  );
-}
-
 export function ProximityWorkspace({
   initialView,
   initialRetailers,
@@ -1219,8 +1209,9 @@ export function ProximityWorkspace({
         );
         if (retailerResponse.status === 401) {
           if (isLatestLoad()) {
-            setError("Your CPGHero session expired. Redirecting to sign in…");
-            window.location.assign(currentCustomerLoginUrl());
+            setError(
+              "Proximity retailers returned 401. Customer login is disabled in legacy restore mode, so the page will not redirect.",
+            );
           }
           return;
         }
@@ -1271,8 +1262,9 @@ export function ProximityWorkspace({
       });
       if (response.status === 401) {
         if (isLatestLoad()) {
-          setError("Your CPGHero session expired. Redirecting to sign in…");
-          window.location.assign(currentCustomerLoginUrl());
+          setError(
+            "Proximity data returned 401. Customer login is disabled in legacy restore mode, so the page will not redirect.",
+          );
         }
         return;
       }

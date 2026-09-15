@@ -11,18 +11,19 @@ const reportPublishingAdminSource = readFileSync(
 );
 
 describe("report publishing admin source contract", () => {
-  it("keeps customer report access manageable by account, workspace, and grant state", () => {
-    expect(reportPublishingAdminSource).toContain("Access overview");
-    expect(reportPublishingAdminSource).toContain("Revoked grants");
-    expect(reportPublishingAdminSource).toContain("Accounts");
-    expect(reportPublishingAdminSource).toContain("Workspace scopes");
-    expect(reportPublishingAdminSource).toContain("Find ready report");
-    expect(reportPublishingAdminSource).toContain("Find grants");
-    expect(reportPublishingAdminSource).toContain("GrantStatusFilter");
-    expect(reportPublishingAdminSource).toContain("aria-pressed={");
+  it("keeps customer report access disabled during the legacy restore", () => {
+    expect(reportPublishingAdminSource).toContain(
+      "const CUSTOMER_REPORT_ACCESS_ENABLED = false",
+    );
+    expect(reportPublishingAdminSource).toContain(
+      "CUSTOMER_REPORT_ACCESS_ENABLED ?",
+    );
+    expect(reportPublishingAdminSource).not.toContain(
+      "Promise.all([loadJobs(), loadCustomerAccess()])",
+    );
   });
 
-  it("keeps grant actions safe and customer-view scoped", () => {
+  it("keeps dormant grant actions safe and customer-view scoped", () => {
     expect(reportPublishingAdminSource).toContain("Confirm revoke");
     expect(reportPublishingAdminSource).toContain(
       "Soft-revoke this report grant without deleting the audit row.",

@@ -1,12 +1,7 @@
-import { CustomerReportDetail } from "./report-detail";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
-export default async function CustomerReportPage({
-  params,
-}: {
-  params: Promise<{ accessId: string }>;
-}) {
-  const { accessId } = await params;
-  return <CustomerReportDetail accessId={accessId} />;
+export default function CustomerReportPage() {
+  redirect("/analyses");
 }

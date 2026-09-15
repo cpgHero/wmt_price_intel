@@ -1,42 +1,10 @@
-import { proxyCustomerAuthGet } from "../../../../lib/customer-auth-proxy";
+import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-function isBackgroundAuthRequest(request: Request): boolean {
+export function GET(request: Request) {
   const url = new URL(request.url);
-  const accept = request.headers.get("accept") ?? "";
-  const secFetchMode = request.headers.get("sec-fetch-mode") ?? "";
-  const secFetchDest = request.headers.get("sec-fetch-dest") ?? "";
-  return (
-    url.searchParams.has("_rsc") ||
-    request.headers.get("rsc") === "1" ||
-    request.headers.get("next-router-prefetch") === "1" ||
-    request.headers.get("purpose") === "prefetch" ||
-    request.headers.get("sec-purpose") === "prefetch" ||
-    (secFetchMode !== "" && secFetchMode !== "navigate") ||
-    (secFetchDest !== "" && secFetchDest !== "document") ||
-    (accept !== "" && !accept.includes("text/html"))
-  );
-}
-
-function requestWithCustomerDefaultReturnTo(request: Request): Request {
-  const url = new URL(request.url);
-  const returnTo = url.searchParams.get("return_to");
-  if (!returnTo || returnTo === "/") {
-    url.searchParams.set("return_to", "/customer");
-  }
-  return new Request(url, { headers: request.headers, method: request.method });
-}
-
-export async function GET(request: Request) {
-  if (isBackgroundAuthRequest(request)) {
-    return Response.json(
-      { error: "Customer authentication requires a browser navigation." },
-      { status: 401, headers: { "cache-control": "private, no-store" } },
-    );
-  }
-  return proxyCustomerAuthGet(
-    requestWithCustomerDefaultReturnTo(request),
-    "/api/auth/login",
-  );
+  url.pathname = "/";
+  url.search = "";
+  return NextResponse.redirect(url);
 }

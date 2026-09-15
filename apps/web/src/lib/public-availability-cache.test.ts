@@ -50,17 +50,23 @@ const publicAvailabilityRoutes = [
   {
     paths: [
       "../app/api/customer/reports/[accessId]/price-monitoring/map/route.ts",
+      "./customer-report-api-disabled.ts",
     ],
+    minNoStoreMentions: 1,
   },
   {
     paths: [
       "../app/api/customer/reports/[accessId]/price-monitoring/state-coverage/route.ts",
+      "./customer-report-api-disabled.ts",
     ],
+    minNoStoreMentions: 1,
   },
   {
     paths: [
       "../app/api/customer/reports/[accessId]/price-monitoring/evidence.csv/route.ts",
+      "./customer-report-api-disabled.ts",
     ],
+    minNoStoreMentions: 1,
   },
 ];
 

@@ -21,7 +21,7 @@ describe("platform owner and administrator documentation", () => {
   it("provides a unique maintained guide in every documentation group", () => {
     const ids = platformDocumentation.guides.map((guide) => guide.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(platformDocumentation.version).toBe("1.3.169");
+    expect(platformDocumentation.version).toBe("1.3.170");
     expect(platformDocumentation.lastVerified).toBeTruthy();
 
     for (const group of platformDocGroups) {
@@ -226,7 +226,7 @@ describe("platform owner and administrator documentation", () => {
     );
     const text = JSON.stringify({ incident, release }).toLocaleLowerCase();
 
-    expect(platformDocumentation.version).toBe("1.3.169");
+    expect(platformDocumentation.version).toBe("1.3.170");
     expect(platformDocumentation.guides).toHaveLength(22);
     expect(text).toContain("protect evidence before restoring speed");
     expect(text).toContain("isolated non-production environment");
@@ -251,7 +251,7 @@ describe("platform owner and administrator documentation", () => {
     expect(allText()).toContain("8d6c4756-c44f-487e-9a6a-393dc1661b96");
   });
 
-  it("documents WorkOS authentication without handing authorization to WorkOS", () => {
+  it("documents paused WorkOS authentication without handing authorization to WorkOS", () => {
     const guides = Object.fromEntries(
       platformDocumentation.guides.map((guide) => [
         guide.id,
@@ -278,32 +278,43 @@ describe("platform owner and administrator documentation", () => {
       "railway stores workos variables",
     );
     expect(guides["trust-governance"]).toContain(
-      "login, callback, logout, /api/v1/me, sealed-session verification",
+      "production web rollout is paused",
+    );
+    expect(guides["trust-governance"]).toContain(
+      "web login, callback, and logout routes redirect to the legacy root",
+    );
+    expect(guides["trust-governance"]).toContain(
+      "/api/auth/me returns private no-store json 401",
+    );
+    expect(guides["trust-governance"]).toContain(
+      "/api/customer/reports routes return a private no-store disabled response without proxying",
+    );
+    expect(guides["trust-governance"]).toContain(
+      "no longer forwards raw webhook payloads",
     );
     expect(guides["trust-governance"]).toContain(
       "non-production customer-principal harness",
     );
     expect(guides["trust-governance"]).toContain(
-      "live customer sessions are cryptographically validated",
-    );
-    expect(guides["trust-governance"]).toContain("/api/v1/me");
-    expect(guides["trust-governance"]).toContain(
-      "validates the expected cpghero customer or administrator session",
+      "production customer-login web flow is disabled",
     );
     expect(guides["trust-governance"]).toContain(
-      "short-lived cpghero-signed route-validation cache cookie",
+      "legacy restore mode disables the next.js route-boundary auth gate",
     );
     expect(guides["trust-governance"]).toContain(
-      "root route is a public cpghero landing page",
+      "proxy performs no customer or administrator authentication validation",
     );
     expect(guides["trust-governance"]).toContain(
-      "without the temporary login-flow cookie",
+      "hard-redirects dormant customer pages to legacy app destinations",
     );
     expect(guides["trust-governance"]).toContain(
-      "protected same-origin app/admin api reads return private no-store json 401",
+      "root route is the legacy app home/dashboard",
     );
     expect(guides["trust-governance"]).toContain(
-      "production must not configure this variable",
+      "legacy administrator password session",
+    );
+    expect(guides["trust-governance"]).toContain(
+      "production must still not configure cpghero_web_route_auth_test_bypass_token",
     );
     expect(guides["change-orders"]).toContain(
       "workos authkit selected and identity mapping foundation added",
@@ -329,6 +340,24 @@ describe("platform owner and administrator documentation", () => {
     expect(guides["change-orders"]).toContain(
       "customer-visible /api/v1/me response remains cpghero-facing",
     );
+    expect(guides["change-orders"]).toContain(
+      "identity rollback and legacy report restore prepared",
+    );
+    expect(guides["change-orders"]).toContain(
+      "the next.js proxy performs no customer or administrator authentication validation",
+    );
+    expect(guides["change-orders"]).toContain(
+      "proxy hard-redirects dormant customer pages to legacy app destinations",
+    );
+    expect(guides["change-orders"]).toContain(
+      "/api/customer/reports routes return a private no-store disabled response without proxying",
+    );
+    expect(guides["change-orders"]).toContain(
+      "renders the legacy blueprint competitive intelligence workspace",
+    );
+    expect(guides["change-orders"]).toContain(
+      "proximity remains active",
+    );
   });
 
   it("documents positive-price store distribution without inventory claims", () => {
@@ -348,12 +377,14 @@ describe("platform owner and administrator documentation", () => {
     expect(guides["analytics-reporting"]).toContain(
       "service-area presence is calculated and labeled separately",
     );
-    expect(guides["analytics-reporting"]).toContain("five distinct app tabs");
     expect(guides["analytics-reporting"]).toContain(
-      "loads source-backed product location maps",
+      "active analysis route renders the legacy blueprint competitive intelligence report workspace",
     );
     expect(guides["analytics-reporting"]).toContain(
-      "rather than drawing inferred geography",
+      "canonical product-report workspace and simplified navigation are paused",
+    );
+    expect(guides["analytics-reporting"]).toContain(
+      "explicit map-evidence availability",
     );
     expect(guides["analytics-reporting"]).toContain(
       "never extrapolates to unobserved stores",
@@ -399,11 +430,11 @@ describe("platform owner and administrator documentation", () => {
     expect(guides["change-orders"]).toContain(
       "new immutable replay generation with zero collection, provider, or ai calls",
     );
-    expect(guides["change-orders"]).toContain(
-      "canonical report tabs were redesigned",
+    expect(guides["analytics-reporting"]).toContain(
+      "not imported by the live /analyses/[analysisid] page",
     );
-    expect(guides["change-orders"]).toContain(
-      "comprehensive walmart-loss and walmart-win action lists",
+    expect(guides["analytics-reporting"]).toContain(
+      "complete walmart-win and walmart-loss action lists",
     );
     expect(guides["change-orders"]).toContain(
       "csv, excel-compatible, and json downloads",
@@ -415,34 +446,19 @@ describe("platform owner and administrator documentation", () => {
       "instead of rebuilding the full retailer catalog",
     );
     expect(guides["analytics-reporting"]).toContain(
-      "report-footprint share metadata",
-    );
-    expect(guides["analytics-reporting"]).toContain(
-      "store-evidence drawers through the price-monitoring product view",
+      "product/store-evidence drawers",
     );
     expect(guides["change-orders"]).toContain(
-      "does not change source data, matching-v2 certification, report calculations",
+      "does not drop account/rbac database tables",
+    );
+    expect(guides["change-orders"]).toContain(
+      "does not drop account/rbac database tables, remove railway workos secrets",
     );
     expect(guides["analytics-reporting"]).toContain(
-      "retailer's report footprint denominator",
+      "state-footprint context",
     );
     expect(guides["analytics-reporting"]).toContain(
-      "not total chain stores, inventory, or a sampled returned-row count",
-    );
-    expect(guides["analytics-reporting"]).toContain(
-      "broad distribution is a visible metric rather than a hidden filter",
-    );
-    expect(guides["analytics-reporting"]).toContain(
-      "searched-row audit-share metadata",
-    );
-    expect(guides["analytics-reporting"]).toContain(
-      "filter drawer for source-backed relationship dimensions",
-    );
-    expect(guides["analytics-reporting"]).toContain(
-      "compact state-coverage read model derived from exact-product positive-price search observations",
-    );
-    expect(guides["analytics-reporting"]).toContain(
-      "must not imply the displayed price gap is state-specific",
+      "source-backed filters",
     );
     expect(guides["analytics-reporting"]).toContain(
       "a normalized $/gallon value is never labeled as shelf or package price",

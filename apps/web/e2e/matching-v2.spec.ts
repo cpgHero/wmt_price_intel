@@ -63,7 +63,7 @@ test("renders authoritative coverage after a forced governed replay", async ({
   let replayPayload: Record<string, unknown> | null = null;
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
-  await page.route("**/api/admin/session", async (route) => {
+  await page.route("**/api/admin/session*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
@@ -171,7 +171,7 @@ test("explains the reviewer prerequisite before a bounded AI review", async ({
   page,
 }) => {
   let aiDraftRequests = 0;
-  await page.route("**/api/admin/session", async (route) => {
+  await page.route("**/api/admin/session*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
@@ -326,7 +326,7 @@ test("prepares and confirms every eligible case in the retailer-scoped queue", a
   page,
 }) => {
   let submittedCaseIds: string[] = [];
-  await page.route("**/api/admin/session", async (route) => {
+  await page.route("**/api/admin/session*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
@@ -447,7 +447,7 @@ test("reviews consolidated product evidence claims before match certification", 
 }) => {
   let evidenceDecision: Record<string, unknown> | null = null;
   let bulkEvidenceDecision: Record<string, unknown> | null = null;
-  await page.route("**/api/admin/session", async (route) => {
+  await page.route("**/api/admin/session*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
@@ -771,7 +771,7 @@ test("retries terminal AI failures as confirmed linked individual or bulk work",
     },
   }));
 
-  await page.route("**/api/admin/session", async (route) => {
+  await page.route("**/api/admin/session*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
@@ -913,7 +913,7 @@ test("bulk-certifies comparable and not-comparable AI recommendations", async ({
     },
   }));
 
-  await page.route("**/api/admin/session", async (route) => {
+  await page.route("**/api/admin/session*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
@@ -1239,7 +1239,7 @@ test("discovers not-comparable AI recommendations beyond the visible page", asyn
   };
   let previewPayload: Record<string, unknown> | null = null;
 
-  await page.route("**/api/admin/session", async (route) => {
+  await page.route("**/api/admin/session*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
@@ -1397,7 +1397,7 @@ test("discovers not-comparable AI recommendations beyond the visible page", asyn
 test("reports a plain-text submission failure without a JSON parsing error", async ({
   page,
 }) => {
-  await page.route("**/api/admin/session", async (route) => {
+  await page.route("**/api/admin/session*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
@@ -1472,7 +1472,7 @@ test("reports a plain-text submission failure without a JSON parsing error", asy
 test("blocks comparable approval when current Milk package volume conflicts", async ({
   page,
 }) => {
-  await page.route("**/api/admin/session", async (route) => {
+  await page.route("**/api/admin/session*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
@@ -1570,7 +1570,7 @@ test("finalizes one human decision and requires an explicit flag before review",
     ai_draft: null,
     evidence_refs: ["source-file:test.csv#sha256=test"],
   };
-  await page.route("**/api/admin/session", async (route) => {
+  await page.route("**/api/admin/session*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),

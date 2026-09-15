@@ -1,7 +1,8 @@
-import { proxyCustomerAuthWebhookPost } from "@/lib/customer-auth-proxy";
-
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
-  return proxyCustomerAuthWebhookPost(request, "/api/webhooks/workos");
+export function POST() {
+  return new Response(null, {
+    status: 204,
+    headers: { "cache-control": "private, no-store" },
+  });
 }

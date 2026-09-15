@@ -5,6 +5,8 @@ import Link from "next/link";
 
 import styles from "./report-publishing-admin.module.css";
 
+const CUSTOMER_REPORT_ACCESS_ENABLED = false;
+
 interface AdminSession {
   authenticated: boolean;
   configured: boolean;
@@ -352,7 +354,8 @@ export function ReportPublishingAdmin() {
       .then(async (value) => {
         setSession(value);
         if (value.authenticated) {
-          await Promise.all([loadJobs(), loadCustomerAccess()]);
+          await loadJobs();
+          if (CUSTOMER_REPORT_ACCESS_ENABLED) await loadCustomerAccess();
         }
       })
       .catch((cause: unknown) =>
@@ -381,7 +384,8 @@ export function ReportPublishingAdmin() {
       });
       setSession({ authenticated: true, configured: true });
       setPassword("");
-      await Promise.all([loadJobs(), loadCustomerAccess()]);
+      await loadJobs();
+      if (CUSTOMER_REPORT_ACCESS_ENABLED) await loadCustomerAccess();
     } catch (cause) {
       setError(
         cause instanceof Error ? cause.message : "Unable to authenticate.",
@@ -658,7 +662,8 @@ export function ReportPublishingAdmin() {
           </div>
         </section>
       ) : null}
-      <section
+      {CUSTOMER_REPORT_ACCESS_ENABLED ? (
+        <section
         className={styles.customerAccessPanel}
         aria-label="Customer report access"
       >
@@ -941,7 +946,8 @@ export function ReportPublishingAdmin() {
         ) : (
           <div className="builder-loading">Loading customer access grants…</div>
         )}
-      </section>
+        </section>
+      ) : null}
       {error ? <p className="form-error">{error}</p> : null}
       <div className={styles.jobs}>
         {jobs.length ? (

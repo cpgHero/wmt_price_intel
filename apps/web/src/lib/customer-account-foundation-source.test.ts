@@ -54,7 +54,7 @@ describe("customer account foundation admin source contract", () => {
     expect(customerAuthAdminSource).not.toContain("workos_user_id");
     expect(customerAuthAdminSource).not.toContain("workos_organization_id");
     expect(customerAuthAdminSource).not.toContain("Internal provider:");
-    expect(customerAuthPageSource).toContain("Accounts &amp; Access");
+    expect(customerAuthPageSource).toContain('redirect("/admin/operations")');
     expect(customerAuthPageSource).not.toContain("WorkOS webhook");
   });
 

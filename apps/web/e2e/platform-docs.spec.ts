@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 import { platformDocumentation } from "../src/lib/platform-docs";
 
 test("protects the owner and administrator documentation", async ({ page }) => {
-  await page.route("**/api/admin/session", async (route) => {
+  await page.route("**/api/admin/session*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: false }),
@@ -22,13 +22,13 @@ test("protects the owner and administrator documentation", async ({ page }) => {
 });
 
 test("searches and navigates maintained platform guides", async ({ page }) => {
-  await page.route("**/api/admin/session", async (route) => {
+  await page.route("**/api/admin/session*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({ configured: true, authenticated: true }),
     });
   });
-  await page.route("**/api/admin/docs", async (route) => {
+  await page.route("**/api/admin/docs*", async (route) => {
     await route.fulfill({
       contentType: "application/json",
       body: JSON.stringify(platformDocumentation),

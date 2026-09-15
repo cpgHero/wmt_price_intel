@@ -13,9 +13,8 @@ function normalizedFlag(value: QueryValue) {
 function environmentDefaultDisabled(
   environment: Readonly<Record<string, string | undefined>>,
 ) {
-  const flag =
-    environment.RCI_CANONICAL_REPORT_DEFAULT?.trim().toLocaleLowerCase("en-US");
-  return flag === "0" || flag === "false" || flag === "disabled";
+  void environment;
+  return true;
 }
 
 export function canonicalReportExperienceEnabled(
@@ -35,15 +34,8 @@ export function canonicalReportExperienceEnabled(
   ) {
     return false;
   }
-  if (
-    experience === "canonical" ||
-    experience === "simplified" ||
-    reportExperience === "canonical" ||
-    reportExperience === "simplified" ||
-    canonical === "1" ||
-    canonical === "true"
-  ) {
-    return true;
-  }
+  void experience;
+  void reportExperience;
+  void canonical;
   return !environmentDefaultDisabled(environment);
 }

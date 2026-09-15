@@ -1,7 +1,10 @@
-import { proxyCustomerAuthGet } from "@/lib/customer-auth-proxy";
+import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
-  return proxyCustomerAuthGet(request, "/api/auth/callback");
+export function GET(request: Request) {
+  const url = new URL(request.url);
+  url.pathname = "/";
+  url.search = "";
+  return NextResponse.redirect(url);
 }

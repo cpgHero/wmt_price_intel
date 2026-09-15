@@ -20,7 +20,7 @@ describe("application navigation", () => {
     ];
 
     expect(hrefs).toEqual([
-      "/customer",
+      "/",
       "/price-intelligence",
       "/analyses",
       "/proximity",
@@ -28,7 +28,6 @@ describe("application navigation", () => {
       "/automation",
       "/data-quality",
       "/admin/operations",
-      "/admin/customer-auth",
       "/admin/docs",
       "/admin/matching-v2",
       "/workspace/brands",
@@ -39,25 +38,27 @@ describe("application navigation", () => {
     expect(hrefs).not.toContain("/intelligence/price");
   });
 
-  it("keeps the customer workspace as in-app home and activates nested workspaces by prefix", () => {
+  it("keeps the legacy dashboard as in-app home and activates nested workspaces by prefix", () => {
     const dashboard = homeNavigationItem;
     const competitive = applicationNavigation[0].items.find(
       (item) => item.href === "/analyses",
     );
     if (!competitive) throw new Error("Expected /analyses navigation item");
 
-    expect(navigationItemIsActive("/customer", dashboard)).toBe(true);
+    expect(navigationItemIsActive("/", dashboard)).toBe(true);
+    expect(navigationItemIsActive("/customer", dashboard)).toBe(false);
     expect(
       navigationItemIsActive("/customer/reports/access-1", dashboard),
-    ).toBe(true);
-    expect(navigationItemIsActive("/", dashboard)).toBe(false);
+    ).toBe(false);
     expect(navigationItemIsActive("/collections", dashboard)).toBe(false);
     expect(navigationItemIsActive("/analyses", competitive)).toBe(true);
     expect(navigationItemIsActive("/analyses/analysis-123", competitive)).toBe(
       true,
     );
     expect(activeNavigationItem("/workspace/matches")).toBeNull();
-    expect(activeNavigationItem("/price-intelligence/analysis-123")).toBeNull();
+    expect(activeNavigationItem("/price-intelligence/analysis-123")?.label).toBe(
+      "Price Intelligence",
+    );
     expect(activeNavigationItem("/proximity")?.label).toBe("Proximity");
     expect(
       activeNavigationItem(
@@ -84,8 +85,8 @@ describe("application navigation", () => {
     expect(activeNavigationItem("/health")).toBeNull();
   });
 
-  it("uses simplified navigation by default and keeps legacy navigation behind an explicit disable flag", () => {
-    expect(simplifiedNavigationEnabled({})).toBe(true);
+  it("keeps simplified navigation disabled in legacy restore mode", () => {
+    expect(simplifiedNavigationEnabled({})).toBe(false);
     expect(
       simplifiedNavigationEnabled({
         NEXT_PUBLIC_RCI_SIMPLIFIED_NAV: "0",
@@ -105,13 +106,11 @@ describe("application navigation", () => {
       simplifiedNavigationEnabled({
         NEXT_PUBLIC_RCI_SIMPLIFIED_NAV: "enabled",
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(applicationNavigationForExperience(false)).toBe(
       applicationNavigation,
     );
-    expect(applicationNavigationForExperience(true)).toBe(
-      simplifiedApplicationNavigation,
-    );
+    expect(applicationNavigationForExperience(true)).toBe(applicationNavigation);
 
     const hrefs = [
       homeNavigationItem.href,
@@ -121,7 +120,7 @@ describe("application navigation", () => {
     ];
 
     expect(hrefs).toEqual([
-      "/customer",
+      "/",
       "/analyses",
       "/proximity",
       "/collections",
@@ -132,7 +131,6 @@ describe("application navigation", () => {
       "/workspace/brands",
       "/admin/studies",
       "/admin/operations",
-      "/admin/customer-auth",
       "/admin/docs",
     ]);
     expect(hrefs).not.toContain("/price-intelligence");

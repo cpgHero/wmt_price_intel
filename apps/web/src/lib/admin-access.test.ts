@@ -16,103 +16,49 @@ function configureLegacyAdmin() {
 }
 
 describe("admin access", () => {
-  it("accepts the existing legacy admin session cookie", async () => {
+  it("accepts the existing legacy admin session cookie", () => {
     configureLegacyAdmin();
     const fetchMock = vi.spyOn(globalThis, "fetch");
-    const request = new Request("https://app.cpghero.com/admin/customer-auth", {
+    const request = new Request("https://app.cpghero.com/admin/matching-v2", {
       headers: {
         cookie: `${adminSessionCookie.name}=${createAdminSession()}`,
       },
     });
 
-    await expect(verifyAdminAccess(request)).resolves.toBe(true);
+    expect(verifyAdminAccess(request)).toBe(true);
+    expect(adminSessionStatus(request)).toEqual({
+      authenticated: true,
+      configured: true,
+      source: "legacy_admin",
+    });
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("accepts a WorkOS-backed CPGHero principal with system admin permission", async () => {
+  it("does not accept WorkOS customer cookies as admin access", () => {
     configureLegacyAdmin();
-    vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json({
-        principal: {
-          email: "owner@cpghero.com",
-          permissions: ["system.admin", "system.governance"],
-          roles: ["system_owner"],
-        },
-      }),
-    );
-    const request = new Request("https://app.cpghero.com/admin/customer-auth", {
-      headers: {
-        cookie: "cph_customer_session=sealed-session",
-        "user-agent": "admin-access-regression-test",
-        "x-forwarded-for": "203.0.113.9",
-        "x-forwarded-host": "app.cpghero.com",
-        "x-forwarded-proto": "https",
-      },
-    });
-
-    await expect(adminSessionStatus(request)).resolves.toEqual({
-      authenticated: true,
-      configured: true,
-      customer: {
-        email: "owner@cpghero.com",
-        permissions: ["system.admin", "system.governance"],
-        roles: ["system_owner"],
-      },
-      source: "customer_system",
-    });
-    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(
-      "http://api.internal/api/v1/me",
-    );
-    const upstreamHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
-    expect(upstreamHeaders.get("cookie")).toBe(
-      "cph_customer_session=sealed-session",
-    );
-    expect(upstreamHeaders.get("user-agent")).toBe(
-      "admin-access-regression-test",
-    );
-    expect(upstreamHeaders.get("x-forwarded-for")).toBe("203.0.113.9");
-    expect(upstreamHeaders.get("x-forwarded-host")).toBe("app.cpghero.com");
-    expect(upstreamHeaders.get("x-forwarded-proto")).toBe("https");
-  });
-
-  it("does not accept an account owner without system admin permission", async () => {
-    configureLegacyAdmin();
-    vi.stubEnv("RCI_API_INTERNAL_URL", "http://api.internal");
-    vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      Response.json({
-        principal: {
-          email: "account-owner@example.com",
-          permissions: ["analytics.view", "users.manage"],
-          roles: ["account_owner"],
-        },
-      }),
-    );
-    const request = new Request("https://app.cpghero.com/admin/customer-auth", {
+    const fetchMock = vi.spyOn(globalThis, "fetch");
+    const request = new Request("https://app.cpghero.com/admin/matching-v2", {
       headers: { cookie: "cph_customer_session=sealed-session" },
     });
 
-    await expect(adminSessionStatus(request)).resolves.toEqual({
+    expect(verifyAdminAccess(request)).toBe(false);
+    expect(adminSessionStatus(request)).toEqual({
       authenticated: false,
       configured: true,
-      customer: {
-        email: "account-owner@example.com",
-        permissions: ["analytics.view", "users.manage"],
-        roles: ["account_owner"],
-      },
       source: "none",
     });
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("fails closed when no administrator or customer session cookie is present", async () => {
+  it("fails closed when no administrator session cookie is present", () => {
     configureLegacyAdmin();
     const fetchMock = vi.spyOn(globalThis, "fetch");
 
-    await expect(
+    expect(
       adminSessionStatus(
-        new Request("https://app.cpghero.com/admin/customer-auth"),
+        new Request("https://app.cpghero.com/admin/matching-v2"),
       ),
-    ).resolves.toEqual({
+    ).toEqual({
       authenticated: false,
       configured: true,
       source: "none",

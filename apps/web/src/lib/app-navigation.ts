@@ -27,11 +27,11 @@ export interface NavigationGroup {
 }
 
 export const homeNavigationItem: NavigationItem = {
-  label: "My Workspace",
-  description: "Customer account, workspace, and access state",
-  href: "/customer",
+  label: "Home",
+  description: "Decisions, activity, and operational health",
+  href: "/",
   icon: "dashboard",
-  match: "prefix",
+  match: "exact",
 };
 
 export const applicationNavigation: readonly NavigationGroup[] = [
@@ -97,14 +97,6 @@ export const applicationNavigation: readonly NavigationGroup[] = [
         label: "System Operations",
         description: "Release, queue, spend, and recovery readiness",
         href: "/admin/operations",
-        icon: "operations",
-        match: "prefix",
-      },
-      {
-        label: "Accounts & Access",
-        description:
-          "Customer accounts, workspaces, access, and login readiness",
-        href: "/admin/customer-auth",
         icon: "operations",
         match: "prefix",
       },
@@ -244,14 +236,6 @@ export const simplifiedApplicationNavigation: readonly NavigationGroup[] = [
         match: "prefix",
       },
       {
-        label: "Accounts & Access",
-        description:
-          "Customer accounts, workspaces, access, and login readiness",
-        href: "/admin/customer-auth",
-        icon: "operations",
-        match: "prefix",
-      },
-      {
         label: "Platform Docs",
         description: "Owner and administrator operating guide",
         href: "/admin/docs",
@@ -265,14 +249,15 @@ export const simplifiedApplicationNavigation: readonly NavigationGroup[] = [
 export function simplifiedNavigationEnabled(
   environment: Record<string, string | undefined> = process.env,
 ): boolean {
-  const flag = environment.NEXT_PUBLIC_RCI_SIMPLIFIED_NAV;
-  return flag !== "0" && flag !== "false" && flag !== "disabled";
+  void environment;
+  return false;
 }
 
 export function applicationNavigationForExperience(
   simplified = simplifiedNavigationEnabled(),
 ): readonly NavigationGroup[] {
-  return simplified ? simplifiedApplicationNavigation : applicationNavigation;
+  void simplified;
+  return applicationNavigation;
 }
 
 export function navigationItemIsActive(

@@ -2,46 +2,33 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-const customerWorkspaceSource = readFileSync(
-  new URL("../app/customer/customer-workspace.tsx", import.meta.url),
+const customerPageSource = readFileSync(
+  new URL("../app/customer/page.tsx", import.meta.url),
   "utf8",
 );
-
-const customerReportDetailSource = readFileSync(
+const customerReportPageSource = readFileSync(
+  new URL("../app/customer/reports/[accessId]/page.tsx", import.meta.url),
+  "utf8",
+);
+const customerReportApiSource = readFileSync(
   new URL(
-    "../app/customer/reports/[accessId]/report-detail.tsx",
+    "../app/api/customer/reports/[accessId]/report/route.ts",
     import.meta.url,
   ),
   "utf8",
 );
 
 describe("customer report workspace source contract", () => {
-  it("keeps granted report list labels customer-facing with hidden audit detail", () => {
-    expect(customerWorkspaceSource).toContain("Granted reports");
-    expect(customerWorkspaceSource).toContain("Ready to open");
-    expect(customerWorkspaceSource).toContain("Trust boundary");
-    expect(customerWorkspaceSource).toContain("Grant-gated");
-    expect(customerWorkspaceSource).toContain(
-      "Only reports explicitly granted",
-    );
-    expect(customerWorkspaceSource).toContain("<details");
-    expect(customerWorkspaceSource).toContain("<dt>Analysis</dt>");
-    expect(customerWorkspaceSource).toContain("<dt>Result</dt>");
-    expect(customerWorkspaceSource).toContain("<dt>Checksum</dt>");
+  it("redirects dormant customer workspace pages in legacy restore mode", () => {
+    expect(customerPageSource).toContain('redirect("/")');
+    expect(customerReportPageSource).toContain('redirect("/analyses")');
   });
 
-  it("renders the full canonical report through a customer access grant", () => {
-    expect(customerReportDetailSource).toContain("CanonicalReportWorkspace");
-    expect(customerReportDetailSource).toContain("customerAccessId={accessId}");
-    expect(customerReportDetailSource).toContain(
-      "/api/customer/reports/${encodeURIComponent(accessId)}/report",
+  it("keeps customer report APIs disabled instead of proxying report grants", () => {
+    expect(customerReportApiSource).toContain(
+      "customerReportApiDisabledResponse",
     );
-    expect(customerReportDetailSource).toContain(
-      "Customer report access summary",
-    );
-    expect(customerReportDetailSource).toContain("Audit identifiers");
-    expect(customerReportDetailSource).toContain(
-      "Report data, evidence, and downloads use this access grant.",
-    );
+    expect(customerReportApiSource).not.toContain("loadServerConfig");
+    expect(customerReportApiSource).not.toContain("fetch(");
   });
 });

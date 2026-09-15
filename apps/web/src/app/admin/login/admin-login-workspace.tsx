@@ -3,26 +3,21 @@
 import { useEffect, useState, type FormEvent } from "react";
 
 function safeReturnTo(): string {
-  if (typeof window === "undefined") return "/admin/customer-auth";
+  if (typeof window === "undefined") return "/admin/matching-v2";
   const requested =
     new URLSearchParams(window.location.search).get("return_to") ??
-    "/admin/customer-auth";
+    "/admin/matching-v2";
   if (!requested.startsWith("/") || requested.startsWith("//")) {
-    return "/admin/customer-auth";
+    return "/admin/matching-v2";
   }
   const target = new URL(requested, window.location.origin);
-  if (target.origin !== window.location.origin) return "/admin/customer-auth";
-  if (target.pathname.startsWith("/api/")) return "/admin/customer-auth";
-  if (target.pathname === "/admin/login") return "/admin/customer-auth";
+  if (target.origin !== window.location.origin) return "/admin/matching-v2";
+  if (target.pathname.startsWith("/api/")) return "/admin/matching-v2";
+  if (target.pathname === "/admin/login") return "/admin/matching-v2";
   return `${target.pathname}${target.search}${target.hash}`;
 }
 
 export function AdminLoginWorkspace() {
-  const [customer, setCustomer] = useState<{
-    email: string;
-    permissions: string[];
-    roles: string[];
-  } | null>(null);
   const [checking, setChecking] = useState(true);
   const [configured, setConfigured] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -42,15 +37,9 @@ export function AdminLoginWorkspace() {
         const payload = (await response.json()) as {
           authenticated?: boolean;
           configured?: boolean;
-          customer?: {
-            email: string;
-            permissions: string[];
-            roles: string[];
-          };
         };
         if (cancelled) return;
         setConfigured(payload.configured !== false);
-        setCustomer(payload.customer ?? null);
         if (payload.authenticated) {
           setRedirecting(true);
           window.location.replace(safeReturnTo());
@@ -110,20 +99,13 @@ export function AdminLoginWorkspace() {
           </h2>
           <p>
             {checking
-              ? "Verifying the current CPGHero session before opening the requested page."
+              ? "Verifying the current CPGHero administrator session before opening the requested page."
               : redirecting
                 ? "Access verified. Opening the requested Administration page."
-                : "Administration is available to CPGHero system administrators. The password unlock remains available as a temporary internal fallback."}
+                : "Administration is available to CPGHero system administrators through the legacy administrator password session."}
           </p>
         </div>
         {error ? <p className="empty-inline">{error}</p> : null}
-        {!checking && !redirecting && customer ? (
-          <p className="empty-inline">
-            Signed in as {customer.email} with roles{" "}
-            {customer.roles.length ? customer.roles.join(", ") : "none"}. This
-            area requires the system.admin permission.
-          </p>
-        ) : null}
         {checking || redirecting ? null : configured ? (
           <form onSubmit={submit}>
             <input

@@ -1,198 +1,33 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import {
-  ADMIN_ROUTE_CACHE_COOKIE_NAME,
-  CUSTOMER_ROUTE_CACHE_COOKIE_NAME,
-  CUSTOMER_ROUTE_CACHE_SECONDS,
-  createCustomerRouteCacheCookie,
-  verifyAdminRouteCacheCookie,
-  verifyCustomerRouteCacheCookie,
-} from "./lib/route-auth-cache";
-import {
-  cookieValueFromRequest,
-  customerRouteCacheSecret,
-} from "./lib/customer-auth-cookies";
-import {
-  routeAccessDecision,
-  sessionCookieName,
-  type ProtectedSessionKind,
-} from "./lib/route-access-policy";
-
-function returnTo(request: NextRequest): string {
-  return `${request.nextUrl.pathname}${request.nextUrl.search}`;
-}
-
-function redirectToAdminLogin(request: NextRequest): NextResponse {
-  const url = request.nextUrl.clone();
-  url.pathname = "/admin/login";
-  url.search = "";
-  url.searchParams.set("return_to", returnTo(request));
-  return NextResponse.redirect(url);
-}
-
-function redirectToCustomerLogin(request: NextRequest): NextResponse {
-  const url = request.nextUrl.clone();
-  url.pathname = "/api/auth/login";
-  url.search = "";
-  url.searchParams.set("return_to", returnTo(request));
-  return NextResponse.redirect(url);
-}
-
-function unauthorizedJson(session: "admin" | "customer"): NextResponse {
-  const subject = session === "admin" ? "Administrator" : "Customer";
-  return NextResponse.json(
-    { error: `${subject} authentication is required.` },
-    { status: 401, headers: { "cache-control": "private, no-store" } },
-  );
-}
-
-function isBackgroundRouteRequest(request: NextRequest): boolean {
-  const accept = request.headers.get("accept") ?? "";
-  const secFetchMode = request.headers.get("sec-fetch-mode") ?? "";
-  const secFetchDest = request.headers.get("sec-fetch-dest") ?? "";
-  return (
-    request.nextUrl.searchParams.has("_rsc") ||
-    request.headers.get("rsc") === "1" ||
-    request.headers.get("next-router-prefetch") === "1" ||
-    request.headers.get("purpose") === "prefetch" ||
-    request.headers.get("sec-purpose") === "prefetch" ||
-    (secFetchMode !== "" && secFetchMode !== "navigate") ||
-    (secFetchDest !== "" && secFetchDest !== "document") ||
-    (accept !== "" && !accept.includes("text/html"))
-  );
-}
-
-function hasTestRouteBypass(request: NextRequest): boolean {
-  const token = process.env.CPGHERO_WEB_ROUTE_AUTH_TEST_BYPASS_TOKEN?.trim();
-  return Boolean(
-    token && request.headers.get("x-cpghero-route-auth-test") === token,
-  );
-}
-
-async function validateSession(
-  request: NextRequest,
-  session: ProtectedSessionKind,
-): Promise<boolean> {
-  const validationUrl = request.nextUrl.clone();
-  validationUrl.pathname =
-    session === "admin" ? "/api/admin/session" : "/api/auth/me";
-  validationUrl.search = "";
-
-  try {
-    const response = await fetch(validationUrl, {
-      cache: "no-store",
-      headers: {
-        accept: "application/json",
-        cookie: request.headers.get("cookie") ?? "",
-      },
-    });
-    if (!response.ok) return false;
-    if (session === "customer") return true;
-
-    const payload = (await response.json()) as { authenticated?: unknown };
-    return payload.authenticated === true;
-  } catch {
-    return false;
+/*
+ * Legacy restore mode.
+ *
+ * The WorkOS/customer route boundary is intentionally disabled because it
+ * caused repeated browser redirect loops. App shell and analytics pages load
+ * directly. Dormant customer page routes are hard-redirected to legacy app
+ * destinations without validating WorkOS or route-cache cookies. Administrator
+ * API handlers continue to enforce the legacy CPGHero admin password session
+ * via verifyAdminAccess().
+ */
+export function proxy(request: NextRequest): NextResponse {
+  const pathname = request.nextUrl.pathname;
+  if (pathname === "/customer" || pathname === "/customer/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/";
+    url.search = "";
+    return NextResponse.redirect(url);
   }
-}
-
-async function hasValidCustomerRouteCache(
-  request: NextRequest,
-  sessionCookie: string,
-): Promise<boolean> {
-  return verifyCustomerRouteCacheCookie(
-    cookieValueFromRequest(request, CUSTOMER_ROUTE_CACHE_COOKIE_NAME),
-    sessionCookie,
-    customerRouteCacheSecret(),
-  );
-}
-
-async function hasValidAdminRouteCache(
-  request: NextRequest,
-  sessionCookie: string,
-): Promise<boolean> {
-  return verifyAdminRouteCacheCookie(
-    cookieValueFromRequest(request, ADMIN_ROUTE_CACHE_COOKIE_NAME),
-    sessionCookie,
-    customerRouteCacheSecret(),
-  );
-}
-
-async function withCustomerRouteCache(
-  response: NextResponse,
-  sessionCookie: string,
-): Promise<NextResponse> {
-  const cacheCookie = await createCustomerRouteCacheCookie(
-    sessionCookie,
-    customerRouteCacheSecret(),
-  );
-  if (!cacheCookie) return response;
-
-  response.cookies.set(CUSTOMER_ROUTE_CACHE_COOKIE_NAME, cacheCookie, {
-    httpOnly: true,
-    maxAge: CUSTOMER_ROUTE_CACHE_SECONDS,
-    path: "/",
-    sameSite: "strict",
-    secure: process.env.NODE_ENV === "production",
-  });
-  return response;
-}
-
-export async function proxy(request: NextRequest): Promise<NextResponse> {
-  if (hasTestRouteBypass(request)) {
-    return NextResponse.next();
+  if (
+    pathname === "/customer/reports" ||
+    pathname.startsWith("/customer/reports/")
+  ) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/analyses";
+    url.search = "";
+    return NextResponse.redirect(url);
   }
-
-  const decision = routeAccessDecision(request.nextUrl.pathname);
-  if (decision.kind === "public") {
-    return NextResponse.next();
-  }
-
-  const cookieName = sessionCookieName(decision.session);
-  const sessionCookie = cookieValueFromRequest(request, cookieName);
-  const customerSessionCookie =
-    decision.session === "admin"
-      ? cookieValueFromRequest(request, sessionCookieName("customer"))
-      : null;
-
-  if (sessionCookie) {
-    if (
-      decision.session === "customer" &&
-      (await hasValidCustomerRouteCache(request, sessionCookie))
-    ) {
-      return NextResponse.next();
-    }
-
-    if (await validateSession(request, decision.session)) {
-      if (decision.session === "customer") {
-        return withCustomerRouteCache(NextResponse.next(), sessionCookie);
-      }
-      return NextResponse.next();
-    }
-  }
-  if (decision.session === "admin" && customerSessionCookie) {
-    if (await hasValidAdminRouteCache(request, customerSessionCookie)) {
-      return NextResponse.next();
-    }
-
-    if (await validateSession(request, "admin")) {
-      return NextResponse.next();
-    }
-  }
-
-  if (decision.mode === "json") {
-    return unauthorizedJson(decision.session);
-  }
-
-  if (decision.session === "admin") {
-    return redirectToAdminLogin(request);
-  }
-
-  if (isBackgroundRouteRequest(request)) {
-    return unauthorizedJson(decision.session);
-  }
-
-  return redirectToCustomerLogin(request);
+  return NextResponse.next();
 }
 
 export const config = {
