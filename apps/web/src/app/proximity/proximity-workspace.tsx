@@ -1137,6 +1137,10 @@ export function ProximityWorkspace({
   const mapRef = useRef<InteractiveMap | null>(null);
   const popupRef = useRef<MapPopup | null>(null);
   const pairByKeyRef = useRef<Map<string, ProximityPair>>(new Map());
+  const countryRef = useRef(country);
+  const competitorRetailerIdRef = useRef(competitorRetailerId);
+  const radiusRef = useRef(radius);
+  const retailersRef = useRef(retailers);
   const shortlistStorageKey = `proximity-shortlist:${country}:${competitorRetailerId}`;
   const savedKeys = useMemo(
     () => new Set(savedByComparison[shortlistStorageKey] ?? []),
@@ -1188,12 +1192,13 @@ export function ProximityWorkspace({
     competitorRetailerId?: string;
     radius?: number;
   }) {
-    const nextCountry = next.country ?? country;
+    const currentCountry = countryRef.current;
+    const nextCountry = next.country ?? currentCountry;
     setLoading(true);
     setError(null);
     try {
-      let nextRetailers = retailers;
-      if (next.country && next.country !== country) {
+      let nextRetailers = retailersRef.current;
+      if (next.country && next.country !== currentCountry) {
         const retailerResponse = await fetch(
           `/api/proximity/retailers?country=${encodeURIComponent(nextCountry)}`,
           { cache: "no-store" },
@@ -1203,6 +1208,7 @@ export function ProximityWorkspace({
           throw new Error("Retailer locations could not be loaded.");
         }
         nextRetailers = retailerBody as LocationRetailer[];
+        retailersRef.current = nextRetailers;
         setRetailers(nextRetailers);
       }
       const competitorOptionsForCountry = availableCompetitors(
@@ -1211,14 +1217,19 @@ export function ProximityWorkspace({
       );
       const selectedCompetitor = selectCompetitorForProximityLoad({
         competitorOptions: competitorOptionsForCountry,
-        countryChanged: Boolean(next.country && next.country !== country),
-        currentCompetitorRetailerId: competitorRetailerId,
+        countryChanged: Boolean(
+          next.country && next.country !== currentCountry,
+        ),
+        currentCompetitorRetailerId: competitorRetailerIdRef.current,
         requestedCompetitorRetailerId: next.competitorRetailerId,
       });
-      const selectedRadius = next.radius ?? radius;
+      const selectedRadius = next.radius ?? radiusRef.current;
       const comparisonChanged =
         Boolean(next.competitorRetailerId) ||
-        Boolean(next.country && next.country !== country);
+        Boolean(next.country && next.country !== currentCountry);
+      countryRef.current = nextCountry;
+      competitorRetailerIdRef.current = selectedCompetitor;
+      radiusRef.current = selectedRadius;
       setCountry(nextCountry);
       setCompetitorRetailerId(selectedCompetitor);
       setRadius(selectedRadius);
@@ -1246,13 +1257,22 @@ export function ProximityWorkspace({
       if (comparisonChanged) {
         setComparisonScope(recommendedScopeForView(nextView));
       }
-      setSelectedKey(body.pairs?.[0] ? pairKey(body.pairs[0]) : null);
-      setStateFilter("all");
-      setRelation("all");
-      setSort("nearest");
-      setOnlySaved(false);
-      setCompetitorStateDetail(null);
-      setCompetitorMarketDetail(null);
+      const nextPairs = nextView.pairs ?? [];
+      const firstPairKey = nextPairs[0] ? pairKey(nextPairs[0]) : null;
+      if (comparisonChanged) {
+        setSelectedKey(firstPairKey);
+        setStateFilter("all");
+        setRelation("all");
+        setSort("nearest");
+        setOnlySaved(false);
+        setCompetitorStateDetail(null);
+        setCompetitorMarketDetail(null);
+      } else {
+        const nextKeys = new Set(nextPairs.map(pairKey));
+        setSelectedKey((current) =>
+          current && nextKeys.has(current) ? current : firstPairKey,
+        );
+      }
     } catch (caught) {
       setError(
         caught instanceof Error

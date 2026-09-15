@@ -6,13 +6,12 @@ import {
   assertSameOrigin,
   createAdminSession,
   verifyAdminPassword,
-  verifyAdminSession,
 } from "@/lib/admin-session";
+import { adminSessionStatus } from "@/lib/admin-access";
 
 export async function GET(request: Request) {
-  return NextResponse.json({
-    configured: adminAuthenticationConfigured(),
-    authenticated: verifyAdminSession(request),
+  return NextResponse.json(await adminSessionStatus(request), {
+    headers: { "cache-control": "private, no-store" },
   });
 }
 

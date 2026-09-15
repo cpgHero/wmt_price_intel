@@ -92,7 +92,7 @@ const customerAuthLastVerified = "September 14, 2026";
 
 export const platformDocumentation: PlatformDocumentation = {
   title: "Platform Owner & Administrator Guide",
-  version: "1.3.164",
+  version: "1.3.165",
   lastVerified: customerAuthLastVerified,
   baseline:
     "Production implementation through the trust-gated Vitamin governed reporting replay under Product Pack 1.3.1",
@@ -2986,6 +2986,12 @@ export const platformDocumentation: PlatformDocumentation = {
           title: "Change-order log",
           columns: ["Date", "Status", "Change", "Operational effect"],
           rows: [
+            [
+              "2026-09-14",
+              "Local verification complete",
+              "Administration RBAC boundary and Proximity radius state stabilized.",
+              "Administration route and web-proxy checks now accept either the existing legacy administrator session or a CPGHero customer principal whose resolved permissions include system.admin. Account-owner-only principals remain blocked from internal Administration pages, and the admin login page reports that permission gap instead of flashing through a generic card. Proximity radius changes now preserve the current selected retailer/country/radius through synchronous UI refs and no longer reset unrelated filters when only the radius changes. This changes web route/session validation and Proximity client state only; it does not grant production roles, broaden account-owner access, change WorkOS credentials, change canary allowlists, alter report calculations, change proximity metrics, make source-provider calls, make PDP calls, make AI calls, or modify historical artifacts.",
+            ],
             [
               "2026-09-14",
               "Local verification complete",

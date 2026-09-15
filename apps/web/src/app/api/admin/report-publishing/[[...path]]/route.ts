@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 
-import { assertSameOrigin, verifyAdminSession } from "@/lib/admin-session";
+import { verifyAdminAccess } from "@/lib/admin-access";
+import { assertSameOrigin } from "@/lib/admin-session";
 import { loadServerConfig } from "@/lib/config";
 
 async function proxy(
   request: Request,
   context: { params: Promise<{ path?: string[] }> },
 ) {
-  if (!verifyAdminSession(request)) {
+  if (!(await verifyAdminAccess(request))) {
     return NextResponse.json(
       { error: "Administrator authentication is required." },
       { status: 401 },
