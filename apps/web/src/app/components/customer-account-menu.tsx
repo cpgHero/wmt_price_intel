@@ -188,14 +188,14 @@ export function CustomerAccountMenu() {
           >
             {workspaceOpening ? "Opening workspace…" : "My workspace"}
           </button>
-          <Link
+          <a
             className={styles.customerMenuItem}
             href={logoutUrl}
             role="menuitem"
             onClick={() => setMenuOpen(false)}
           >
             Sign out
-          </Link>
+          </a>
         </div>
       ) : null}
     </div>

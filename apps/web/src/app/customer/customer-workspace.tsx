@@ -218,9 +218,9 @@ export function CustomerWorkspace() {
           <h1>Customer workspace is not ready.</h1>
           <p>{state.message}</p>
           <div className={styles.actions}>
-            <Link className="button secondary" href="/api/auth/logout">
+            <a className="button secondary" href="/api/auth/logout">
               Clear session
-            </Link>
+            </a>
           </div>
         </section>
       </main>
@@ -305,9 +305,9 @@ export function CustomerWorkspace() {
             <span className="section-kicker">What this account can do</span>
             <h2>Resolved permissions</h2>
           </div>
-          <Link className="button secondary" href="/api/auth/logout">
+          <a className="button secondary" href="/api/auth/logout">
             Sign out
-          </Link>
+          </a>
         </header>
         <div className={styles.permissionGrid}>
           <article className={hasAnalytics ? styles.enabled : ""}>
